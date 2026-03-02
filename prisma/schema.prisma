@@ -88,10 +88,10 @@ model Plan {
   name          String
   slug          String      @unique
   description   String
-  price         Decimal     @db.Decimal(10, 2)
+  price         Float
   currency      Currency    @default(COP)
   period        BillingType @default(MONTHLY)
-  features      String[]    // Array of features
+  features      String      // JSON array of features
   isActive      Boolean     @default(true)
   isPublic      Boolean     @default(true)
   isPopular     Boolean     @default(false)
@@ -163,7 +163,7 @@ model SystemService {
   id          String        @id @default(cuid())
   name        String
   description String
-  price       Decimal       @db.Decimal(10, 2)
+  price       Float
   currency    Currency      @default(COP)
   billingType BillingType   @default(MONTHLY)
   status      ServiceStatus @default(ACTIVE)
@@ -242,7 +242,7 @@ model Product {
   categoryId  String
   name        String
   description String?
-  price       Decimal       @db.Decimal(10, 2)
+  price       Float
   currency    Currency      @default(COP)
   image       String?
   isAvailable Boolean       @default(true)
@@ -300,25 +300,54 @@ model MenuCategory {
 // =============================================
 
 model Order {
-  id            String      @id @default(cuid())
-  businessId    String
-  customerId    String?
-  customerName  String
-  customerPhone String
-  customerEmail String?
-  total         Decimal     @db.Decimal(10, 2)
-  currency      Currency    @default(COP)
-  status        OrderStatus @default(PENDING)
-  notes         String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String        @id @default(cuid())
+  businessId      String
+  customerId      String?
+  customerName    String
+  customerPhone   String?
+  customerEmail   String?
+  customerAddress String?
+  customerNotes   String?
+  
+  // Tipo de pedido
+  orderType       OrderType     @default(RESTAURANT)
+  
+  // Montos
+  subtotal        Float         @default(0)
+  deliveryFee     Float         @default(0)
+  tax             Float         @default(0)
+  total           Float
+  currency        Currency      @default(COP)
+  
+  // Estado
+  status          OrderStatus   @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   String?       // Nequi, Daviplata, Cash, etc.
+  
+  // Domicilio específico
+  neighborhood    String?
+  estimatedDelivery String?
+  driverName      String?
+  invoiceNumber   String?
+  
+  // Timestamps
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  business      Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  items         OrderItem[]
+  business        Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
 
   @@index([businessId])
   @@index([status])
+  @@index([orderType])
+  @@index([createdAt])
   @@map("orders")
+}
+
+enum OrderType {
+  RESTAURANT
+  DELIVERY
 }
 
 enum OrderStatus {
@@ -326,22 +355,29 @@ enum OrderStatus {
   CONFIRMED
   PREPARING
   READY
+  ON_THE_WAY
   DELIVERED
   CANCELLED
 }
 
-model OrderItem {
-  id         String   @id @default(cuid())
-  orderId    String
-  productId  String
-  productName String
-  quantity   Int
-  unitPrice  Decimal  @db.Decimal(10, 2)
-  totalPrice Decimal  @db.Decimal(10, 2)
-  notes      String?
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+}
 
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String
+  productName String
+  quantity    Int
+  unitPrice   Float
+  totalPrice  Float
+  notes       String?
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
   @@map("order_items")

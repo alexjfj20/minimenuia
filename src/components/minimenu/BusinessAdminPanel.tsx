@@ -148,6 +148,7 @@ interface Order {
   notes?: string;
   type?: 'restaurante' | 'domicilio'; // Tipo de pedido
   createdAt?: string; // Para cálculo de temporizador
+  paymentStatus?: 'pending' | 'paid' | 'refunded'; // Estado del pago
 }
 
 // --- Unified Order Interface for 3-column view ---
@@ -618,10 +619,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- Order Detail States ---
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isSavingOrderChanges, setIsSavingOrderChanges] = useState<boolean>(false);
 
   // --- Delivery Order States ---
   const [showDeliveryDetail, setShowDeliveryDetail] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryOrder | null>(null);
+  const [isSavingDeliveryChanges, setIsSavingDeliveryChanges] = useState<boolean>(false);
   const [deliveryFilter, setDeliveryFilter] = useState<'all' | 'pending' | 'on_the_way' | 'delivered'>('all');
   const [deliverySearch, setDeliverySearch] = useState('');
 
@@ -1728,6 +1731,23 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     setShowOrderDetail(true);
   };
 
+  // --- Función para abrir el modal correcto según tipo de pedido ---
+  const handleViewUnifiedOrder = (unifiedOrder: UnifiedOrder): void => {
+    if (unifiedOrder.type === 'domicilio') {
+      // Buscar el pedido de domicilio original en mockDeliveryOrders
+      const deliveryOrder = mockDeliveryOrders.find(d => d.id === unifiedOrder.id);
+      if (deliveryOrder) {
+        openDeliveryDetail(deliveryOrder);
+      }
+    } else {
+      // Buscar el pedido de restaurante original en mockOrders
+      const restaurantOrder = mockOrders.find(o => o.id === unifiedOrder.id);
+      if (restaurantOrder) {
+        openOrderDetail(restaurantOrder);
+      }
+    }
+  };
+
   const closeOrderDetail = (): void => {
     setSelectedOrder(null);
     setShowOrderDetail(false);
@@ -1736,6 +1756,48 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const updateOrderStatus = (newStatus: Order['status']): void => {
     if (!selectedOrder) return;
     setSelectedOrder({ ...selectedOrder, status: newStatus });
+  };
+
+  const updateOrderPaymentStatus = (newPaymentStatus: Order['paymentStatus']): void => {
+    if (!selectedOrder) return;
+    setSelectedOrder({ ...selectedOrder, paymentStatus: newPaymentStatus });
+  };
+
+  const handleSaveOrderChanges = async (): Promise<void> => {
+    if (!selectedOrder) return;
+    
+    setIsSavingOrderChanges(true);
+    try {
+      // Guardar en la base de datos via API
+      const response = await fetch('/api/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedOrder.id,
+          status: selectedOrder.status.toUpperCase(),
+          paymentStatus: selectedOrder.paymentStatus?.toUpperCase() || 'PENDING',
+          paymentMethod: selectedOrder.paymentMethod,
+          notes: selectedOrder.notes
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Error al guardar');
+      }
+      
+      // Mostrar mensaje de éxito
+      setToastMessage({ type: 'success', message: `Pedido ${selectedOrder.id} actualizado correctamente` });
+      
+      // Cerrar el modal
+      closeOrderDetail();
+    } catch (error) {
+      console.error('Error saving order changes:', error);
+      setToastMessage({ type: 'error', message: 'Error al guardar los cambios' });
+    } finally {
+      setIsSavingOrderChanges(false);
+    }
   };
 
   // --- Delivery Order Functions ---
@@ -1757,6 +1819,45 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const updatePaymentStatus = (newStatus: DeliveryOrder['paymentStatus']): void => {
     if (!selectedDelivery) return;
     setSelectedDelivery({ ...selectedDelivery, paymentStatus: newStatus });
+  };
+
+  // --- Guardar cambios de pedido de domicilio ---
+  const handleSaveDeliveryChanges = async (): Promise<void> => {
+    if (!selectedDelivery) return;
+    
+    setIsSavingDeliveryChanges(true);
+    try {
+      // Guardar en la base de datos via API
+      const response = await fetch('/api/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedDelivery.id,
+          status: selectedDelivery.status.toUpperCase(),
+          paymentStatus: selectedDelivery.paymentStatus.toUpperCase(),
+          paymentMethod: selectedDelivery.paymentMethod,
+          driverName: selectedDelivery.driver,
+          notes: selectedDelivery.notes
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Error al guardar');
+      }
+      
+      // Mostrar mensaje de éxito
+      setToastMessage({ type: 'success', message: `Pedido de domicilio ${selectedDelivery.invoiceNumber} actualizado correctamente` });
+      
+      // Cerrar el modal
+      closeDeliveryDetail();
+    } catch (error) {
+      console.error('Error saving delivery changes:', error);
+      setToastMessage({ type: 'error', message: 'Error al guardar los cambios del domicilio' });
+    } finally {
+      setIsSavingDeliveryChanges(false);
+    }
   };
 
   const getFilteredDeliveries = (): DeliveryOrder[] => {
@@ -4461,7 +4562,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       key={order.id} 
                       order={order} 
                       timer={orderTimers.get(order.id)}
-                      onView={() => openOrderDetail(order as unknown as Order)}
+                      onView={() => handleViewUnifiedOrder(order)}
                     />
                   ))}
                   {getOrdersByType('all').length === 0 && (
@@ -4487,7 +4588,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       key={order.id} 
                       order={order} 
                       timer={orderTimers.get(order.id)}
-                      onView={() => openOrderDetail(order as unknown as Order)}
+                      onView={() => handleViewUnifiedOrder(order)}
                     />
                   ))}
                   {getOrdersByType('restaurante').length === 0 && (
@@ -4513,7 +4614,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       key={order.id} 
                       order={order} 
                       timer={orderTimers.get(order.id)}
-                      onView={() => openOrderDetail(order as unknown as Order)}
+                      onView={() => handleViewUnifiedOrder(order)}
                     />
                   ))}
                   {getOrdersByType('domicilio').length === 0 && (
@@ -4532,7 +4633,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       key={order.id} 
                       order={order} 
                       timer={orderTimers.get(order.id)}
-                      onView={() => openOrderDetail(order as unknown as Order)}
+                      onView={() => handleViewUnifiedOrder(order)}
                     />
                   ))}
                   {getOrdersByType(mobileOrderColumn).length === 0 && (
@@ -7177,7 +7278,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             </DialogTitle>
           </DialogHeader>
           {selectedOrder && (
-            <div className="py-4 space-y-4">
+            <div className="py-4 space-y-4 max-h-[70vh] overflow-y-auto pr-2">
               {/* Customer Info */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <h4 className="font-semibold text-gray-900">Información del Cliente</h4>
@@ -7267,6 +7368,69 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                 </div>
               </div>
 
+              {/* Payment Status Update */}
+              <div className="space-y-2">
+                <h4 className="font-semibold text-gray-900">Actualizar Estado del Pago</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    size="sm"
+                    variant={selectedOrder.paymentStatus === 'pending' || !selectedOrder.paymentStatus ? 'default' : 'outline'}
+                    className={selectedOrder.paymentStatus === 'pending' || !selectedOrder.paymentStatus ? 'bg-yellow-500 hover:bg-yellow-600' : ''}
+                    onClick={() => updateOrderPaymentStatus('pending')}
+                  >
+                    Pendiente
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={selectedOrder.paymentStatus === 'paid' ? 'default' : 'outline'}
+                    className={selectedOrder.paymentStatus === 'paid' ? 'bg-green-500 hover:bg-green-600' : ''}
+                    onClick={() => updateOrderPaymentStatus('paid')}
+                  >
+                    Pagado
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={selectedOrder.paymentStatus === 'refunded' ? 'default' : 'outline'}
+                    className={selectedOrder.paymentStatus === 'refunded' ? 'bg-gray-500 hover:bg-gray-600' : ''}
+                    onClick={() => updateOrderPaymentStatus('refunded')}
+                  >
+                    Reembolsado
+                  </Button>
+                </div>
+              </div>
+
+              {/* Actions - WhatsApp and Map */}
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    if (selectedOrder.phone) {
+                      const whatsappUrl = `https://wa.me/${selectedOrder.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${selectedOrder.customer}, tu pedido ${selectedOrder.id} está en proceso.`)}`;
+                      window.open(whatsappUrl, '_blank');
+                    }
+                  }}
+                  disabled={!selectedOrder.phone}
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  WhatsApp
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    if (selectedOrder.address) {
+                      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedOrder.address)}`;
+                      window.open(mapsUrl, '_blank');
+                    }
+                  }}
+                  disabled={!selectedOrder.address}
+                >
+                  <MapPin className="w-4 h-4 mr-2" />
+                  Ver Mapa
+                </Button>
+              </div>
+
               {/* Print Buttons */}
               <div className="space-y-2">
                 <h4 className="font-semibold text-gray-900">Imprimir</h4>
@@ -7296,6 +7460,23 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           <DialogFooter>
             <Button variant="outline" onClick={closeOrderDetail}>
               Cerrar
+            </Button>
+            <Button
+              onClick={handleSaveOrderChanges}
+              disabled={isSavingOrderChanges}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {isSavingOrderChanges ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Guardar Cambios
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -7560,9 +7741,26 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               )}
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDeliveryDetail}>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={closeDeliveryDetail} className="flex-1">
               Cerrar
+            </Button>
+            <Button
+              onClick={handleSaveDeliveryChanges}
+              disabled={isSavingDeliveryChanges}
+              className="flex-1 bg-purple-600 hover:bg-purple-700"
+            >
+              {isSavingDeliveryChanges ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Guardar Cambios
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,7 +1,7 @@
 {
   "id": "business-1",
   "name": "Restaurante El Sabor",
-  "phone": "+57 300 123 4567",
+  "phone": "+57 3228831634",
   "address": "Calle 123 #45-67, Bogotá",
   "primaryColor": "#8b5cf6",
   "secondaryColor": "#ffffff",
@@ -64,5 +64,5 @@
       "enabled": true
     }
   ],
-  "updatedAt": "2026-03-02T20:09:02.916Z"
+  "updatedAt": "2026-03-02T20:19:51.477Z"
 }
