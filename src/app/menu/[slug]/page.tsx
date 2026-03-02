@@ -62,6 +62,17 @@ interface CartItem extends MenuItem {
   notes?: string;
 }
 
+// --- Payment Method Config Interface ---
+interface PaymentMethodConfig {
+  id: string;
+  name: string;
+  icon: string;
+  phone: string;
+  accountHolder: string;
+  qrImage: string | null;
+  enabled: boolean;
+}
+
 interface RestaurantInfo {
   id: string;
   name: string;
@@ -87,6 +98,8 @@ interface RestaurantInfo {
   tipEnabled?: boolean;
   tipPercentageDefault?: number;
   tipOnlyOnPremise?: boolean;
+  // Métodos de Pago
+  paymentMethods?: PaymentMethodConfig[];
 }
 
 // ============================================================================
@@ -291,12 +304,17 @@ function CartSidebar({
     return items.reduce((sum, item) => sum + item.quantity, 0);
   }, [items]);
 
-  // Payment methods
-  const paymentMethods = [
-    { id: 'cash', name: 'Efectivo', icon: '💵' },
-    { id: 'transfer', name: 'Transferencia', icon: '🏦' },
-    { id: 'card', name: 'Tarjeta', icon: '💳' }
-  ];
+  // Payment methods - usar los configurados en el perfil, filtrando solo los habilitados
+  const paymentMethods = useMemo(() => {
+    const configuredMethods = restaurant.paymentMethods?.filter(m => m.enabled) ?? [];
+    // Si no hay métodos configurados, usar los por defecto
+    if (configuredMethods.length === 0) {
+      return [
+        { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true }
+      ] as PaymentMethodConfig[];
+    }
+    return configuredMethods;
+  }, [restaurant.paymentMethods]);
 
   // Reset tip when order mode changes - use a callback instead of effect
   const handleOrderModeChange = (mode: 'restaurant' | 'delivery') => {
@@ -320,6 +338,15 @@ function CartSidebar({
 
     const tipLine = tipAmount > 0 ? `Propina Voluntaria: ${formatPrice(tipAmount)}\n` : '';
 
+    const selectedPaymentMethod = paymentMethods.find(p => p.id === selectedPayment);
+    const paymentMethodName = selectedPaymentMethod?.name || 'No especificado';
+    const paymentPhone = selectedPaymentMethod?.phone || '';
+    const paymentHolder = selectedPaymentMethod?.accountHolder || '';
+
+    const paymentInfo = paymentPhone || paymentHolder
+      ? `💳 *Método de Pago:* ${paymentMethodName}\n${paymentPhone ? `📱 Número: ${paymentPhone}\n` : ''}${paymentHolder ? `👤 Titular: ${paymentHolder}\n` : ''}`
+      : `💳 *Método de Pago:* ${paymentMethodName}\n`;
+
     const message = `🍽️ *PEDIDO EN RESTAURANTE*\n\n` +
       `${orderText}\n\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
@@ -328,8 +355,9 @@ function CartSidebar({
       tipLine +
       `━━━━━━━━━━━━━━━━━━\n` +
       `*TOTAL: ${formatPrice(total)}*\n\n` +
+      paymentInfo +
       `¡Gracias por su pedido!`;
-    
+
     const whatsappUrl = `https://wa.me/${restaurant.whatsapp?.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
   };
@@ -348,10 +376,17 @@ function CartSidebar({
       .map(item => `• ${item.quantity}x ${item.name} - ${formatPrice(item.price * item.quantity)}`)
       .join('\n');
 
-    const paymentMethodName = paymentMethods.find(p => p.id === selectedPayment)?.name || 'Efectivo';
+    const selectedPaymentMethod = paymentMethods.find(p => p.id === selectedPayment);
+    const paymentMethodName = selectedPaymentMethod?.name || 'No especificado';
+    const paymentPhone = selectedPaymentMethod?.phone || '';
+    const paymentHolder = selectedPaymentMethod?.accountHolder || '';
 
     const empaqueLine = empaqueTotal > 0 ? `Empaque: ${formatPrice(empaqueTotal)}\n` : '';
     const tipLine = tipAmount > 0 ? `Propina Voluntaria: ${formatPrice(tipAmount)}\n` : '';
+    
+    const paymentInfo = paymentPhone || paymentHolder 
+      ? `💳 *Método de Pago:* ${paymentMethodName}\n${paymentPhone ? `📱 Número: ${paymentPhone}\n` : ''}${paymentHolder ? `👤 Titular: ${paymentHolder}\n` : ''}`
+      : `💳 *Método de Pago:* ${paymentMethodName}\n`;
     
     const message = `🛵 *PEDIDO A DOMICILIO*\n\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
@@ -371,7 +406,7 @@ function CartSidebar({
       tipLine +
       `━━━━━━━━━━━━━━━━━━\n` +
       `*TOTAL: ${formatPrice(total)}*\n\n` +
-      `💳 *Método de Pago:* ${paymentMethodName}\n\n` +
+      paymentInfo +
       `¡Gracias por su pedido!`;
     
     const whatsappUrl = `https://wa.me/${restaurant.whatsapp?.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
@@ -706,36 +741,65 @@ function CartSidebar({
                       </div>
                     )}
                   </div>
+                </div>
+              )}
 
-                  {/* Método de Pago */}
-                  <div className="border rounded-lg overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setShowPaymentMethods(!showPaymentMethods)}
-                      className="w-full px-4 py-3 flex items-center justify-between bg-gray-100 hover:bg-gray-200 transition-colors"
-                    >
-                      <span className="font-medium text-gray-700">💳 Método de Pago</span>
-                      {showPaymentMethods ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-                    {showPaymentMethods && (
-                      <div className="p-4 bg-white">
-                        <div className="space-y-2">
-                          {paymentMethods.map(method => (
+              {/* Método de Pago - Available for both Restaurant and Delivery modes */}
+              <div className="mb-4">
+                <div className="border rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentMethods(!showPaymentMethods)}
+                    className="w-full px-4 py-3 flex items-center justify-between bg-gray-100 hover:bg-gray-200 transition-colors"
+                  >
+                    <span className="font-medium text-gray-700">💳 Método de Pago</span>
+                    {showPaymentMethods ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {showPaymentMethods && (
+                    <div className="p-4 bg-white">
+                      <div className="space-y-3">
+                        {paymentMethods.map(method => (
                             <button
                               key={method.id}
                               type="button"
                               onClick={() => setSelectedPayment(method.id)}
                               className={cn(
-                                'w-full px-4 py-3 rounded-lg flex items-center gap-3 transition-colors text-left',
+                                'w-full px-4 py-3 rounded-lg flex flex-col transition-colors text-left',
                                 selectedPayment === method.id
                                   ? 'bg-orange-100 border-2 border-orange-500'
                                   : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
                               )}
                             >
-                              <span className="text-xl">{method.icon}</span>
-                              <span className="font-medium text-gray-700">{method.name}</span>
-                              {selectedPayment === method.id && (
-                                <Check className="w-5 h-5 text-orange-500 ml-auto" />
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-2xl">{method.icon}</span>
+                                  <div>
+                                    <span className="font-semibold text-gray-900">{method.name}</span>
+                                    {method.phone && (
+                                      <p className="text-xs text-gray-500">{method.phone}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                {selectedPayment === method.id && (
+                                  <Check className="w-5 h-5 text-orange-500" />
+                                )}
+                              </div>
+                              {/* Mostrar info adicional cuando está seleccionado */}
+                              {selectedPayment === method.id && method.accountHolder && (
+                                <div className="mt-2 pt-2 border-t border-orange-200 text-xs text-gray-600">
+                                  <p><strong>Titular:</strong> {method.accountHolder}</p>
+                                </div>
+                              )}
+                              {/* Mostrar QR si está disponible */}
+                              {selectedPayment === method.id && method.qrImage && (
+                                <div className="mt-3 pt-3 border-t border-orange-200">
+                                  <p className="text-xs text-gray-500 mb-2">Escanea para pagar:</p>
+                                  <img 
+                                    src={method.qrImage} 
+                                    alt={`QR ${method.name}`}
+                                    className="w-32 h-32 rounded-lg border mx-auto"
+                                  />
+                                </div>
                               )}
                             </button>
                           ))}
@@ -744,7 +808,6 @@ function CartSidebar({
                     )}
                   </div>
                 </div>
-              )}
             </div>
           )}
         </div>
@@ -839,7 +902,15 @@ export default function PublicMenuPage() {
             // Propina Voluntaria
             tipEnabled: data.data.business.tipEnabled ?? false,
             tipPercentageDefault: data.data.business.tipPercentageDefault ?? 10,
-            tipOnlyOnPremise: data.data.business.tipOnlyOnPremise ?? true
+            tipOnlyOnPremise: data.data.business.tipOnlyOnPremise ?? true,
+            // Métodos de Pago
+            paymentMethods: data.data.business.paymentMethods ?? [
+              { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
+              { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+            ]
           });
           
           // Map categories

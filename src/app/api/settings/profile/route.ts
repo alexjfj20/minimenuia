@@ -1,60 +1,15 @@
+// ============================================================================
+// Settings Profile API - v3.0 (Shared Store with File Persistence)
+// Uses shared business store for data persistence across API routes
+// ============================================================================
+
 import { NextRequest, NextResponse } from 'next/server';
-
-// ============================================================================
-// IN-MEMORY STORAGE (persists during server runtime)
-// ============================================================================
-
-interface BusinessProfile {
-  id: string;
-  name: string;
-  phone: string;
-  address: string;
-  primaryColor: string;
-  secondaryColor: string;
-  logo: string | null;
-  slug: string;
-  iva?: number;
-  empaque?: number;
-  valorEmpaqueUnitario?: number;
-  domicilio?: number;
-  impoconsumo?: number;
-  // Imágenes del negocio
-  avatar?: string | null;
-  banner?: string | null;
-  // Propina Voluntaria
-  tipEnabled?: boolean;
-  tipPercentageDefault?: number;
-  tipOnlyOnPremise?: boolean;
-  updatedAt: string;
-}
-
-// Default profile
-const DEFAULT_PROFILE: BusinessProfile = {
-  id: 'business-1',
-  name: 'Restaurante El Sabor',
-  phone: '+57 300 123 4567',
-  address: 'Calle 123 #45-67, Bogotá',
-  primaryColor: '#8b5cf6',
-  secondaryColor: '#ffffff',
-  logo: null,
-  slug: 'restaurante-el-sabor',
-  iva: 19,
-  empaque: 3000,
-  valorEmpaqueUnitario: 500,
-  domicilio: 3000,
-  impoconsumo: 8,
-  // Imágenes del negocio
-  avatar: null,
-  banner: null,
-  // Propina Voluntaria - Configuración por defecto
-  tipEnabled: true,
-  tipPercentageDefault: 10,
-  tipOnlyOnPremise: true,
-  updatedAt: new Date().toISOString()
-};
-
-// In-memory storage
-let currentProfile: BusinessProfile = { ...DEFAULT_PROFILE };
+import { 
+  getBusinessProfileAsync, 
+  updateBusinessProfileAsync,
+  type PaymentMethodConfig,
+  type BusinessProfile 
+} from '@/lib/business-store';
 
 // ============================================================================
 // INTERFACES
@@ -85,6 +40,8 @@ interface UpdateProfileRequest {
   tipEnabled?: boolean;
   tipPercentageDefault?: number;
   tipOnlyOnPremise?: boolean;
+  // Métodos de Pago
+  paymentMethods?: PaymentMethodConfig[];
 }
 
 // ============================================================================
@@ -92,11 +49,13 @@ interface UpdateProfileRequest {
 // ============================================================================
 
 export async function GET(): Promise<NextResponse<ProfileResponse>> {
-  console.log('[Settings Profile API] GET profile:', currentProfile.name);
+  const profile = await getBusinessProfileAsync();
+  console.log('[Settings Profile API v3.0] GET profile:', profile.name);
+  console.log('[Settings Profile API v3.0] Payment methods:', profile.paymentMethods?.filter(m => m.enabled).map(m => m.name).join(', '));
   
   return NextResponse.json({
     success: true,
-    data: currentProfile
+    data: profile
   });
 }
 
@@ -118,9 +77,8 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
       }, { status: 400 });
     }
     
-    // Update profile
-    currentProfile = {
-      ...currentProfile,
+    // Update profile using shared store (async for file persistence)
+    const updatedProfile = await updateBusinessProfileAsync({
       ...(body.name !== undefined && { name: body.name }),
       ...(body.phone !== undefined && { phone: body.phone }),
       ...(body.address !== undefined && { address: body.address }),
@@ -134,20 +92,21 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
       ...(body.impoconsumo !== undefined && { impoconsumo: body.impoconsumo }),
       // Imágenes del negocio
       ...(body.avatar !== undefined && { avatar: body.avatar }),
-      ...(body.logo !== undefined && { logo: body.logo }),
       ...(body.banner !== undefined && { banner: body.banner }),
       // Propina Voluntaria
       ...(body.tipEnabled !== undefined && { tipEnabled: body.tipEnabled }),
       ...(body.tipPercentageDefault !== undefined && { tipPercentageDefault: body.tipPercentageDefault }),
       ...(body.tipOnlyOnPremise !== undefined && { tipOnlyOnPremise: body.tipOnlyOnPremise }),
-      updatedAt: new Date().toISOString()
-    };
+      // Métodos de Pago
+      ...(body.paymentMethods !== undefined && { paymentMethods: body.paymentMethods }),
+    });
 
-    console.log('[Settings Profile API] Profile updated successfully:', currentProfile.name);
+    console.log('[Settings Profile API v3.0] Profile updated successfully:', updatedProfile.name);
+    console.log('[Settings Profile API v3.0] Active payment methods:', updatedProfile.paymentMethods?.filter(m => m.enabled).map(m => m.name).join(', '));
 
     return NextResponse.json({
       success: true,
-      data: currentProfile
+      data: updatedProfile
     });
 
   } catch (error) {

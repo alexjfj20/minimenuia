@@ -52,7 +52,8 @@ import {
   AlertTriangle,
   Calendar,
   RefreshCw,
-  LayoutGrid
+  LayoutGrid,
+  CreditCard
 } from 'lucide-react';
 
 // --- Speech Recognition Types ---
@@ -267,6 +268,17 @@ interface RestaurantInvoice {
   status: 'paid' | 'pending' | 'cancelled';
   createdAt: string;
   notes?: string;
+}
+
+// --- Payment Method Config Interface ---
+interface PaymentMethodConfig {
+  id: string;
+  name: string;
+  icon: string;
+  phone: string;
+  accountHolder: string;
+  qrImage: string | null;
+  enabled: boolean;
 }
 
 // Default categories for fallback
@@ -589,7 +601,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     // Propina Voluntaria
     tipEnabled: true,
     tipPercentageDefault: 10,
-    tipOnlyOnPremise: true
+    tipOnlyOnPremise: true,
+    // Métodos de Pago
+    paymentMethods: [
+      { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
+      { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
+      { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
+      { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
+      { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+    ] as PaymentMethodConfig[]
   });
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(true);
@@ -716,7 +736,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             // Propina Voluntaria
             tipEnabled: parsed.tipEnabled ?? true,
             tipPercentageDefault: parsed.tipPercentageDefault ?? 10,
-            tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true
+            tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true,
+            // Métodos de Pago
+            paymentMethods: parsed.paymentMethods ?? [
+              { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
+              { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+            ]
           });
           // Load empaque value
           if (parsed.valorEmpaqueUnitario !== undefined) {
@@ -744,7 +772,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             // Propina Voluntaria
             tipEnabled: data.data.tipEnabled ?? true,
             tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
-            tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true
+            tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true,
+            // Métodos de Pago
+            paymentMethods: data.data.paymentMethods ?? [
+              { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
+              { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+            ]
           });
           // Load empaque value from server
           if (data.data.valorEmpaqueUnitario !== undefined) {
@@ -774,7 +810,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             // Propina Voluntaria
             tipEnabled: parsed.tipEnabled ?? true,
             tipPercentageDefault: parsed.tipPercentageDefault ?? 10,
-            tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true
+            tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true,
+            // Métodos de Pago
+            paymentMethods: parsed.paymentMethods ?? [
+              { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
+              { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+            ]
           });
         } else {
           // Set default values if loading fails
@@ -792,7 +836,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             // Propina Voluntaria
             tipEnabled: true,
             tipPercentageDefault: 10,
-            tipOnlyOnPremise: true
+            tipOnlyOnPremise: true,
+            // Métodos de Pago
+            paymentMethods: [
+              { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
+              { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+            ]
           });
         }
       } finally {
@@ -3630,7 +3682,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           // Propina Voluntaria
           tipEnabled: profileForm.tipEnabled,
           tipPercentageDefault: profileForm.tipPercentageDefault,
-          tipOnlyOnPremise: profileForm.tipOnlyOnPremise
+          tipOnlyOnPremise: profileForm.tipOnlyOnPremise,
+          // Métodos de Pago
+          paymentMethods: profileForm.paymentMethods
         })
       });
 
@@ -3657,7 +3711,13 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           // Propina Voluntaria
           tipEnabled: data.data.tipEnabled ?? true,
           tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
-          tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true
+          tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true,
+          // Métodos de Pago
+          paymentMethods: data.data.paymentMethods ?? [
+            { id: 'cash', name: 'Efectivo', icon: '💵', enabled: true },
+            { id: 'transfer', name: 'Transferencia', icon: '🏦', enabled: true },
+            { id: 'card', name: 'Tarjeta', icon: '💳', enabled: true }
+          ]
         });
         // Save to localStorage for persistence
         localStorage.setItem('businessProfile', JSON.stringify(data.data));
@@ -6360,6 +6420,189 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         </div>
                       </>
                     )}
+
+                    <Button 
+                      onClick={handleSaveProfile}
+                      disabled={isSavingProfile || isLoadingProfile}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      {isSavingProfile ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        'Guardar Configuración'
+                      )}
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Métodos de Pago Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-purple-600" />
+                  Métodos de Pago
+                </CardTitle>
+                <CardDescription>
+                  Configura tus métodos de pago con número, titular y código QR
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {isLoadingProfile ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-600 mr-3" />
+                    <span className="text-gray-600">Cargando configuración...</span>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Configura cada método de pago con su información. Solo los métodos activados serán visibles en el menú.
+                    </p>
+                    
+                    <div className="space-y-4">
+                      {profileForm.paymentMethods.map((method) => (
+                        <div 
+                          key={method.id}
+                          className={`border rounded-lg overflow-hidden ${method.enabled ? 'border-green-200 bg-green-50/30' : 'border-gray-200 bg-gray-50'}`}
+                        >
+                          {/* Header con nombre y switch */}
+                          <div className="flex items-center justify-between p-4 bg-white border-b">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${method.enabled ? 'bg-green-100' : 'bg-gray-100'}`}>
+                                <span className="text-lg">{method.icon}</span>
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900">{method.name}</p>
+                                <p className={`text-xs ${method.enabled ? 'text-green-600' : 'text-gray-500'}`}>
+                                  {method.enabled ? '✓ Activo' : '✗ Inactivo'}
+                                </p>
+                              </div>
+                            </div>
+                            <Switch 
+                              checked={method.enabled}
+                              onCheckedChange={(checked) => {
+                                setProfileForm(prev => ({
+                                  ...prev,
+                                  paymentMethods: prev.paymentMethods.map(m => 
+                                    m.id === method.id ? { ...m, enabled: checked } : m
+                                  )
+                                }));
+                              }}
+                              className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300" 
+                            />
+                          </div>
+                          
+                          {/* Campos editables */}
+                          <div className="p-4 space-y-3 bg-white">
+                            {/* Número de Celular */}
+                            <div>
+                              <Label className="text-xs text-gray-500 mb-1 block">Número de Celular</Label>
+                              <Input
+                                placeholder="300 123 4567"
+                                value={method.phone}
+                                onChange={(e) => {
+                                  setProfileForm(prev => ({
+                                    ...prev,
+                                    paymentMethods: prev.paymentMethods.map(m => 
+                                      m.id === method.id ? { ...m, phone: e.target.value } : m
+                                    )
+                                  }));
+                                }}
+                                className="text-sm"
+                              />
+                            </div>
+                            
+                            {/* Nombre del Titular */}
+                            <div>
+                              <Label className="text-xs text-gray-500 mb-1 block">Nombre del Titular</Label>
+                              <Input
+                                placeholder="Juan Pérez"
+                                value={method.accountHolder}
+                                onChange={(e) => {
+                                  setProfileForm(prev => ({
+                                    ...prev,
+                                    paymentMethods: prev.paymentMethods.map(m => 
+                                      m.id === method.id ? { ...m, accountHolder: e.target.value } : m
+                                    )
+                                  }));
+                                }}
+                                className="text-sm"
+                              />
+                            </div>
+                            
+                            {/* Código QR */}
+                            <div>
+                              <Label className="text-xs text-gray-500 mb-1 block">Código QR (Opcional)</Label>
+                              <div className="flex items-center gap-3">
+                                {method.qrImage ? (
+                                  <div className="relative">
+                                    <img 
+                                      src={method.qrImage} 
+                                      alt={`QR ${method.name}`}
+                                      className="w-20 h-20 rounded-lg border object-cover"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setProfileForm(prev => ({
+                                          ...prev,
+                                          paymentMethods: prev.paymentMethods.map(m => 
+                                            m.id === method.id ? { ...m, qrImage: null } : m
+                                          )
+                                        }));
+                                      }}
+                                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 text-xs"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                                    <ImageIcon className="w-6 h-6 text-gray-400" />
+                                    <span className="text-xs text-gray-400 mt-1">Subir QR</span>
+                                    <input 
+                                      type="file" 
+                                      className="hidden" 
+                                      accept="image/*"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                          const reader = new FileReader();
+                                          reader.onload = (event) => {
+                                            setProfileForm(prev => ({
+                                              ...prev,
+                                              paymentMethods: prev.paymentMethods.map(m => 
+                                                m.id === method.id ? { ...m, qrImage: event.target?.result as string } : m
+                                              )
+                                            }));
+                                          };
+                                          reader.readAsDataURL(file);
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                )}
+                                <p className="text-xs text-gray-400 flex-1">
+                                  Sube el código QR de tu cuenta {method.name} para que los clientes puedan escanearlo fácilmente.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Info */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-xs text-blue-800">
+                        <strong>💡 Importante:</strong> Solo los métodos de pago activados serán mostrados a los clientes 
+                        en el carrito de compras del menú digital. Asegúrate de ingresar la información correcta.
+                      </p>
+                    </div>
 
                     <Button 
                       onClick={handleSaveProfile}

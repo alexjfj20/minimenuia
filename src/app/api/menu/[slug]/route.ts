@@ -1,6 +1,18 @@
+// ============================================================================
+// Menu Public API - v3.1 (Shared Store + Payment Methods Sync - FIX CACHE)
+// FIX: Payment methods from profile should sync to menu
+// ============================================================================
+
+const API_VERSION = '3.1-FIX-CACHE';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { 
+  getBusinessProfileAsync,
+  type PaymentMethodConfig,
+  type BusinessProfile 
+} from '@/lib/business-store';
 
 // ============================================================================
 // INTERFACES
@@ -27,27 +39,6 @@ interface Category {
   order: number;
 }
 
-interface BusinessProfile {
-  id: string;
-  name: string;
-  phone: string;
-  address: string;
-  primaryColor: string;
-  secondaryColor: string;
-  logo: string | null;
-  slug: string;
-  iva: number;
-  empaque: number;
-  valorEmpaqueUnitario?: number;
-  domicilio?: number;
-  impoconsumo?: number;
-  // Propina Voluntaria
-  tipEnabled?: boolean;
-  tipPercentageDefault?: number;
-  tipOnlyOnPremise?: boolean;
-  updatedAt: string;
-}
-
 interface MenuData {
   business: BusinessProfile;
   categories: Category[];
@@ -61,12 +52,11 @@ interface MenuResponse {
 }
 
 // ============================================================================
-// FILE-BASED STORAGE PATHS
+// FILE-BASED STORAGE PATHS (for products only)
 // ============================================================================
 
 const DATA_DIR = path.join(process.cwd(), 'db');
 const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
-const PROFILE_FILE = path.join(DATA_DIR, 'business_profile.json');
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -82,7 +72,7 @@ async function readJSON<T>(filePath: string, defaultValue: T): Promise<T> {
 }
 
 // ============================================================================
-// GET - Obtener menú público por slug
+// GET - Obtener menú público por slug (v2 - using shared store)
 // ============================================================================
 
 export async function GET(
@@ -92,34 +82,15 @@ export async function GET(
   try {
     const { slug } = await params;
     
-    console.log('[Menu API] GET menu for slug:', slug);
+    console.log('========================================');
+    console.log('[Menu API v3.0] GET menu for slug:', slug);
+    console.log('[Menu API v3.0] API Version:', API_VERSION);
     
-    // Read business profile
-    const defaultProfile: BusinessProfile = {
-      id: 'business-1',
-      name: 'Restaurante El Sabor',
-      phone: '+57 300 123 4567',
-      address: 'Calle 123 #45-67, Bogotá',
-      primaryColor: '#8b5cf6',
-      secondaryColor: '#ffffff',
-      logo: null,
-      slug: 'restaurante-el-sabor',
-      iva: 19,
-      empaque: 3000,
-      valorEmpaqueUnitario: 500,
-      domicilio: 3000,
-      impoconsumo: 8,
-      // Propina Voluntaria
-      tipEnabled: true,
-      tipPercentageDefault: 10,
-      tipOnlyOnPremise: true,
-      updatedAt: new Date().toISOString()
-    };
+    // Get business profile from shared store (async to ensure file is loaded)
+    const profile = await getBusinessProfileAsync();
     
-    const profile = await readJSON<BusinessProfile>(PROFILE_FILE, defaultProfile);
-    
-    // Check if slug matches (for now, we'll accept any slug and return the data)
-    // In production, you'd want to validate the slug against the business
+    console.log('[Menu API] Profile loaded:', profile.name);
+    console.log('[Menu API] Payment methods from store:', profile.paymentMethods?.map(m => `${m.name}(${m.enabled ? 'on' : 'off'})`).join(', '));
     
     // Read products and categories
     const defaultProductsData = {
@@ -145,6 +116,7 @@ export async function GET(
     };
     
     console.log('[Menu API] Returning menu with', menuData.products.length, 'products');
+    console.log('[Menu API] Active payment methods:', menuData.business.paymentMethods?.filter(m => m.enabled).map(m => m.name).join(', '));
     
     return NextResponse.json({
       success: true,
