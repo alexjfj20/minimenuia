@@ -51,7 +51,8 @@ import {
   Upload,
   AlertTriangle,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  LayoutGrid
 } from 'lucide-react';
 
 // --- Speech Recognition Types ---
@@ -144,6 +145,24 @@ interface Order {
   phone?: string;
   address?: string;
   notes?: string;
+  type?: 'restaurante' | 'domicilio'; // Tipo de pedido
+  createdAt?: string; // Para cálculo de temporizador
+}
+
+// --- Unified Order Interface for 3-column view ---
+interface UnifiedOrder {
+  id: string;
+  customer: string;
+  items: number;
+  total: number;
+  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'confirmed' | 'on_the_way' | 'cancelled';
+  type: 'restaurante' | 'domicilio';
+  time: string;
+  date: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+  createdAt: string; // Para temporizador
 }
 
 // --- Delivery Order Interface ---
@@ -176,6 +195,80 @@ interface Category {
   order: number;
 }
 
+// Printer interface
+interface Printer {
+  id: string;
+  name: string;
+  type: string;
+  area: string;
+  ip: string;
+  port: number;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+}
+
+// Delivery Cart Item for TPV Domicilio
+interface DeliveryCartItem {
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  stock: number;
+  requiereEmpaque: boolean;
+}
+
+// Delivery Invoice for TPV Domicilio
+interface DeliveryInvoice {
+  id: string;
+  invoiceNumber: string;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  customerNeighborhood: string;
+  items: DeliveryCartItem[];
+  subtotal: number;
+  deliveryFee: number;
+  empaqueTotal: number;
+  total: number;
+  paymentMethod: 'cash' | 'card' | 'transfer';
+  paymentStatus: 'pending' | 'paid';
+  notes: string;
+  status: 'pending' | 'confirmed' | 'preparing' | 'on_the_way' | 'delivered';
+  createdAt: string;
+  estimatedDelivery: string;
+}
+
+// --- Cart Item Interface for TPV ---
+interface CartItem {
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  stock: number;
+}
+
+// --- Restaurant Invoice Interface ---
+interface RestaurantInvoice {
+  id: string;
+  invoiceNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  items: Array<{
+    productId: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>;
+  subtotal: number;
+  tax: number;
+  total: number;
+  paymentMethod: 'cash' | 'card' | 'transfer';
+  status: 'paid' | 'pending' | 'cancelled';
+  createdAt: string;
+  notes?: string;
+}
+
 // Default categories for fallback
 const defaultCategories: Category[] = [
   { id: 'cat-1', name: 'Entradas', icon: '🥗', order: 1 },
@@ -183,6 +276,10 @@ const defaultCategories: Category[] = [
   { id: 'cat-3', name: 'Bebidas', icon: '🥤', order: 3 },
   { id: 'cat-4', name: 'Postres', icon: '🍰', order: 4 }
 ];
+
+// Default printer types and areas
+const defaultPrinterTypes = ['Térmica', 'Inyección', 'Láser', 'Matricial'];
+const defaultPrinterAreas = ['Cocina', 'Barra', 'Caja', 'General'];
 
 const mockOrders: Order[] = [
   { id: 'ORD-001', customer: 'Pedro Martínez', items: 3, total: 80000, status: 'pending', time: '12:30 PM', date: '2025-02-28', phone: '+57 300 111 2222', address: 'Calle 10 #20-30', notes: 'Sin cebolla' },
@@ -289,6 +386,98 @@ const mockDeliveryOrders: DeliveryOrder[] = [
     estimatedDelivery: '10:45'
   }
 ];
+
+// --- Helper functions for OrderCard (must be outside component) ---
+function getTimerColor(minutes: number): string {
+  if (minutes <= 10) return 'text-green-600';
+  if (minutes <= 20) return 'text-yellow-600';
+  return 'text-red-600';
+}
+
+function getTimerBackground(minutes: number): string {
+  if (minutes > 20) return 'bg-red-50 animate-pulse';
+  return '';
+}
+
+function shouldShowTimer(status: string): boolean {
+  return ['pending', 'preparing', 'confirmed'].includes(status);
+}
+
+// --- Order Card Component for Kanban View ---
+interface OrderCardProps {
+  order: UnifiedOrder;
+  timer?: number;
+  onView: () => void;
+}
+
+function OrderCard({ order, timer, onView }: OrderCardProps): JSX.Element {
+  const timerColor = timer !== undefined ? getTimerColor(timer) : '';
+  const timerBg = timer !== undefined ? getTimerBackground(timer) : '';
+  const showTimer = timer !== undefined && shouldShowTimer(order.status);
+
+  const statusColors: Record<string, string> = {
+    pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    preparing: 'bg-orange-100 text-orange-800 border-orange-200',
+    confirmed: 'bg-blue-100 text-blue-800 border-blue-200',
+    ready: 'bg-green-100 text-green-800 border-green-200',
+    on_the_way: 'bg-purple-100 text-purple-800 border-purple-200',
+    delivered: 'bg-gray-100 text-gray-800 border-gray-200',
+    cancelled: 'bg-red-100 text-red-800 border-red-200'
+  };
+
+  const statusText: Record<string, string> = {
+    pending: 'Pendiente',
+    preparing: 'Preparando',
+    confirmed: 'Confirmado',
+    ready: 'Listo',
+    on_the_way: 'En camino',
+    delivered: 'Entregado',
+    cancelled: 'Cancelado'
+  };
+
+  const typeBorder = order.type === 'restaurante' 
+    ? 'border-l-4 border-l-green-500' 
+    : 'border-l-4 border-l-orange-500';
+
+  return (
+    <div 
+      className={`bg-white rounded-lg shadow-sm p-3 cursor-pointer hover:shadow-md transition-all ${typeBorder} ${timerBg}`}
+      onClick={onView}
+    >
+      {/* Header */}
+      <div className="flex justify-between items-start mb-2">
+        <div>
+          <span className="font-bold text-sm text-gray-900">{order.id}</span>
+          <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${order.type === 'restaurante' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+            {order.type === 'restaurante' ? '🍽️' : '🚚'}
+          </span>
+        </div>
+        {showTimer && (
+          <span className={`text-xs font-medium ${timerColor}`}>
+            ⏱ {timer} min
+          </span>
+        )}
+      </div>
+
+      {/* Customer */}
+      <p className="text-sm font-medium text-gray-800 truncate">{order.customer}</p>
+      
+      {/* Details */}
+      <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+        <span>{order.items} items</span>
+        <span className="font-medium text-gray-700">${order.total.toLocaleString()}</span>
+      </div>
+
+      {/* Status & Time */}
+      <div className="flex justify-between items-center mt-2">
+        <span className={`text-xs px-2 py-1 rounded-full border ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}>
+          {statusText[order.status] || order.status}
+        </span>
+        <span className="text-xs text-gray-500">{order.time}</span>
+      </div>
+    </div>
+  );
+}
 
 export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -436,6 +625,73 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [valorEmpaqueUnitario, setValorUnitarioEmpaque] = useState<number>(500);
   const [isSavingEmpaque, setIsSavingEmpaque] = useState<boolean>(false);
 
+  // --- Printer States ---
+  const [printers, setPrinters] = useState<Printer[]>([]);
+  const [showPrinterModal, setShowPrinterModal] = useState(false);
+  const [editingPrinter, setEditingPrinter] = useState<Printer | null>(null);
+  const [printerToDelete, setPrinterToDelete] = useState<Printer | null>(null);
+  const [showPrinterDeleteConfirm, setShowPrinterDeleteConfirm] = useState(false);
+  const [printerForm, setPrinterForm] = useState({
+    name: '',
+    type: 'Térmica',
+    area: 'Cocina',
+    ip: '',
+    port: 9100,
+    isDefault: false,
+    isActive: true
+  });
+  const [customPrinterTypes, setCustomPrinterTypes] = useState<string[]>([]);
+  const [customPrinterAreas, setCustomPrinterAreas] = useState<string[]>([]);
+  const [newPrinterType, setNewPrinterType] = useState('');
+  const [newPrinterArea, setNewPrinterArea] = useState('');
+  const [isAddingNewType, setIsAddingNewType] = useState(false);
+  const [isAddingNewArea, setIsAddingNewArea] = useState(false);
+
+  // --- Pedidos Kanban States ---
+  const [mobileOrderColumn, setMobileOrderColumn] = useState<'all' | 'restaurante' | 'domicilio'>('all');
+  const [orderTimers, setOrderTimers] = useState<Map<string, number>>(new Map());
+  const [pedidosSearchQuery, setPedidosSearchQuery] = useState('');
+  const [pedidosStatusFilter, setPedidosStatusFilter] = useState<string>('all');
+  const [pedidosDateFilter, setPedidosDateFilter] = useState<string>('all');
+  const [notifications, setNotifications] = useState<Array<{
+    id: string;
+    message: string;
+    type: 'restaurante' | 'domicilio';
+    timestamp: Date;
+  }>>([]);
+  const [previousOrderCount, setPreviousOrderCount] = useState<number>(0);
+
+  // --- TPV Domicilio States ---
+  const [deliveryCart, setDeliveryCart] = useState<DeliveryCartItem[]>([]);
+  const [deliveryCustomerName, setDeliveryCustomerName] = useState('');
+  const [deliveryCustomerPhone, setDeliveryCustomerPhone] = useState('');
+  const [deliveryCustomerAddress, setDeliveryCustomerAddress] = useState('');
+  const [deliveryCustomerNeighborhood, setDeliveryCustomerNeighborhood] = useState('');
+  const [deliveryPaymentMethod, setDeliveryPaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [deliveryPaymentStatus, setDeliveryPaymentStatus] = useState<'pending' | 'paid'>('pending');
+  const [deliveryFee, setDeliveryFee] = useState(5000);
+  const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [deliverySearchQuery, setDeliverySearchQuery] = useState('');
+  const [isCreatingDeliveryInvoice, setIsCreatingDeliveryInvoice] = useState(false);
+  const [deliveryInvoiceCreated, setDeliveryInvoiceCreated] = useState(false);
+  const [lastDeliveryInvoiceNumber, setLastDeliveryInvoiceNumber] = useState('');
+  const [deliveryInvoices, setDeliveryInvoices] = useState<DeliveryInvoice[]>([]);
+  const [isLoadingDeliveryInvoices, setIsLoadingDeliveryInvoices] = useState(false);
+  const [deliveryViewMode, setDeliveryViewMode] = useState<'create' | 'list'>('list');
+
+  // --- TPV Restaurante States ---
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [invoiceCustomerName, setInvoiceCustomerName] = useState('');
+  const [invoiceCustomerPhone, setInvoiceCustomerPhone] = useState('');
+  const [invoicePaymentMethod, setInvoicePaymentMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
+  const [invoiceCreated, setInvoiceCreated] = useState(false);
+  const [lastInvoiceNumber, setLastInvoiceNumber] = useState(0);
+  const [invoices, setInvoices] = useState<RestaurantInvoice[]>([]);
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+  const [invoiceViewMode, setInvoiceViewMode] = useState<'create' | 'list'>('create');
+
   // Load profile from API on mount
   useEffect(() => {
     const loadProfile = async (): Promise<void> => {
@@ -557,8 +813,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'catalogo', label: 'Catálogo', icon: <Package className="w-5 h-5" /> },
-    { id: 'pedidos', label: 'Pedidos', icon: <ShoppingCart className="w-5 h-5" /> },
-    { id: 'domicilios', label: 'Domicilios', icon: <Truck className="w-5 h-5" /> },
+    { id: 'pedidos', label: 'Gestión de Pedidos', icon: <ShoppingCart className="w-5 h-5" /> },
+    { id: 'tpv', label: 'Factura Restaurante', icon: <FileText className="w-5 h-5" /> },
+    { id: 'domicilios', label: 'Facturación Domicilio', icon: <Truck className="w-5 h-5" /> },
+    { id: 'impresoras', label: 'Impresoras', icon: <Printer className="w-5 h-5" /> },
     { id: 'empaque', label: 'Empaque', icon: <Package className="w-5 h-5" /> },
     { id: 'backup', label: 'Backup', icon: <HardDrive className="w-5 h-5" /> },
     { id: 'compartir', label: 'Compartir Menú', icon: <Share2 className="w-5 h-5" /> },
@@ -1087,6 +1345,316 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     console.log('[Categories] Created new category:', trimmedName);
   };
 
+  // ============================================================================
+  // TPV DOMICILIO FUNCTIONS
+  // ============================================================================
+
+  // Add product to delivery cart
+  const addToDeliveryCart = (product: Product): void => {
+    setDeliveryCart(prev => {
+      const existingItem = prev.find(item => item.productId === product.id);
+      if (existingItem) {
+        return prev.map(item =>
+          item.productId === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...prev, {
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: 1,
+        stock: product.stock,
+        requiereEmpaque: product.requiereEmpaque ?? true
+      }];
+    });
+  };
+
+  // Remove product from delivery cart
+  const removeFromDeliveryCart = (productId: string): void => {
+    setDeliveryCart(prev => prev.filter(item => item.productId !== productId));
+  };
+
+  // Update delivery cart quantity
+  const updateDeliveryCartQuantity = (productId: string, quantity: number): void => {
+    if (quantity <= 0) {
+      removeFromDeliveryCart(productId);
+      return;
+    }
+    setDeliveryCart(prev =>
+      prev.map(item =>
+        item.productId === productId
+          ? { ...item, quantity }
+          : item
+      )
+    );
+  };
+
+  // Get delivery cart totals
+  const getDeliveryCartTotals = (): { subtotal: number; empaqueTotal: number; total: number; itemCount: number } => {
+    const subtotal = deliveryCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const empaqueTotal = deliveryCart.reduce((sum, item) => {
+      if (item.requiereEmpaque) {
+        return sum + (valorEmpaqueUnitario * item.quantity);
+      }
+      return sum;
+    }, 0);
+    const total = subtotal + deliveryFee + empaqueTotal;
+    const itemCount = deliveryCart.reduce((sum, item) => sum + item.quantity, 0);
+    return { subtotal, empaqueTotal, total, itemCount };
+  };
+
+  // Clear delivery cart
+  const clearDeliveryCart = (): void => {
+    setDeliveryCart([]);
+    setDeliveryCustomerName('');
+    setDeliveryCustomerPhone('');
+    setDeliveryCustomerAddress('');
+    setDeliveryCustomerNeighborhood('');
+    setDeliveryPaymentMethod('cash');
+    setDeliveryPaymentStatus('pending');
+    setDeliveryNotes('');
+    setDeliveryInvoiceCreated(false);
+    setLastDeliveryInvoiceNumber('');
+  };
+
+  // Create delivery invoice
+  const handleCreateDeliveryInvoice = async (): Promise<void> => {
+    if (deliveryCart.length === 0 || !deliveryCustomerName.trim() || !deliveryCustomerPhone.trim() || !deliveryCustomerAddress.trim()) {
+      return;
+    }
+
+    setIsCreatingDeliveryInvoice(true);
+
+    try {
+      const { subtotal, empaqueTotal, total, itemCount } = getDeliveryCartTotals();
+      const now = new Date();
+      const invoiceNumber = `FAC-DOM-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(deliveryInvoices.length + 1).padStart(4, '0')}`;
+
+      const newInvoice: DeliveryInvoice = {
+        id: `DEL-${Date.now()}`,
+        invoiceNumber,
+        customerName: deliveryCustomerName,
+        customerPhone: deliveryCustomerPhone,
+        customerAddress: deliveryCustomerAddress,
+        customerNeighborhood: deliveryCustomerNeighborhood,
+        items: [...deliveryCart],
+        subtotal,
+        deliveryFee,
+        empaqueTotal,
+        total,
+        paymentMethod: deliveryPaymentMethod,
+        paymentStatus: deliveryPaymentStatus,
+        notes: deliveryNotes,
+        status: 'pending',
+        createdAt: now.toISOString(),
+        estimatedDelivery: new Date(now.getTime() + 45 * 60000).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+      };
+
+      // Save to localStorage
+      const savedInvoices = localStorage.getItem('deliveryInvoices');
+      const existingInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
+      const updatedInvoices = [newInvoice, ...existingInvoices];
+      localStorage.setItem('deliveryInvoices', JSON.stringify(updatedInvoices));
+
+      setDeliveryInvoices(updatedInvoices);
+      setLastDeliveryInvoiceNumber(invoiceNumber);
+      setDeliveryInvoiceCreated(true);
+
+      console.log('[DeliveryInvoice] Created:', invoiceNumber);
+    } catch (error) {
+      console.error('[DeliveryInvoice] Error creating invoice:', error);
+    } finally {
+      setIsCreatingDeliveryInvoice(false);
+    }
+  };
+
+  // Load delivery invoices from localStorage
+  const loadDeliveryInvoices = (): void => {
+    setIsLoadingDeliveryInvoices(true);
+    try {
+      const savedInvoices = localStorage.getItem('deliveryInvoices');
+      if (savedInvoices) {
+        setDeliveryInvoices(JSON.parse(savedInvoices));
+      }
+    } catch (error) {
+      console.error('[DeliveryInvoices] Error loading:', error);
+    } finally {
+      setIsLoadingDeliveryInvoices(false);
+    }
+  };
+
+  // Get filtered products for delivery invoice
+  const getFilteredProductsForDelivery = (): Product[] => {
+    return products.filter(p => {
+      if (!p.available) return false;
+      if (deliverySearchQuery) {
+        return p.name.toLowerCase().includes(deliverySearchQuery.toLowerCase());
+      }
+      return true;
+    });
+  };
+
+  // ============================================================================
+  // TPV RESTAURANTE FUNCTIONS
+  // ============================================================================
+
+  // Add product to cart
+  const addToCart = (product: Product): void => {
+    setCart(prevCart => {
+      const existingItem = prevCart.find(item => item.productId === product.id);
+      if (existingItem) {
+        return prevCart.map(item =>
+          item.productId === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...prevCart, {
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: 1,
+        stock: product.stock
+      }];
+    });
+  };
+
+  // Remove product from cart
+  const removeFromCart = (productId: string): void => {
+    setCart(prevCart => prevCart.filter(item => item.productId !== productId));
+  };
+
+  // Update cart quantity
+  const updateCartQuantity = (productId: string, quantity: number): void => {
+    if (quantity <= 0) {
+      removeFromCart(productId);
+      return;
+    }
+    setCart(prevCart =>
+      prevCart.map(item =>
+        item.productId === productId
+          ? { ...item, quantity }
+          : item
+      )
+    );
+  };
+
+  // Get cart totals
+  const getCartTotals = (): { subtotal: number; tax: number; total: number } => {
+    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const tax = Math.round(subtotal * (profileForm.impoconsumo / 100));
+    const total = subtotal + tax;
+    return { subtotal, tax, total };
+  };
+
+  // Clear cart
+  const clearCart = (): void => {
+    setCart([]);
+    setInvoiceCustomerName('');
+    setInvoiceCustomerPhone('');
+    setInvoicePaymentMethod('cash');
+  };
+
+  // Create invoice
+  const handleCreateInvoice = async (): Promise<void> => {
+    if (cart.length === 0) return;
+    
+    setIsCreatingInvoice(true);
+    
+    const totals = getCartTotals();
+    const newInvoiceNumber = lastInvoiceNumber + 1;
+    
+    const newInvoice: RestaurantInvoice = {
+      id: `inv-${Date.now()}`,
+      invoiceNumber: `FAC-${String(newInvoiceNumber).padStart(4, '0')}`,
+      customerName: invoiceCustomerName || 'Cliente Mostrador',
+      customerPhone: invoiceCustomerPhone,
+      items: cart.map(item => ({
+        productId: item.productId,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity
+      })),
+      subtotal: totals.subtotal,
+      tax: totals.tax,
+      total: totals.total,
+      paymentMethod: invoicePaymentMethod,
+      status: 'paid',
+      createdAt: new Date().toISOString()
+    };
+    
+    try {
+      const response = await fetch('/api/restaurant-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newInvoice)
+      });
+      
+      if (response.ok) {
+        setLastInvoiceNumber(newInvoiceNumber);
+        setInvoices(prev => [newInvoice, ...prev]);
+        clearCart();
+        setInvoiceCreated(true);
+        setTimeout(() => setInvoiceCreated(false), 3000);
+      }
+    } catch (error) {
+      console.error('[TPV] Error creating invoice:', error);
+    } finally {
+      setIsCreatingInvoice(false);
+    }
+  };
+
+  // Load invoices
+  const loadInvoices = useCallback(async (): Promise<void> => {
+    setIsLoadingInvoices(true);
+    try {
+      const response = await fetch('/api/restaurant-invoice');
+      const data = await response.json();
+      if (data.success && data.invoices) {
+        setInvoices(data.invoices);
+        // Get last invoice number
+        if (data.invoices.length > 0) {
+          const lastNum = data.invoices.reduce((max: number, inv: RestaurantInvoice) => {
+            const num = parseInt(inv.invoiceNumber.replace('FAC-', ''));
+            return num > max ? num : max;
+          }, 0);
+          setLastInvoiceNumber(lastNum);
+        }
+      }
+    } catch (error) {
+      console.error('[TPV] Error loading invoices:', error);
+    } finally {
+      setIsLoadingInvoices(false);
+    }
+  }, []);
+
+  // Get filtered products for invoice
+  const getFilteredProductsForInvoice = (): Product[] => {
+    let filtered = products.filter(p => p.available);
+    
+    if (productSearchQuery.trim()) {
+      const query = productSearchQuery.toLowerCase();
+      filtered = filtered.filter(p =>
+        p.name.toLowerCase().includes(query) ||
+        p.description.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  };
+
+  // Load invoices on mount
+  useEffect(() => {
+    loadInvoices();
+  }, [loadInvoices]);
+
+  // Load delivery invoices on mount
+  useEffect(() => {
+    loadDeliveryInvoices();
+  }, []);
+
   const closeAIModals = (): void => {
     // Stop any ongoing speech recognition
     if (recognitionRef.current) {
@@ -1148,6 +1716,137 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         delivery.address.toLowerCase().includes(deliverySearch.toLowerCase());
       return matchesFilter && matchesSearch;
     });
+  };
+
+  // Get filtered delivery invoices (real invoices from TPV)
+  const getFilteredDeliveryInvoices = (): DeliveryInvoice[] => {
+    return deliveryInvoices.filter(invoice => {
+      const matchesFilter = deliveryFilter === 'all' || invoice.status === deliveryFilter;
+      const matchesSearch = !deliverySearch || 
+        invoice.customerName.toLowerCase().includes(deliverySearch.toLowerCase()) ||
+        invoice.invoiceNumber.toLowerCase().includes(deliverySearch.toLowerCase()) ||
+        invoice.customerAddress.toLowerCase().includes(deliverySearch.toLowerCase()) ||
+        invoice.customerPhone.includes(deliverySearch);
+      return matchesFilter && matchesSearch;
+    });
+  };
+
+  // Filter delivery invoices by date range
+  const getFilteredDeliveryInvoicesByDate = (): DeliveryInvoice[] => {
+    const baseFiltered = getFilteredDeliveryInvoices();
+    if (!deliveryDateFrom && !deliveryDateTo) return baseFiltered;
+    
+    return baseFiltered.filter(invoice => {
+      const invoiceDate = new Date(invoice.createdAt);
+      const dateFrom = deliveryDateFrom ? new Date(deliveryDateFrom) : null;
+      const dateTo = deliveryDateTo ? new Date(deliveryDateTo) : null;
+
+      if (dateFrom && dateTo) {
+        return invoiceDate >= dateFrom && invoiceDate <= dateTo;
+      } else if (dateFrom) {
+        return invoiceDate >= dateFrom;
+      } else if (dateTo) {
+        return invoiceDate <= dateTo;
+      }
+      return true;
+    });
+  };
+
+  // Get delivery invoice status color
+  const getDeliveryInvoiceStatusColor = (status: DeliveryInvoice['status']): string => {
+    const colors: Record<DeliveryInvoice['status'], string> = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      confirmed: 'bg-blue-100 text-blue-800',
+      preparing: 'bg-orange-100 text-orange-800',
+      on_the_way: 'bg-purple-100 text-purple-800',
+      delivered: 'bg-green-100 text-green-800'
+    };
+    return colors[status];
+  };
+
+  // Get delivery invoice status text
+  const getDeliveryInvoiceStatusText = (status: DeliveryInvoice['status']): string => {
+    const texts: Record<DeliveryInvoice['status'], string> = {
+      pending: 'Pendiente',
+      confirmed: 'Confirmado',
+      preparing: 'Preparando',
+      on_the_way: 'En Camino',
+      delivered: 'Entregado'
+    };
+    return texts[status];
+  };
+
+  // Get delivery invoice payment status color
+  const getDeliveryInvoicePaymentStatusColor = (status: DeliveryInvoice['paymentStatus']): string => {
+    const colors: Record<DeliveryInvoice['paymentStatus'], string> = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      paid: 'bg-green-100 text-green-800'
+    };
+    return colors[status];
+  };
+
+  // Get delivery invoice payment method text
+  const getDeliveryInvoicePaymentMethodText = (method: DeliveryInvoice['paymentMethod']): string => {
+    const texts: Record<DeliveryInvoice['paymentMethod'], string> = {
+      cash: 'Efectivo',
+      card: 'Tarjeta',
+      transfer: 'Transferencia'
+    };
+    return texts[method];
+  };
+
+  // Toggle delivery invoice selection
+  const toggleDeliveryInvoiceSelection = (invoiceId: string): void => {
+    setSelectedDeliveryIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(invoiceId)) {
+        newSet.delete(invoiceId);
+      } else {
+        newSet.add(invoiceId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select/deselect all visible delivery invoices
+  const toggleAllDeliveryInvoices = (checked: boolean): void => {
+    const filteredInvoices = getFilteredDeliveryInvoicesByDate();
+    if (checked) {
+      setSelectedDeliveryIds(new Set(filteredInvoices.map(inv => inv.id)));
+    } else {
+      setSelectedDeliveryIds(new Set());
+    }
+  };
+
+  // Delete selected delivery invoices
+  const deleteSelectedDeliveryInvoices = async (): Promise<void> => {
+    setIsDeletingDeliveries(true);
+    const idsArray = Array.from(selectedDeliveryIds);
+    setDeliveryDeleteProgress({ current: 0, total: idsArray.length });
+
+    try {
+      // Delete from localStorage
+      const savedInvoices = localStorage.getItem('deliveryInvoices');
+      let existingInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
+      existingInvoices = existingInvoices.filter(inv => !idsArray.includes(inv.id));
+      localStorage.setItem('deliveryInvoices', JSON.stringify(existingInvoices));
+      
+      setDeliveryInvoices(existingInvoices);
+      setToastMessage({
+        type: 'success',
+        message: `✅ ${idsArray.length} domicilios eliminados correctamente`
+      });
+      setSelectedDeliveryIds(new Set());
+      setShowDeliveryDeleteConfirm(false);
+    } catch (error) {
+      setToastMessage({
+        type: 'error',
+        message: '❌ Error al eliminar algunos domicilios'
+      });
+    } finally {
+      setIsDeletingDeliveries(false);
+      setDeliveryDeleteProgress({ current: 0, total: 0 });
+    }
   };
 
   const getDeliveryStatusColor = (status: DeliveryOrder['status']): string => {
@@ -1412,6 +2111,215 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     setDeliveryDateFrom('');
     setDeliveryDateTo('');
   };
+
+  // ============================================================================
+  // PEDIDOS KANBAN - NOTIFICATIONS, TIMERS & UNIFIED ORDERS
+  // ============================================================================
+
+  // Play notification sound using Web Audio API
+  const playNotificationSound = (): void => {
+    try {
+      const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      
+      // Create a pleasant notification sound
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (error) {
+      console.log('Audio not supported:', error);
+    }
+  };
+
+  // Add notification
+  const addNotification = (message: string, type: 'restaurante' | 'domicilio'): void => {
+    const notification = {
+      id: `notif-${Date.now()}`,
+      message,
+      type,
+      timestamp: new Date()
+    };
+    
+    setNotifications(prev => [...prev, notification]);
+    playNotificationSound();
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== notification.id));
+    }, 5000);
+  };
+
+  // Remove notification
+  const removeNotification = (id: string): void => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  // Calculate elapsed time in minutes
+  const getElapsedMinutes = (createdAt: string): number => {
+    const created = new Date(createdAt).getTime();
+    const now = Date.now();
+    return Math.floor((now - created) / 60000);
+  };
+
+  // Get timer color based on elapsed time
+  const getTimerColor = (minutes: number): string => {
+    if (minutes <= 10) return 'text-green-600';
+    if (minutes <= 20) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  // Get timer background for urgent orders
+  const getTimerBackground = (minutes: number): string => {
+    if (minutes > 20) return 'bg-red-50 animate-pulse';
+    return '';
+  };
+
+  // Get all unified orders (restaurant + delivery)
+  const getAllUnifiedOrders = (): UnifiedOrder[] => {
+    const restaurantOrders: UnifiedOrder[] = mockOrders.map(order => ({
+      id: order.id,
+      customer: order.customer,
+      items: order.items,
+      total: order.total,
+      status: order.status as UnifiedOrder['status'],
+      type: 'restaurante' as const,
+      time: order.time,
+      date: order.date,
+      phone: order.phone,
+      address: order.address,
+      notes: order.notes,
+      createdAt: new Date().toISOString() // Mock createdAt
+    }));
+    
+    const deliveryOrders: UnifiedOrder[] = mockDeliveryOrders.map(order => ({
+      id: order.id,
+      customer: order.customer,
+      items: order.items,
+      total: order.total,
+      status: order.status as UnifiedOrder['status'],
+      type: 'domicilio' as const,
+      time: order.createdAt,
+      date: order.date,
+      phone: order.phone,
+      address: order.address,
+      notes: order.notes,
+      createdAt: new Date().toISOString() // Mock createdAt
+    }));
+    
+    return [...restaurantOrders, ...deliveryOrders];
+  };
+
+  // Get filtered orders by type with search
+  const getOrdersByType = (type: 'all' | 'restaurante' | 'domicilio'): UnifiedOrder[] => {
+    const allOrders = getAllUnifiedOrders();
+
+    // Filter by type
+    let filtered = type === 'all' ? allOrders : allOrders.filter(order => order.type === type);
+
+    // Filter by status
+    if (pedidosStatusFilter !== 'all') {
+      filtered = filtered.filter(order => order.status === pedidosStatusFilter);
+    }
+
+    // Filter by date
+    if (pedidosDateFilter !== 'all') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (pedidosDateFilter === 'today') {
+        filtered = filtered.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          orderDate.setHours(0, 0, 0, 0);
+          return orderDate.getTime() === today.getTime();
+        });
+      } else if (pedidosDateFilter === 'yesterday') {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        filtered = filtered.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          orderDate.setHours(0, 0, 0, 0);
+          return orderDate.getTime() === yesterday.getTime();
+        });
+      } else if (pedidosDateFilter === 'week') {
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        filtered = filtered.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= weekAgo;
+        });
+      } else if (pedidosDateFilter === 'month') {
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        filtered = filtered.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate >= monthAgo;
+        });
+      }
+    }
+
+    // Filter by search query
+    if (pedidosSearchQuery.trim()) {
+      const query = pedidosSearchQuery.toLowerCase().trim();
+      filtered = filtered.filter(order =>
+        order.id.toLowerCase().includes(query) ||
+        order.customer.toLowerCase().includes(query) ||
+        (order.phone && order.phone.toLowerCase().includes(query)) ||
+        (order.address && order.address.toLowerCase().includes(query)) ||
+        (order.notes && order.notes.toLowerCase().includes(query))
+      );
+    }
+
+    return filtered;
+  };
+
+  // Check if order should show timer
+  const shouldShowTimer = (status: UnifiedOrder['status']): boolean => {
+    return ['pending', 'preparing', 'confirmed'].includes(status);
+  };
+
+  // Update timers every minute
+  useEffect(() => {
+    const updateTimers = (): void => {
+      const allOrders = getAllUnifiedOrders();
+      const newTimers = new Map<string, number>();
+      
+      allOrders.forEach(order => {
+        if (shouldShowTimer(order.status)) {
+          newTimers.set(order.id, getElapsedMinutes(order.createdAt));
+        }
+      });
+      
+      setOrderTimers(newTimers);
+    };
+    
+    updateTimers();
+    const interval = setInterval(updateTimers, 60000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Check for new orders and notify
+  useEffect(() => {
+    const currentCount = mockOrders.length + mockDeliveryOrders.length;
+    
+    if (previousOrderCount > 0 && currentCount > previousOrderCount) {
+      const newCount = currentCount - previousOrderCount;
+      addNotification(`🔔 ${newCount} nuevo${newCount > 1 ? 's' : ''} pedido${newCount > 1 ? 's' : ''} recibido${newCount > 1 ? 's' : ''}`, 'restaurante');
+    }
+    
+    setPreviousOrderCount(currentCount);
+  }, [mockOrders.length, mockDeliveryOrders.length]);
 
   // --- Ticket and PDF Functions ---
   const printThermalTicket = (delivery: DeliveryOrder): void => {
@@ -1945,6 +2853,574 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     }
   };
 
+  // --- Order Ticket and PDF Functions (Restaurant Orders) ---
+  const printOrderTicket = (order: Order): void => {
+    const statusText: Record<string, string> = {
+      pending: 'Pendiente',
+      preparing: 'Preparando',
+      ready: 'Listo',
+      delivered: 'Entregado'
+    };
+
+    // Generate QR Code URL using a free QR API
+    const qrData = `PEDIDO: ${order.id}\\nCliente: ${order.customer}\\nTotal: $${order.total.toLocaleString()}\\nFecha: ${order.date} ${order.time}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(qrData)}`;
+
+    // Logo URL (use business logo or fallback to a default)
+    const logoUrl = profileForm.logo || profileForm.avatar || '';
+
+    const ticketContent = `
+      <html>
+      <head>
+        <title>Ticket de Pedido - ${order.id}</title>
+        <style>
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          body {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            width: 72mm;
+            padding: 3mm;
+            background: white;
+          }
+          .ticket {
+            width: 100%;
+            max-width: 72mm;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 1px dashed #000;
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+          }
+          .logo-container {
+            text-align: center;
+            margin-bottom: 5px;
+          }
+          .logo {
+            max-width: 50mm;
+            max-height: 25mm;
+            object-fit: contain;
+          }
+          .business-name {
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 5px;
+            text-transform: uppercase;
+          }
+          .business-info {
+            font-size: 9px;
+            color: #333;
+            margin-top: 2px;
+          }
+          .order-title {
+            font-size: 12px;
+            font-weight: bold;
+            background: #000;
+            color: #fff;
+            padding: 3px 5px;
+            margin: 8px 0;
+            text-align: center;
+          }
+          .info-section {
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+            border-bottom: 1px dashed #000;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+            font-size: 10px;
+          }
+          .label {
+            font-weight: bold;
+          }
+          .customer-section {
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+            border-bottom: 1px dashed #000;
+          }
+          .section-title {
+            font-size: 10px;
+            font-weight: bold;
+            margin-bottom: 3px;
+            background: #f0f0f0;
+            padding: 2px;
+          }
+          .total-section {
+            font-size: 14px;
+            font-weight: bold;
+            text-align: right;
+            padding: 8px 0;
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            margin: 8px 0;
+          }
+          .total-amount {
+            font-size: 16px;
+          }
+          .qr-section {
+            text-align: center;
+            margin: 10px 0;
+            padding: 8px 0;
+            border-top: 1px dashed #000;
+          }
+          .qr-code {
+            width: 80px;
+            height: 80px;
+            margin: 5px auto;
+          }
+          .qr-label {
+            font-size: 8px;
+            color: #666;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #000;
+            font-size: 9px;
+          }
+          .status {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 9px;
+            font-weight: bold;
+            border: 1px solid #000;
+          }
+          .divider {
+            border-top: 1px dashed #000;
+            margin: 6px 0;
+          }
+          .dotted-line {
+            border-top: 1px dotted #000;
+            margin: 4px 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="ticket">
+          <div class="header">
+            ${logoUrl ? `
+            <div class="logo-container">
+              <img src="${logoUrl}" alt="Logo" class="logo" onerror="this.style.display='none'">
+            </div>
+            ` : ''}
+            <div class="business-name">${profileForm.businessName || 'MINIMENU'}</div>
+            ${profileForm.address ? `<div class="business-info">${profileForm.address}</div>` : ''}
+            ${profileForm.phone ? `<div class="business-info">Tel: ${profileForm.phone}</div>` : ''}
+          </div>
+          
+          <div class="order-title">PEDIDO ${order.id}</div>
+          
+          <div class="info-section">
+            <div class="info-row">
+              <span class="label">Fecha:</span>
+              <span>${order.date}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Hora:</span>
+              <span>${order.time}</span>
+            </div>
+            <div class="info-row">
+              <span class="label">Estado:</span>
+              <span class="status">${statusText[order.status]}</span>
+            </div>
+          </div>
+
+          <div class="customer-section">
+            <div class="section-title">DATOS DEL CLIENTE</div>
+            <div class="info-row">
+              <span class="label">Nombre:</span>
+              <span>${order.customer}</span>
+            </div>
+            ${order.phone ? `
+            <div class="info-row">
+              <span class="label">Teléfono:</span>
+              <span>${order.phone}</span>
+            </div>
+            ` : ''}
+            ${order.address ? `
+            <div class="dotted-line"></div>
+            <div class="info-row">
+              <span class="label">Dirección:</span>
+            </div>
+            <div style="font-size: 9px; word-wrap: break-word;">${order.address}</div>
+            ` : ''}
+          </div>
+
+          <div class="info-section">
+            <div class="section-title">DETALLE DEL PEDIDO</div>
+            <div class="info-row">
+              <span class="label">Cantidad Items:</span>
+              <span>${order.items}</span>
+            </div>
+            ${order.notes ? `
+            <div class="dotted-line"></div>
+            <div class="info-row">
+              <span class="label">Notas:</span>
+            </div>
+            <div style="font-size: 9px; word-wrap: break-word; background: #fffbe6; padding: 2px;">${order.notes}</div>
+            ` : ''}
+          </div>
+
+          <div class="total-section">
+            <div>TOTAL A PAGAR:</div>
+            <div class="total-amount">$${order.total.toLocaleString()}</div>
+          </div>
+
+          <div class="qr-section">
+            <img src="${qrCodeUrl}" alt="QR Code" class="qr-code">
+            <div class="qr-label">Escanea para ver el pedido</div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="footer">
+            <p>¡Gracias por su preferencia!</p>
+            <p>---</p>
+            <p>Generado por MINIMENU</p>
+            <p>${new Date().toLocaleString('es-CO')}</p>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=320,height=500');
+    if (printWindow) {
+      printWindow.document.write(ticketContent);
+      printWindow.document.close();
+    }
+  };
+
+  const downloadOrderPDF = (order: Order): void => {
+    const statusText: Record<string, string> = {
+      pending: 'Pendiente',
+      preparing: 'Preparando',
+      ready: 'Listo',
+      delivered: 'Entregado'
+    };
+
+    // Generate QR Code URL
+    const qrData = `PEDIDO: ${order.id}\\nCliente: ${order.customer}\\nTotal: $${order.total.toLocaleString()}\\nFecha: ${order.date} ${order.time}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+
+    // Logo URL
+    const logoUrl = profileForm.logo || profileForm.avatar || '';
+
+    const pdfContent = `
+      <html>
+      <head>
+        <title>Pedido ${order.id}</title>
+        <meta charset="UTF-8">
+        <style>
+          @page {
+            size: A4;
+            margin: 15mm;
+          }
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #333;
+            background: #fff;
+          }
+          .invoice {
+            max-width: 100%;
+            margin: 0 auto;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #8b5cf6;
+          }
+          .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+          }
+          .logo-img {
+            max-width: 80px;
+            max-height: 80px;
+            object-fit: contain;
+            border-radius: 8px;
+          }
+          .business-info h1 {
+            font-size: 24px;
+            font-weight: bold;
+            color: #8b5cf6;
+            margin-bottom: 5px;
+          }
+          .business-info p {
+            font-size: 11px;
+            color: #666;
+          }
+          .invoice-badge {
+            background: #8b5cf6;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-align: center;
+          }
+          .invoice-badge h2 {
+            font-size: 14px;
+            margin-bottom: 5px;
+          }
+          .invoice-badge p {
+            font-size: 20px;
+            font-weight: bold;
+          }
+          .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+          }
+          .section {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #e5e7eb;
+          }
+          .section-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #8b5cf6;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px dotted #e5e7eb;
+          }
+          .info-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+          }
+          .info-label {
+            font-weight: 600;
+            color: #6b7280;
+            font-size: 11px;
+          }
+          .info-value {
+            font-weight: 500;
+            color: #111827;
+          }
+          .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: bold;
+          }
+          .status-pending { background: #fef3c7; color: #92400e; }
+          .status-preparing { background: #ffedd5; color: #9a3412; }
+          .status-ready { background: #dcfce7; color: #166534; }
+          .status-delivered { background: #f3f4f6; color: #374151; }
+          .total-section {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .total-label {
+            font-size: 14px;
+            opacity: 0.9;
+          }
+          .total-amount {
+            font-size: 28px;
+            font-weight: bold;
+          }
+          .notes-box {
+            background: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            padding: 12px 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+          }
+          .notes-box h4 {
+            font-size: 12px;
+            color: #92400e;
+            margin-bottom: 6px;
+          }
+          .notes-box p {
+            color: #78350f;
+            font-size: 11px;
+          }
+          .qr-section {
+            text-align: center;
+            margin: 25px 0;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+          }
+          .qr-code {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 10px;
+          }
+          .qr-label {
+            font-size: 11px;
+            color: #6b7280;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #e5e7eb;
+          }
+          .footer p {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-bottom: 5px;
+          }
+          .footer .brand {
+            font-size: 13px;
+            color: #8b5cf6;
+            font-weight: bold;
+          }
+          @media print {
+            body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="invoice">
+          <div class="header">
+            <div class="logo-section">
+              ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo-img" onerror="this.style.display='none'">` : ''}
+              <div class="business-info">
+                <h1>${profileForm.businessName || 'MINIMENU'}</h1>
+                ${profileForm.address ? `<p>${profileForm.address}</p>` : ''}
+                ${profileForm.phone ? `<p>Tel: ${profileForm.phone}</p>` : ''}
+              </div>
+            </div>
+            <div class="invoice-badge">
+              <h2>PEDIDO</h2>
+              <p>${order.id}</p>
+            </div>
+          </div>
+
+          <div class="content-grid">
+            <div class="section">
+              <div class="section-title">📋 Información del Pedido</div>
+              <div class="info-row">
+                <span class="info-label">Fecha:</span>
+                <span class="info-value">${order.date}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Hora:</span>
+                <span class="info-value">${order.time}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Cantidad de Items:</span>
+                <span class="info-value">${order.items}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Estado:</span>
+                <span class="info-value">
+                  <span class="status-badge status-${order.status}">${statusText[order.status]}</span>
+                </span>
+              </div>
+            </div>
+
+            <div class="section">
+              <div class="section-title">👤 Información del Cliente</div>
+              <div class="info-row">
+                <span class="info-label">Nombre:</span>
+                <span class="info-value">${order.customer}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Teléfono:</span>
+                <span class="info-value">${order.phone || 'No especificado'}</span>
+              </div>
+              ${order.address ? `
+              <div class="info-row">
+                <span class="info-label">Dirección:</span>
+                <span class="info-value">${order.address}</span>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="total-section">
+            <div class="total-label">TOTAL A PAGAR</div>
+            <div class="total-amount">$${order.total.toLocaleString()}</div>
+          </div>
+
+          ${order.notes ? `
+          <div class="notes-box">
+            <h4>📝 Notas del Cliente</h4>
+            <p>${order.notes}</p>
+          </div>
+          ` : ''}
+
+          <div class="qr-section">
+            <img src="${qrCodeUrl}" alt="QR Code" class="qr-code">
+            <div class="qr-label">Escanea el código QR para ver información del pedido</div>
+          </div>
+
+          <div class="footer">
+            <p class="brand">¡Gracias por su preferencia!</p>
+            <p>Documento generado el ${new Date().toLocaleString('es-CO')}</p>
+            <p>MINIMENU - Sistema de Gestión de Pedidos</p>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(pdfContent);
+      printWindow.document.close();
+    }
+  };
+
   // Cleanup speech recognition on unmount
   useEffect(() => {
     return () => {
@@ -2261,6 +3737,126 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       setToastMessage({ type: 'error', message: 'Error al descargar el código QR' });
     }
   };
+
+  // --- Printer Functions ---
+  const loadPrinters = useCallback((): void => {
+    try {
+      const saved = localStorage.getItem('printers');
+      if (saved) {
+        setPrinters(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.error('[Printers] Error loading:', error);
+    }
+  }, []);
+
+  const savePrinters = useCallback((newPrinters: Printer[]): void => {
+    try {
+      localStorage.setItem('printers', JSON.stringify(newPrinters));
+      setPrinters(newPrinters);
+    } catch (error) {
+      console.error('[Printers] Error saving:', error);
+    }
+  }, []);
+
+  const openAddPrinterModal = (): void => {
+    setEditingPrinter(null);
+    setPrinterForm({
+      name: '',
+      type: 'Térmica',
+      area: 'Cocina',
+      ip: '',
+      port: 9100,
+      isDefault: false,
+      isActive: true
+    });
+    setShowPrinterModal(true);
+  };
+
+  const openEditPrinterModal = (printer: Printer): void => {
+    setEditingPrinter(printer);
+    setPrinterForm({
+      name: printer.name,
+      type: printer.type,
+      area: printer.area,
+      ip: printer.ip,
+      port: printer.port,
+      isDefault: printer.isDefault,
+      isActive: printer.isActive
+    });
+    setShowPrinterModal(true);
+  };
+
+  const handleSavePrinter = (): void => {
+    if (!printerForm.name.trim() || !printerForm.ip.trim()) return;
+    
+    if (editingPrinter) {
+      // Update existing
+      const updated = printers.map(p => 
+        p.id === editingPrinter.id 
+          ? { ...p, ...printerForm }
+          : p
+      );
+      savePrinters(updated);
+    } else {
+      // Create new
+      const newPrinter: Printer = {
+        id: `printer-${Date.now()}`,
+        ...printerForm,
+        createdAt: new Date().toISOString()
+      };
+      savePrinters([...printers, newPrinter]);
+    }
+    
+    setShowPrinterModal(false);
+  };
+
+  const handleDeletePrinter = (): void => {
+    if (!printerToDelete) return;
+    savePrinters(printers.filter(p => p.id !== printerToDelete.id));
+    setShowPrinterDeleteConfirm(false);
+    setPrinterToDelete(null);
+  };
+
+  const togglePrinterActive = (printerId: string): void => {
+    const updated = printers.map(p => 
+      p.id === printerId ? { ...p, isActive: !p.isActive } : p
+    );
+    savePrinters(updated);
+  };
+
+  const getAllPrinterTypes = (): string[] => {
+    return [...defaultPrinterTypes, ...customPrinterTypes];
+  };
+
+  const getAllPrinterAreas = (): string[] => {
+    return [...defaultPrinterAreas, ...customPrinterAreas];
+  };
+
+  const getPrinterTypeBadge = (type: string): string => {
+    const colors: Record<string, string> = {
+      'Térmica': 'bg-blue-100 text-blue-800',
+      'Inyección': 'bg-green-100 text-green-800',
+      'Láser': 'bg-purple-100 text-purple-800',
+      'Matricial': 'bg-orange-100 text-orange-800'
+    };
+    return colors[type] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getPrinterAreaBadge = (area: string): string => {
+    const colors: Record<string, string> = {
+      'Cocina': 'bg-red-100 text-red-800',
+      'Barra': 'bg-yellow-100 text-yellow-800',
+      'Caja': 'bg-green-100 text-green-800',
+      'General': 'bg-blue-100 text-blue-800'
+    };
+    return colors[area] || 'bg-gray-100 text-gray-800';
+  };
+
+  // Load printers on mount
+  useEffect(() => {
+    loadPrinters();
+  }, [loadPrinters]);
 
   return (
     <div className="min-h-screen flex bg-gray-100">
@@ -2660,127 +4256,852 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           </div>
         )}
 
-        {/* Pedidos Tab */}
+        {/* Pedidos Tab - Kanban 3 Columnas */}
         {activeTab === 'pedidos' && (
           <div className="space-y-4">
-            {/* Existing buttons */}
-            <div className="flex items-center gap-4">
-              <Button variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                Pendientes (3)
-              </Button>
-              <Button variant="outline">Todos</Button>
-            </div>
-
-            {/* NEW: Date Filter Row */}
-            <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50 rounded-lg">
-              <span className="text-sm font-medium text-gray-700">Filtrar por fecha:</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={orderDateFrom}
-                  onChange={(e) => setOrderDateFrom(e.target.value)}
-                  className="px-3 py-1.5 border rounded-lg text-sm"
-                  placeholder="Desde"
-                />
-                <span className="text-gray-500">a</span>
-                <input
-                  type="date"
-                  value={orderDateTo}
-                  onChange={(e) => setOrderDateTo(e.target.value)}
-                  className="px-3 py-1.5 border rounded-lg text-sm"
-                  placeholder="Hasta"
-                />
+            {/* Notifications Toast */}
+            {notifications.length > 0 && (
+              <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
+                {notifications.map(notif => (
+                  <div
+                    key={notif.id}
+                    className={`p-4 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in ${
+                      notif.type === 'restaurante' 
+                        ? 'bg-orange-500 text-white' 
+                        : 'bg-blue-500 text-white'
+                    }`}
+                  >
+                    <Bell className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-medium text-sm">{notif.message}</p>
+                      <p className="text-xs opacity-80 mt-1">
+                        {notif.timestamp.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => removeNotification(notif.id)}
+                      className="text-white/80 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
-              {(orderDateFrom || orderDateTo) && (
-                <Button size="sm" variant="outline" onClick={clearOrderDateFilter}>
+            )}
+
+            {/* Search Bar and Filters */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Search Input */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Input
+                  placeholder="Buscar por ID, cliente, teléfono, dirección..."
+                  value={pedidosSearchQuery}
+                  onChange={(e) => setPedidosSearchQuery(e.target.value)}
+                  className="pl-10 pr-10 bg-white"
+                />
+                {pedidosSearchQuery && (
+                  <button
+                    onClick={() => setPedidosSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter */}
+              <select
+                className="h-10 rounded-md border border-gray-300 px-3 text-sm bg-white"
+                value={pedidosStatusFilter}
+                onChange={(e) => setPedidosStatusFilter(e.target.value)}
+              >
+                <option value="all">📋 Todos los estados</option>
+                <option value="pending">⏳ Pendiente</option>
+                <option value="confirmed">✅ Confirmado</option>
+                <option value="preparing">🍳 Preparando</option>
+                <option value="ready">🍽️ Listo</option>
+                <option value="on_the_way">🚚 En camino</option>
+                <option value="delivered">✓ Entregado</option>
+                <option value="cancelled">❌ Cancelado</option>
+              </select>
+
+              {/* Date Filter */}
+              <select
+                className="h-10 rounded-md border border-gray-300 px-3 text-sm bg-white"
+                value={pedidosDateFilter}
+                onChange={(e) => setPedidosDateFilter(e.target.value)}
+              >
+                <option value="all">📅 Todas las fechas</option>
+                <option value="today">📅 Hoy</option>
+                <option value="yesterday">📅 Ayer</option>
+                <option value="week">📅 Última semana</option>
+                <option value="month">📅 Último mes</option>
+              </select>
+
+              {/* Clear Filters Button */}
+              {(pedidosStatusFilter !== 'all' || pedidosDateFilter !== 'all' || pedidosSearchQuery) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPedidosStatusFilter('all');
+                    setPedidosDateFilter('all');
+                    setPedidosSearchQuery('');
+                  }}
+                  className="text-gray-600 whitespace-nowrap"
+                >
+                  <X className="w-4 h-4 mr-1" />
                   Limpiar
                 </Button>
               )}
             </div>
 
-            {/* NEW: Bulk Actions Bar */}
-            {selectedOrderIds.size > 0 && (
-              <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                <span className="text-sm font-medium text-purple-700">
-                  {selectedOrderIds.size} pedido{selectedOrderIds.size !== 1 ? 's' : ''} seleccionado{selectedOrderIds.size !== 1 ? 's' : ''}
-                </span>
+            {/* Mobile Column Selector */}
+            <div className="flex md:hidden gap-2 mb-4">
+              <Button
+                variant={mobileOrderColumn === 'all' ? 'default' : 'outline'}
+                onClick={() => setMobileOrderColumn('all')}
+                className={mobileOrderColumn === 'all' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+              >
+                Todos ({getOrdersByType('all').length})
+              </Button>
+              <Button
+                variant={mobileOrderColumn === 'restaurante' ? 'default' : 'outline'}
+                onClick={() => setMobileOrderColumn('restaurante')}
+                className={mobileOrderColumn === 'restaurante' ? 'bg-green-600 hover:bg-green-700' : ''}
+              >
+                🍽️ Restaurante ({getOrdersByType('restaurante').length})
+              </Button>
+              <Button
+                variant={mobileOrderColumn === 'domicilio' ? 'default' : 'outline'}
+                onClick={() => setMobileOrderColumn('domicilio')}
+                className={mobileOrderColumn === 'domicilio' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+              >
+                🚚 Domicilio ({getOrdersByType('domicilio').length})
+              </Button>
+            </div>
+
+            {/* 3 Column Layout - Desktop/Tablet */}
+            <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Columna TODOS - Solo Desktop (lg) */}
+              <div className="hidden lg:flex flex-col bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b">
+                  <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                    <span className="w-3 h-3 bg-purple-500 rounded-full"></span>
+                    TODOS
+                  </h3>
+                  <Badge className="bg-purple-100 text-purple-700">
+                    {getOrdersByType('all').length}
+                  </Badge>
+                </div>
+                <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
+                  {getOrdersByType('all').map(order => (
+                    <OrderCard 
+                      key={order.id} 
+                      order={order} 
+                      timer={orderTimers.get(order.id)}
+                      onView={() => openOrderDetail(order as unknown as Order)}
+                    />
+                  ))}
+                  {getOrdersByType('all').length === 0 && (
+                    <p className="text-center text-gray-500 py-8">No hay pedidos</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Columna RESTAURANTE */}
+              <div className="flex flex-col bg-green-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b border-green-200">
+                  <h3 className="font-semibold text-green-700 flex items-center gap-2">
+                    <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                    🍽️ RESTAURANTE
+                  </h3>
+                  <Badge className="bg-green-100 text-green-700">
+                    {getOrdersByType('restaurante').length}
+                  </Badge>
+                </div>
+                <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
+                  {getOrdersByType('restaurante').map(order => (
+                    <OrderCard 
+                      key={order.id} 
+                      order={order} 
+                      timer={orderTimers.get(order.id)}
+                      onView={() => openOrderDetail(order as unknown as Order)}
+                    />
+                  ))}
+                  {getOrdersByType('restaurante').length === 0 && (
+                    <p className="text-center text-gray-500 py-8">No hay pedidos de restaurante</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Columna DOMICILIO */}
+              <div className="flex flex-col bg-orange-50 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4 pb-2 border-b border-orange-200">
+                  <h3 className="font-semibold text-orange-700 flex items-center gap-2">
+                    <span className="w-3 h-3 bg-orange-500 rounded-full"></span>
+                    🚚 DOMICILIO
+                  </h3>
+                  <Badge className="bg-orange-100 text-orange-700">
+                    {getOrdersByType('domicilio').length}
+                  </Badge>
+                </div>
+                <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
+                  {getOrdersByType('domicilio').map(order => (
+                    <OrderCard 
+                      key={order.id} 
+                      order={order} 
+                      timer={orderTimers.get(order.id)}
+                      onView={() => openOrderDetail(order as unknown as Order)}
+                    />
+                  ))}
+                  {getOrdersByType('domicilio').length === 0 && (
+                    <p className="text-center text-gray-500 py-8">No hay pedidos a domicilio</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile View - Single Column */}
+            <div className="md:hidden">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex-1 overflow-y-auto max-h-[70vh] space-y-3">
+                  {getOrdersByType(mobileOrderColumn).map(order => (
+                    <OrderCard 
+                      key={order.id} 
+                      order={order} 
+                      timer={orderTimers.get(order.id)}
+                      onView={() => openOrderDetail(order as unknown as Order)}
+                    />
+                  ))}
+                  {getOrdersByType(mobileOrderColumn).length === 0 && (
+                    <p className="text-center text-gray-500 py-8">No hay pedidos</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TPV Restaurante Tab */}
+        {activeTab === 'tpv' && (
+          <div className="space-y-6">
+            {/* Header with Toggle */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Factura Restaurante</h2>
+                <p className="text-gray-600 mt-1">TPV para crear facturas de consumo en sitio</p>
+              </div>
+              <div className="flex gap-2">
                 <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => setShowOrderDeleteConfirm(true)}
-                  className="bg-red-600 hover:bg-red-700"
+                  variant={invoiceViewMode === 'create' ? 'default' : 'outline'}
+                  onClick={() => setInvoiceViewMode('create')}
+                  className={invoiceViewMode === 'create' ? 'bg-purple-600 hover:bg-purple-700' : ''}
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Eliminar seleccionados
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nueva Factura
                 </Button>
+                <Button
+                  variant={invoiceViewMode === 'list' ? 'default' : 'outline'}
+                  onClick={() => setInvoiceViewMode('list')}
+                  className={invoiceViewMode === 'list' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Ver Facturas ({invoices.length})
+                </Button>
+              </div>
+            </div>
+
+            {/* Success Message */}
+            {invoiceCreated && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                <Check className="w-5 h-5 text-green-600" />
+                <p className="text-green-700 font-medium">Factura creada exitosamente</p>
               </div>
             )}
 
-            <Card>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b">
-                      <tr>
-                        {/* NEW: Checkbox column */}
-                        <th className="px-4 py-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedOrderIds.size === getFilteredOrders().length && getFilteredOrders().length > 0}
-                            onChange={(e) => toggleAllOrders(e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                          />
-                        </th>
-                        <th className="text-left px-6 py-4 font-medium text-gray-600">Pedido</th>
-                        <th className="text-left px-6 py-4 font-medium text-gray-600">Cliente</th>
-                        <th className="text-left px-6 py-4 font-medium text-gray-600">Items</th>
-                        <th className="text-left px-6 py-4 font-medium text-gray-600">Total</th>
-                        <th className="text-left px-6 py-4 font-medium text-gray-600">Estado</th>
-                        <th className="text-left px-6 py-4 font-medium text-gray-600">Fecha</th>
-                        <th className="text-left px-6 py-4 font-medium text-gray-600">Hora</th>
-                        <th className="text-right px-6 py-4 font-medium text-gray-600">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {getFilteredOrders().map(order => (
-                        <tr key={order.id} className="hover:bg-gray-50">
-                          {/* NEW: Checkbox */}
-                          <td className="px-4 py-4">
-                            <input
-                              type="checkbox"
-                              checked={selectedOrderIds.has(order.id)}
-                              onChange={() => toggleOrderSelection(order.id)}
-                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                            />
-                          </td>
-                          <td className="px-6 py-4 font-medium">{order.id}</td>
-                          <td className="px-6 py-4">{order.customer}</td>
-                          <td className="px-6 py-4">{order.items}</td>
-                          <td className="px-6 py-4 font-medium">${order.total.toLocaleString()}</td>
-                          <td className="px-6 py-4">
-                            <StatusBadge status={order.status} />
-                          </td>
-                          <td className="px-6 py-4 text-gray-500">{order.date}</td>
-                          <td className="px-6 py-4 text-gray-500">{order.time}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button size="sm" variant="outline" onClick={() => openOrderDetail(order)}>Ver</Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            {invoiceViewMode === 'create' ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Products Section */}
+                <div className="lg:col-span-2 space-y-4">
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      placeholder="Buscar productos..."
+                      value={productSearchQuery}
+                      onChange={e => setProductSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+
+                  {/* Products Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto pr-2">
+                    {getFilteredProductsForInvoice().map(product => (
+                      <Card 
+                        key={product.id}
+                        className="cursor-pointer hover:shadow-md transition-shadow"
+                        onClick={() => addToCart(product)}
+                      >
+                        <CardContent className="p-3">
+                          <div className="aspect-square bg-gray-100 rounded-md mb-2 overflow-hidden">
+                            {product.image ? (
+                              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Utensils className="w-8 h-8 text-gray-300" />
+                              </div>
+                            )}
+                          </div>
+                          <h4 className="font-medium text-sm truncate">{product.name}</h4>
+                          <p className="text-purple-600 font-bold text-sm">${product.price.toLocaleString()}</p>
+                          {product.stock !== undefined && product.stock > 0 && (
+                            <p className="text-xs text-gray-500">Stock: {product.stock}</p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+
+                {/* Cart Section */}
+                <Card className="lg:col-span-1">
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center justify-between">
+                      <span>Carrito</span>
+                      {cart.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearCart}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Cart Items */}
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {cart.length === 0 ? (
+                        <p className="text-gray-500 text-center py-8">Carrito vacío</p>
+                      ) : (
+                        cart.map(item => (
+                          <div key={item.productId} className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{item.name}</p>
+                              <p className="text-xs text-gray-500">${item.price.toLocaleString()} c/u</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => updateCartQuantity(item.productId, item.quantity - 1)}
+                              >
+                                -
+                              </Button>
+                              <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => updateCartQuantity(item.productId, item.quantity + 1)}
+                              >
+                                +
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Customer Info */}
+                    <div className="space-y-3 pt-4 border-t">
+                      <div>
+                        <Label className="text-sm text-gray-600">Nombre del Cliente</Label>
+                        <Input
+                          placeholder="Cliente Mostrador"
+                          value={invoiceCustomerName}
+                          onChange={e => setInvoiceCustomerName(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm text-gray-600">Teléfono (Opcional)</Label>
+                        <Input
+                          placeholder="+57 300 000 0000"
+                          value={invoiceCustomerPhone}
+                          onChange={e => setInvoiceCustomerPhone(e.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm text-gray-600">Método de Pago</Label>
+                        <div className="flex gap-2 mt-1">
+                          {[
+                            { value: 'cash', label: 'Efectivo', icon: '💵' },
+                            { value: 'card', label: 'Tarjeta', icon: '💳' },
+                            { value: 'transfer', label: 'Transfer', icon: '📱' }
+                          ].map(method => (
+                            <Button
+                              key={method.value}
+                              type="button"
+                              variant={invoicePaymentMethod === method.value ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => setInvoicePaymentMethod(method.value as 'cash' | 'card' | 'transfer')}
+                              className={invoicePaymentMethod === method.value ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                            >
+                              <span className="mr-1">{method.icon}</span>
+                              {method.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Totals */}
+                    {cart.length > 0 && (
+                      <div className="space-y-2 pt-4 border-t">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Subtotal:</span>
+                          <span className="font-medium">${getCartTotals().subtotal.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Impoconsumo ({profileForm.impoconsumo}%):</span>
+                          <span className="font-medium">${getCartTotals().tax.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-lg font-bold pt-2 border-t">
+                          <span>Total:</span>
+                          <span className="text-purple-600">${getCartTotals().total.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Create Invoice Button */}
+                    <Button
+                      className="w-full bg-purple-600 hover:bg-purple-700"
+                      disabled={cart.length === 0 || isCreatingInvoice}
+                      onClick={handleCreateInvoice}
+                    >
+                      {isCreatingInvoice ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Creando...
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-4 h-4 mr-2" />
+                          Crear Factura
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              /* Invoices List */
+              <Card>
+                <CardHeader>
+                  <CardTitle>Facturas Creadas</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingInvoices ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                    </div>
+                  ) : invoices.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p>No hay facturas creadas</p>
+                      <p className="text-sm">Crea tu primera factura para comenzar</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Factura</th>
+                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Cliente</th>
+                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Items</th>
+                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Total</th>
+                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Pago</th>
+                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Fecha</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoices.slice(0, 20).map(invoice => (
+                            <tr key={invoice.id} className="border-b hover:bg-gray-50">
+                              <td className="py-3 px-3">
+                                <span className="font-medium text-purple-600">{invoice.invoiceNumber}</span>
+                              </td>
+                              <td className="py-3 px-3">
+                                <div>
+                                  <p className="font-medium">{invoice.customerName}</p>
+                                  {invoice.customerPhone && (
+                                    <p className="text-xs text-gray-500">{invoice.customerPhone}</p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="bg-gray-100 px-2 py-1 rounded text-xs">
+                                  {invoice.items.length} items
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 font-bold text-green-600">
+                                ${invoice.total.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className={`text-xs px-2 py-1 rounded ${
+                                  invoice.paymentMethod === 'cash' ? 'bg-green-100 text-green-700' :
+                                  invoice.paymentMethod === 'card' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-purple-100 text-purple-700'
+                                }`}>
+                                  {invoice.paymentMethod === 'cash' ? 'Efectivo' :
+                                   invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-gray-600">
+                                {new Date(invoice.createdAt).toLocaleDateString('es-CO', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
         {/* Domicilios Tab */}
         {activeTab === 'domicilios' && (
           <div className="space-y-6">
-            {/* Stats Cards */}
+            {/* Header with Toggle */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Facturación Domicilio</h2>
+                <p className="text-gray-600 mt-1">TPV para crear facturas de domicilios</p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant={deliveryViewMode === 'create' ? 'default' : 'outline'}
+                  onClick={() => setDeliveryViewMode('create')}
+                  className={deliveryViewMode === 'create' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Crear Factura
+                </Button>
+                <Button
+                  variant={deliveryViewMode === 'list' ? 'default' : 'outline'}
+                  onClick={() => setDeliveryViewMode('list')}
+                  className={deliveryViewMode === 'list' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Ver Facturas ({deliveryInvoices.length})
+                </Button>
+              </div>
+            </div>
+
+            {/* TPV Domicilio - Create Mode */}
+            {deliveryViewMode === 'create' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Productos */}
+                <div className="lg:col-span-2 space-y-4">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">Productos</CardTitle>
+                      <div className="relative mt-2">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <Input
+                          placeholder="Buscar producto..."
+                          value={deliverySearchQuery}
+                          onChange={(e) => setDeliverySearchQuery(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
+                        {getFilteredProductsForDelivery().map(product => (
+                          <div
+                            key={product.id}
+                            onClick={() => addToDeliveryCart(product)}
+                            className={`p-3 rounded-lg border cursor-pointer transition-all hover:border-purple-400 hover:bg-purple-50 ${
+                              deliveryCart.some(item => item.productId === product.id) 
+                                ? 'border-purple-500 bg-purple-50' 
+                                : 'border-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              {product.image ? (
+                                <img src={product.image} alt={product.name} className="w-8 h-8 rounded object-cover" />
+                              ) : (
+                                <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                                  <Package className="w-4 h-4 text-gray-400" />
+                                </div>
+                              )}
+                              <span className="text-xs font-medium text-purple-600">{product.category}</span>
+                            </div>
+                            <p className="font-medium text-sm truncate">{product.name}</p>
+                            <p className="text-sm font-bold text-green-600">{formatPrice(product.price)}</p>
+                            {deliveryCart.some(item => item.productId === product.id) && (
+                              <Badge className="mt-1 bg-purple-500 text-white text-xs">
+                                {deliveryCart.find(item => item.productId === product.id)?.quantity || 0}
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Carrito y Cliente */}
+                <div className="space-y-4">
+                  {/* Cliente */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Users className="w-5 h-5" />
+                        Datos del Cliente
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div>
+                        <Label className="text-xs">Nombre *</Label>
+                        <Input
+                          placeholder="Nombre del cliente"
+                          value={deliveryCustomerName}
+                          onChange={(e) => setDeliveryCustomerName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Teléfono *</Label>
+                        <Input
+                          placeholder="+57 300 000 0000"
+                          value={deliveryCustomerPhone}
+                          onChange={(e) => setDeliveryCustomerPhone(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Dirección *</Label>
+                        <Input
+                          placeholder="Calle #..."
+                          value={deliveryCustomerAddress}
+                          onChange={(e) => setDeliveryCustomerAddress(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Barrio</Label>
+                        <Input
+                          placeholder="Barrio"
+                          value={deliveryCustomerNeighborhood}
+                          onChange={(e) => setDeliveryCustomerNeighborhood(e.target.value)}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Carrito */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <ShoppingCart className="w-5 h-5" />
+                          Carrito
+                        </span>
+                        {deliveryCart.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={clearDeliveryCart}
+                            className="text-red-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {deliveryCart.length === 0 ? (
+                        <p className="text-center text-gray-500 py-4">
+                          Selecciona productos para agregar
+                        </p>
+                      ) : (
+                        <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                          {deliveryCart.map(item => (
+                            <div key={item.productId} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{item.name}</p>
+                                <p className="text-xs text-gray-500">{formatPrice(item.price)}</p>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-7 h-7 p-0"
+                                  onClick={() => updateDeliveryCartQuantity(item.productId, item.quantity - 1)}
+                                >
+                                  -
+                                </Button>
+                                <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-7 h-7 p-0"
+                                  onClick={() => updateDeliveryCartQuantity(item.productId, item.quantity + 1)}
+                                >
+                                  +
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Pago y Totales */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">Pago y Totales</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div>
+                        <Label className="text-xs">Método de Pago</Label>
+                        <div className="flex gap-2 mt-1">
+                          {(['cash', 'card', 'transfer'] as const).map(method => (
+                            <Button
+                              key={method}
+                              size="sm"
+                              variant={deliveryPaymentMethod === method ? 'default' : 'outline'}
+                              onClick={() => setDeliveryPaymentMethod(method)}
+                              className={deliveryPaymentMethod === method ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                            >
+                              {method === 'cash' ? '💵 Efectivo' : method === 'card' ? '💳 Tarjeta' : '🏦 Transfer'}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Estado del Pago</Label>
+                        <div className="flex gap-2 mt-1">
+                          <Button
+                            size="sm"
+                            variant={deliveryPaymentStatus === 'pending' ? 'default' : 'outline'}
+                            onClick={() => setDeliveryPaymentStatus('pending')}
+                            className={deliveryPaymentStatus === 'pending' ? 'bg-yellow-500 hover:bg-yellow-600' : ''}
+                          >
+                            Pendiente
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={deliveryPaymentStatus === 'paid' ? 'default' : 'outline'}
+                            onClick={() => setDeliveryPaymentStatus('paid')}
+                            className={deliveryPaymentStatus === 'paid' ? 'bg-green-500 hover:bg-green-600' : ''}
+                          >
+                            Pagado
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs">Valor Domicilio</Label>
+                        <Input
+                          type="number"
+                          value={deliveryFee}
+                          onChange={(e) => setDeliveryFee(Number(e.target.value) || 0)}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Notas</Label>
+                        <textarea
+                          className="w-full h-16 px-3 py-2 text-sm border border-gray-300 rounded-md resize-none"
+                          placeholder="Notas del pedido..."
+                          value={deliveryNotes}
+                          onChange={(e) => setDeliveryNotes(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Totales */}
+                      <div className="border-t pt-3 space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span>Subtotal:</span>
+                          <span>{formatPrice(getDeliveryCartTotals().subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Empaque ({deliveryCart.filter(i => i.requiereEmpaque).reduce((s, i) => s + i.quantity, 0)} items):</span>
+                          <span>{formatPrice(getDeliveryCartTotals().empaqueTotal)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Domicilio:</span>
+                          <span>{formatPrice(deliveryFee)}</span>
+                        </div>
+                        <div className="flex justify-between text-lg font-bold border-t pt-2">
+                          <span>TOTAL:</span>
+                          <span className="text-green-600">{formatPrice(getDeliveryCartTotals().total)}</span>
+                        </div>
+                      </div>
+
+                      {/* Crear Factura Button */}
+                      <Button
+                        onClick={handleCreateDeliveryInvoice}
+                        disabled={
+                          deliveryCart.length === 0 || 
+                          !deliveryCustomerName.trim() || 
+                          !deliveryCustomerPhone.trim() || 
+                          !deliveryCustomerAddress.trim() ||
+                          isCreatingDeliveryInvoice
+                        }
+                        className="w-full bg-green-600 hover:bg-green-700"
+                      >
+                        {isCreatingDeliveryInvoice ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Creando...
+                          </>
+                        ) : deliveryInvoiceCreated ? (
+                          <>
+                            <Check className="w-4 h-4 mr-2" />
+                            Factura {lastDeliveryInvoiceNumber} Creada
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="w-4 h-4 mr-2" />
+                            Crear Factura
+                          </>
+                        )}
+                      </Button>
+
+                      {deliveryInvoiceCreated && (
+                        <Button
+                          onClick={clearDeliveryCart}
+                          variant="outline"
+                          className="w-full"
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Nueva Factura
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {/* Lista de Facturas */}
+            {deliveryViewMode === 'list' && (
+              <>
+                {/* Stats Cards - Using real delivery invoices */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card className="bg-yellow-50 border-yellow-200">
                 <CardContent className="p-4">
@@ -2788,7 +5109,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <div>
                       <p className="text-sm text-yellow-600">Pendientes</p>
                       <p className="text-2xl font-bold text-yellow-700">
-                        {mockDeliveryOrders.filter(d => d.status === 'pending').length}
+                        {deliveryInvoices.filter(d => d.status === 'pending').length}
                       </p>
                     </div>
                     <Clock className="w-8 h-8 text-yellow-500" />
@@ -2801,7 +5122,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <div>
                       <p className="text-sm text-orange-600">Preparando</p>
                       <p className="text-2xl font-bold text-orange-700">
-                        {mockDeliveryOrders.filter(d => d.status === 'preparing').length}
+                        {deliveryInvoices.filter(d => d.status === 'preparing').length}
                       </p>
                     </div>
                     <Package className="w-8 h-8 text-orange-500" />
@@ -2814,7 +5135,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <div>
                       <p className="text-sm text-purple-600">En Camino</p>
                       <p className="text-2xl font-bold text-purple-700">
-                        {mockDeliveryOrders.filter(d => d.status === 'on_the_way').length}
+                        {deliveryInvoices.filter(d => d.status === 'on_the_way').length}
                       </p>
                     </div>
                     <Truck className="w-8 h-8 text-purple-500" />
@@ -2825,9 +5146,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-green-600">Entregados Hoy</p>
+                      <p className="text-sm text-green-600">Entregados</p>
                       <p className="text-2xl font-bold text-green-700">
-                        {mockDeliveryOrders.filter(d => d.status === 'delivered').length}
+                        {deliveryInvoices.filter(d => d.status === 'delivered').length}
                       </p>
                     </div>
                     <Check className="w-8 h-8 text-green-500" />
@@ -2925,131 +5246,315 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               </div>
             )}
 
-            {/* Delivery Orders Table */}
+            {/* Delivery Invoices Table - Using real invoices from TPV */}
             <Card>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b">
-                      <tr>
-                        {/* NEW: Checkbox column */}
-                        <th className="px-3 py-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedDeliveryIds.size === getFilteredDeliveriesWithDate().length && getFilteredDeliveriesWithDate().length > 0}
-                            onChange={(e) => toggleAllDeliveries(e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                          />
-                        </th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Factura</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Cliente</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Dirección</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Items</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Total</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Estado</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Pago</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Fecha</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Hora</th>
-                        <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Entrega Est.</th>
-                        <th className="text-right px-4 py-3 font-medium text-gray-600 text-sm">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {getFilteredDeliveriesWithDate().map(delivery => (
-                        <tr key={delivery.id} className="hover:bg-gray-50">
-                          {/* NEW: Checkbox */}
-                          <td className="px-3 py-3">
+                {isLoadingDeliveryInvoices ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                  </div>
+                ) : deliveryInvoices.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">
+                    <Truck className="w-16 h-16 mx-auto mb-3 text-gray-300" />
+                    <p className="text-lg font-medium">No hay facturas de domicilio</p>
+                    <p className="text-sm mt-1">Crea facturas de domicilio desde el TPV para verlas aquí</p>
+                    <Button
+                      className="mt-4 bg-purple-600 hover:bg-purple-700"
+                      onClick={() => setDeliveryViewMode('create')}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Crear Primera Factura
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-3 py-3">
                             <input
                               type="checkbox"
-                              checked={selectedDeliveryIds.has(delivery.id)}
-                              onChange={() => toggleDeliverySelection(delivery.id)}
+                              checked={selectedDeliveryIds.size === getFilteredDeliveryInvoicesByDate().length && getFilteredDeliveryInvoicesByDate().length > 0}
+                              onChange={(e) => toggleAllDeliveryInvoices(e.target.checked)}
                               className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                             />
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="font-medium text-purple-600">{delivery.invoiceNumber}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div>
-                              <p className="font-medium text-gray-900">{delivery.customer}</p>
-                              <p className="text-xs text-gray-500">{delivery.phone}</p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="max-w-[200px]">
-                              <p className="text-sm text-gray-900 truncate">{delivery.address}</p>
-                              <p className="text-xs text-gray-500">{delivery.neighborhood}</p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-center">{delivery.items}</td>
-                          <td className="px-4 py-3">
-                            <div>
-                              <p className="font-bold text-gray-900">${delivery.total.toLocaleString()}</p>
-                              <p className="text-xs text-gray-500">Domicilio: ${delivery.deliveryFee.toLocaleString()}</p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <Badge className={getDeliveryStatusColor(delivery.status)}>
-                              {getDeliveryStatusText(delivery.status)}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div>
-                              <Badge className={getPaymentStatusColor(delivery.paymentStatus)}>
-                                {delivery.paymentStatus === 'pending' ? 'Pendiente' : delivery.paymentStatus === 'paid' ? 'Pagado' : 'Reembolsado'}
-                              </Badge>
-                              <p className="text-xs text-gray-500 mt-1">{getPaymentMethodText(delivery.paymentMethod)}</p>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{delivery.date}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{delivery.createdAt}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{delivery.estimatedDelivery}</td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openDeliveryDetail(delivery)}
-                              >
-                                Ver
-                              </Button>
-                              {delivery.status === 'delivered' && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-blue-600 hover:bg-blue-50"
-                                    onClick={() => printThermalTicket(delivery)}
-                                    title="Imprimir ticket térmico 80mm"
-                                  >
-                                    <Printer className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-purple-600 hover:bg-purple-50"
-                                    onClick={() => downloadDeliveryPDF(delivery)}
-                                    title="Descargar PDF"
-                                  >
-                                    <FileText className="w-4 h-4" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </td>
+                          </th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Factura</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Cliente</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Dirección</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Items</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Total</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Estado</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Pago</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Fecha</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Entrega Est.</th>
+                          <th className="text-right px-4 py-3 font-medium text-gray-600 text-sm">Acciones</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {getFilteredDeliveriesWithDate().length === 0 && (
+                      </thead>
+                      <tbody className="divide-y">
+                        {getFilteredDeliveryInvoicesByDate().map(invoice => (
+                          <tr key={invoice.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedDeliveryIds.has(invoice.id)}
+                                onChange={() => toggleDeliveryInvoiceSelection(invoice.id)}
+                                className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="font-medium text-purple-600">{invoice.invoiceNumber}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div>
+                                <p className="font-medium text-gray-900">{invoice.customerName}</p>
+                                <p className="text-xs text-gray-500">{invoice.customerPhone}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="max-w-[200px]">
+                                <p className="text-sm text-gray-900 truncate">{invoice.customerAddress}</p>
+                                <p className="text-xs text-gray-500">{invoice.customerNeighborhood}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">{invoice.items.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                            <td className="px-4 py-3">
+                              <div>
+                                <p className="font-bold text-gray-900">${invoice.total.toLocaleString()}</p>
+                                <p className="text-xs text-gray-500">Domicilio: ${invoice.deliveryFee.toLocaleString()}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge className={getDeliveryInvoiceStatusColor(invoice.status)}>
+                                {getDeliveryInvoiceStatusText(invoice.status)}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div>
+                                <Badge className={getDeliveryInvoicePaymentStatusColor(invoice.paymentStatus)}>
+                                  {invoice.paymentStatus === 'pending' ? 'Pendiente' : 'Pagado'}
+                                </Badge>
+                                <p className="text-xs text-gray-500 mt-1">{getDeliveryInvoicePaymentMethodText(invoice.paymentMethod)}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {new Date(invoice.createdAt).toLocaleDateString('es-CO', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">{invoice.estimatedDelivery}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    // Show invoice detail in a modal or expand
+                                    alert(`Ver detalle de factura ${invoice.invoiceNumber}\n\nCliente: ${invoice.customerName}\nTeléfono: ${invoice.customerPhone}\nDirección: ${invoice.customerAddress}\n\nItems:\n${invoice.items.map(i => `- ${i.name} x${i.quantity} = $${(i.price * i.quantity).toLocaleString()}`).join('\n')}\n\nSubtotal: $${invoice.subtotal.toLocaleString()}\nDomicilio: $${invoice.deliveryFee.toLocaleString()}\nEmpaque: $${invoice.empaqueTotal.toLocaleString()}\nTotal: $${invoice.total.toLocaleString()}`);
+                                  }}
+                                >
+                                  Ver
+                                </Button>
+                                {invoice.status === 'delivered' && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-blue-600 hover:bg-blue-50"
+                                      title="Imprimir ticket"
+                                    >
+                                      <Printer className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-purple-600 hover:bg-purple-50"
+                                      title="Descargar PDF"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {getFilteredDeliveryInvoicesByDate().length === 0 && deliveryInvoices.length > 0 && (
                   <div className="text-center py-8 text-gray-500">
                     <Truck className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>No se encontraron domicilios</p>
+                    <p>No se encontraron domicilios con los filtros aplicados</p>
                   </div>
                 )}
               </CardContent>
             </Card>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Impresoras Tab */}
+        {activeTab === 'impresoras' && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Gestión de Impresoras</h2>
+                <p className="text-gray-600 mt-1">Configura las impresoras para tu negocio</p>
+              </div>
+              <Button
+                onClick={openAddPrinterModal}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Agregar Impresora
+              </Button>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="bg-purple-50 border-purple-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-purple-600">Total Impresoras</p>
+                      <p className="text-2xl font-bold text-purple-700">{printers.length}</p>
+                    </div>
+                    <Printer className="w-8 h-8 text-purple-500" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-green-50 border-green-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-green-600">Activas</p>
+                      <p className="text-2xl font-bold text-green-700">
+                        {printers.filter(p => p.isActive).length}
+                      </p>
+                    </div>
+                    <Check className="w-8 h-8 text-green-500" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-red-50 border-red-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-red-600">Inactivas</p>
+                      <p className="text-2xl font-bold text-red-700">
+                        {printers.filter(p => !p.isActive).length}
+                      </p>
+                    </div>
+                    <X className="w-8 h-8 text-red-500" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-600">Predeterminadas</p>
+                      <p className="text-2xl font-bold text-blue-700">
+                        {printers.filter(p => p.isDefault).length}
+                      </p>
+                    </div>
+                    <Star className="w-8 h-8 text-blue-500" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Printers Grid */}
+            {printers.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {printers.map(printer => (
+                  <Card key={printer.id} className={`hover:shadow-lg transition-shadow ${!printer.isActive ? 'opacity-60' : ''}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${printer.isActive ? 'bg-purple-100' : 'bg-gray-100'}`}>
+                            <Printer className={`w-5 h-5 ${printer.isActive ? 'text-purple-600' : 'text-gray-400'}`} />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-900">{printer.name}</h4>
+                            {printer.isDefault && (
+                              <Badge className="bg-yellow-100 text-yellow-700 text-xs">
+                                ⭐ Predeterminada
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Switch
+                          checked={printer.isActive}
+                          onCheckedChange={() => togglePrinterActive(printer.id)}
+                          className="data-[state=checked]:bg-green-500"
+                        />
+                      </div>
+
+                      <div className="space-y-2 mb-4">
+                        <div className="flex items-center gap-2">
+                          <Badge className={getPrinterTypeBadge(printer.type)}>
+                            {printer.type}
+                          </Badge>
+                          <Badge className={getPrinterAreaBadge(printer.area)}>
+                            {printer.area}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          📍 {printer.ip}:{printer.port}
+                        </p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => openEditPrinterModal(printer)}
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          Editar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() => {
+                            setPrinterToDelete(printer);
+                            setShowPrinterDeleteConfirm(true);
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <Printer className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No hay impresoras configuradas</h3>
+                  <p className="text-gray-500 mb-4">
+                    Agrega tu primera impresora para comenzar a imprimir comandas y tickets.
+                  </p>
+                  <Button
+                    onClick={openAddPrinterModal}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Agregar Impresora
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
@@ -4518,6 +7023,31 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   </Button>
                 </div>
               </div>
+
+              {/* Print Buttons */}
+              <div className="space-y-2">
+                <h4 className="font-semibold text-gray-900">Imprimir</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                    onClick={() => selectedOrder && printOrderTicket(selectedOrder)}
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Imprimir Directo
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-purple-500 text-purple-600 hover:bg-purple-50"
+                    onClick={() => selectedOrder && downloadOrderPDF(selectedOrder)}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Imprimir PDF
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -4906,7 +7436,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             </Button>
             <Button
               variant="destructive"
-              onClick={deleteSelectedDeliveries}
+              onClick={deleteSelectedDeliveryInvoices}
               disabled={isDeletingDeliveries}
               className="bg-red-600 hover:bg-red-700"
             >
@@ -4918,6 +7448,232 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               ) : (
                 'Confirmar eliminación'
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Printer Modal - Add/Edit */}
+      <Dialog open={showPrinterModal} onOpenChange={(open) => {
+        setShowPrinterModal(open);
+        if (!open) setEditingPrinter(null);
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="w-5 h-5 text-purple-600" />
+              {editingPrinter ? 'Editar Impresora' : 'Agregar Impresora'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {/* Name */}
+            <div>
+              <Label htmlFor="printerName">Nombre *</Label>
+              <Input
+                id="printerName"
+                value={printerForm.name}
+                onChange={(e) => setPrinterForm({ ...printerForm, name: e.target.value })}
+                placeholder="Ej: Impresora Cocina"
+                className="mt-1.5"
+              />
+            </div>
+
+            {/* Type */}
+            <div>
+              <Label htmlFor="printerType">Tipo</Label>
+              <div className="flex gap-2 mt-1.5">
+                <select
+                  id="printerType"
+                  value={printerForm.type}
+                  onChange={(e) => setPrinterForm({ ...printerForm, type: e.target.value })}
+                  className="flex-1 h-10 rounded-md border border-gray-300 px-3 text-sm"
+                >
+                  {getAllPrinterTypes().map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                {isAddingNewType ? (
+                  <div className="flex gap-1">
+                    <Input
+                      value={newPrinterType}
+                      onChange={(e) => setNewPrinterType(e.target.value)}
+                      placeholder="Nuevo tipo"
+                      className="w-28"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (newPrinterType.trim()) {
+                          setCustomPrinterTypes([...customPrinterTypes, newPrinterType.trim()]);
+                          setPrinterForm({ ...printerForm, type: newPrinterType.trim() });
+                          setNewPrinterType('');
+                          setIsAddingNewType(false);
+                        }
+                      }}
+                    >
+                      <Check className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsAddingNewType(true)}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Area */}
+            <div>
+              <Label htmlFor="printerArea">Área</Label>
+              <div className="flex gap-2 mt-1.5">
+                <select
+                  id="printerArea"
+                  value={printerForm.area}
+                  onChange={(e) => setPrinterForm({ ...printerForm, area: e.target.value })}
+                  className="flex-1 h-10 rounded-md border border-gray-300 px-3 text-sm"
+                >
+                  {getAllPrinterAreas().map(area => (
+                    <option key={area} value={area}>{area}</option>
+                  ))}
+                </select>
+                {isAddingNewArea ? (
+                  <div className="flex gap-1">
+                    <Input
+                      value={newPrinterArea}
+                      onChange={(e) => setNewPrinterArea(e.target.value)}
+                      placeholder="Nueva área"
+                      className="w-28"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (newPrinterArea.trim()) {
+                          setCustomPrinterAreas([...customPrinterAreas, newPrinterArea.trim()]);
+                          setPrinterForm({ ...printerForm, area: newPrinterArea.trim() });
+                          setNewPrinterArea('');
+                          setIsAddingNewArea(false);
+                        }
+                      }}
+                    >
+                      <Check className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsAddingNewArea(true)}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* IP Address */}
+            <div>
+              <Label htmlFor="printerIp">Dirección IP *</Label>
+              <Input
+                id="printerIp"
+                value={printerForm.ip}
+                onChange={(e) => setPrinterForm({ ...printerForm, ip: e.target.value })}
+                placeholder="Ej: 192.168.1.100"
+                className="mt-1.5"
+              />
+            </div>
+
+            {/* Port */}
+            <div>
+              <Label htmlFor="printerPort">Puerto</Label>
+              <Input
+                id="printerPort"
+                type="number"
+                value={printerForm.port}
+                onChange={(e) => setPrinterForm({ ...printerForm, port: parseInt(e.target.value) || 9100 })}
+                placeholder="9100"
+                className="mt-1.5"
+              />
+              <p className="text-xs text-gray-500 mt-1">Puerto predeterminado: 9100</p>
+            </div>
+
+            {/* Options */}
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={printerForm.isDefault}
+                  onCheckedChange={(checked) => setPrinterForm({ ...printerForm, isDefault: checked })}
+                  className="data-[state=checked]:bg-yellow-500"
+                />
+                <div>
+                  <p className="font-medium text-sm">Impresora predeterminada</p>
+                  <p className="text-xs text-gray-500">Se usará para impresiones automáticas</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={printerForm.isActive}
+                  onCheckedChange={(checked) => setPrinterForm({ ...printerForm, isActive: checked })}
+                  className="data-[state=checked]:bg-green-500"
+                />
+                <div>
+                  <p className="font-medium text-sm">Activa</p>
+                  <p className="text-xs text-gray-500">La impresora está disponible para uso</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPrinterModal(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleSavePrinter} 
+              className="bg-purple-600 hover:bg-purple-700"
+              disabled={!printerForm.name.trim() || !printerForm.ip.trim()}
+            >
+              {editingPrinter ? 'Guardar Cambios' : 'Agregar Impresora'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Printer Confirmation Modal */}
+      <Dialog open={showPrinterDeleteConfirm} onOpenChange={(open) => {
+        setShowPrinterDeleteConfirm(open);
+        if (!open) setPrinterToDelete(null);
+      }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
+              Confirmar Eliminación
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-gray-600">
+              ¿Estás seguro de que deseas eliminar la impresora <strong>"{printerToDelete?.name}"</strong>?
+            </p>
+            <p className="text-sm text-gray-500 mt-2">Esta acción no se puede deshacer.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowPrinterDeleteConfirm(false);
+              setPrinterToDelete(null);
+            }}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleDeletePrinter} 
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Eliminar
             </Button>
           </DialogFooter>
         </DialogContent>
