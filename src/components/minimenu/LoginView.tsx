@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Utensils, Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Utensils, Loader2, ArrowLeft, Eye, EyeOff, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface LoginViewProps {
   onLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -15,25 +16,67 @@ interface LoginViewProps {
   onForgotPassword: () => void;
 }
 
+type ModalState = 'hidden' | 'success' | 'error';
+
 export function LoginView({ onLogin, onBack, onRegister, onForgotPassword }: LoginViewProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [modalState, setModalState] = useState<ModalState>('hidden');
+  const [modalMessage, setModalMessage] = useState<string>('');
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     
-    const result = await onLogin(email, password);
-    
-    if (!result.success) {
-      setError(result.error ?? 'Error al iniciar sesión');
+    try {
+      const result = await onLogin(email, password);
+      
+      setLoading(false);
+      
+      if (result.success) {
+        setModalMessage('Has iniciado sesión correctamente. Serás redirigido a tu panel.');
+        setModalState('success');
+        toast({
+          title: '¡Bienvenido!',
+          description: 'Inicio de sesión exitoso.',
+        });
+      } else {
+        const errorMsg = result.error ?? 'Error al iniciar sesión. Por favor verifica tus credenciales.';
+        setError(errorMsg);
+        setModalMessage(errorMsg);
+        setModalState('error');
+        toast({
+          variant: 'destructive',
+          title: 'Error de inicio de sesión',
+          description: errorMsg,
+        });
+      }
+    } catch (err) {
+      setLoading(false);
+      const errorMsg = 'Error de conexión. Por favor verifica tu conexión a internet e intenta nuevamente.';
+      setError(errorMsg);
+      setModalMessage(errorMsg);
+      setModalState('error');
+      toast({
+        variant: 'destructive',
+        title: 'Error de conexión',
+        description: errorMsg,
+      });
     }
-    
-    setLoading(false);
+  };
+
+  const handleSuccessClose = () => {
+    setModalState('hidden');
+    window.location.href = '/?view=dashboard';
+  };
+
+  const handleErrorClose = () => {
+    setModalState('hidden');
   };
 
   return (
@@ -67,6 +110,7 @@ export function LoginView({ onLogin, onBack, onRegister, onForgotPassword }: Log
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
@@ -149,6 +193,61 @@ export function LoginView({ onLogin, onBack, onRegister, onForgotPassword }: Log
           </CardContent>
         </Card>
       </main>
+
+      {/* Success Modal */}
+      {modalState === 'success' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md animate-in fade-in-0 zoom-in-95">
+            <CardContent className="pt-6 text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">¡Bienvenido!</h2>
+              <p className="text-gray-600 mb-6">
+                {modalMessage}
+              </p>
+              <Button
+                onClick={handleSuccessClose}
+                className="w-full bg-purple-600 hover:bg-purple-700"
+              >
+                Ir a mi Panel
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Error Modal */}
+      {modalState === 'error' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md animate-in fade-in-0 zoom-in-95">
+            <CardContent className="pt-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <XCircle className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">Error de Inicio de Sesión</h2>
+              <p className="text-gray-600 mb-6">
+                {modalMessage}
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleErrorClose}
+                  className="flex-1"
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  onClick={handleErrorClose}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                >
+                  Intentar de Nuevo
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
