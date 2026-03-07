@@ -1,10 +1,12 @@
 // =============================================
-// MINIMENU - Auth Login API
+// MINIMENU - Auth Login API (con pg directo)
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
+
+export const dynamic = 'force-dynamic';
 
 interface LoginRequest {
   email: string;
@@ -12,9 +14,26 @@ interface LoginRequest {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  console.log('[Login API] Starting login process...');
+
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    return NextResponse.json(
+      { success: false, error: 'Base de datos no configurada' },
+      { status: 500 }
+    );
+  }
+
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 10000,
+  });
+
   try {
     const body: LoginRequest = await request.json();
     const { email, password } = body;
+
+    console.log('[Login API] Login attempt for:', email);
 
     if (!email || !password) {
       return NextResponse.json(
@@ -23,76 +42,87 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Buscar usuario en la base de datos
-    const user = await db.user.findUnique({
-      where: { email: email.toLowerCase() },
-      include: {
-        business: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
+    const client = await pool.connect();
 
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Credenciales inválidas' },
-        { status: 401 }
+    try {
+      // Find user with business info
+      const userResult = await client.query(
+        `SELECT u.id, u.email, u.name, u.password, u.role, u."businessId",
+                b.name as "businessName", b.slug as "businessSlug"
+         FROM users u
+         LEFT JOIN businesses b ON u."businessId" = b.id
+         WHERE u.email = $1`,
+        [email.toLowerCase()]
       );
-    }
 
-    // Verificar contraseña
-    const isValidPassword = await bcrypt.compare(password, user.password);
+      if (userResult.rows.length === 0) {
+        console.log('[Login API] User not found:', email);
+        return NextResponse.json(
+          { success: false, error: 'Credenciales inválidas' },
+          { status: 401 }
+        );
+      }
 
-    if (!isValidPassword) {
-      return NextResponse.json(
-        { success: false, error: 'Credenciales inválidas' },
-        { status: 401 }
-      );
-    }
+      const user = userResult.rows[0];
 
-    // Crear sesión simple (en producción usar JWT o next-auth completo)
-    const sessionData = {
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      businessId: user.businessId,
-      businessName: user.business?.name ?? null,
-    };
+      // Verify password
+      const isValidPassword = await bcrypt.compare(password, user.password);
 
-    // Respuesta con cookie de sesión
-    const response = NextResponse.json({
-      success: true,
-      data: {
-        id: user.id,
+      if (!isValidPassword) {
+        console.log('[Login API] Invalid password for:', email);
+        return NextResponse.json(
+          { success: false, error: 'Credenciales inválidas' },
+          { status: 401 }
+        );
+      }
+
+      console.log('[Login API] Login successful for:', email);
+
+      // Create session data
+      const sessionData = {
+        userId: user.id,
         email: user.email,
         name: user.name,
         role: user.role,
         businessId: user.businessId,
-        businessName: user.business?.name ?? null,
-      },
-      message: 'Inicio de sesión exitoso',
-    });
+        businessName: user.businessName || null,
+      };
 
-    // Establecer cookie de sesión (httpOnly para seguridad)
-    response.cookies.set('session', JSON.stringify(sessionData), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 días
-      path: '/',
-    });
+      const response = NextResponse.json({
+        success: true,
+        data: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          businessId: user.businessId,
+          businessName: user.businessName || null,
+        },
+        message: 'Inicio de sesión exitoso',
+      });
 
-    return response;
+      // Set session cookie
+      response.cookies.set('session', JSON.stringify(sessionData), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+        path: '/',
+      });
+
+      return response;
+
+    } finally {
+      client.release();
+    }
+
   } catch (error) {
-    console.error('Error en login:', error);
+    console.error('[Login API] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }
     );
+  } finally {
+    await pool.end();
   }
 }
