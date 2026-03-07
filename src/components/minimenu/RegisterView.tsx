@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Utensils, Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Utensils, Loader2, ArrowLeft, Eye, EyeOff, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import type { RegisterData } from '@/types';
 
 interface RegisterViewProps {
@@ -14,6 +15,8 @@ interface RegisterViewProps {
   onBack: () => void;
   onLogin: () => void;
 }
+
+type ModalState = 'hidden' | 'success' | 'error';
 
 export function RegisterView({ onRegister, onBack, onLogin }: RegisterViewProps) {
   const [formData, setFormData] = useState({
@@ -28,6 +31,9 @@ export function RegisterView({ onRegister, onBack, onLogin }: RegisterViewProps)
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [modalState, setModalState] = useState<ModalState>('hidden');
+  const [modalMessage, setModalMessage] = useState<string>('');
+  const { toast } = useToast();
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -40,23 +46,65 @@ export function RegisterView({ onRegister, onBack, onLogin }: RegisterViewProps)
       setError('Las contraseñas no coinciden');
       return;
     }
+
+    if (formData.password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
     
     setLoading(true);
     setError(null);
     
-    const result = await onRegister({
-      name: formData.name,
-      email: formData.email,
-      password: formData.password,
-      businessName: formData.businessName,
-      phone: formData.phone
-    });
-    
-    if (!result.success) {
-      setError(result.error ?? 'Error al registrar');
+    try {
+      const result = await onRegister({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        businessName: formData.businessName,
+        phone: formData.phone
+      });
+      
+      setLoading(false);
+      
+      if (result.success) {
+        setModalMessage('Tu cuenta y negocio han sido creados exitosamente. Serás redirigido a tu panel.');
+        setModalState('success');
+        toast({
+          title: '¡Cuenta creada!',
+          description: 'Tu cuenta ha sido creada exitosamente.',
+        });
+      } else {
+        const errorMsg = result.error ?? 'Error al crear la cuenta. Por favor intenta nuevamente.';
+        setError(errorMsg);
+        setModalMessage(errorMsg);
+        setModalState('error');
+        toast({
+          variant: 'destructive',
+          title: 'Error al registrar',
+          description: errorMsg,
+        });
+      }
+    } catch (err) {
+      setLoading(false);
+      const errorMsg = 'Error de conexión. Por favor verifica tu conexión a internet e intenta nuevamente.';
+      setError(errorMsg);
+      setModalMessage(errorMsg);
+      setModalState('error');
+      toast({
+        variant: 'destructive',
+        title: 'Error de conexión',
+        description: errorMsg,
+      });
     }
-    
-    setLoading(false);
+  };
+
+  const handleSuccessClose = () => {
+    setModalState('hidden');
+    window.location.href = '/?view=dashboard';
+  };
+
+  const handleErrorClose = () => {
+    setModalState('hidden');
   };
 
   return (
@@ -90,6 +138,7 @@ export function RegisterView({ onRegister, onBack, onLogin }: RegisterViewProps)
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
@@ -226,6 +275,61 @@ export function RegisterView({ onRegister, onBack, onLogin }: RegisterViewProps)
           </CardContent>
         </Card>
       </main>
+
+      {/* Success Modal */}
+      {modalState === 'success' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md animate-in fade-in-0 zoom-in-95">
+            <CardContent className="pt-6 text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">¡Cuenta Creada!</h2>
+              <p className="text-gray-600 mb-6">
+                {modalMessage}
+              </p>
+              <Button
+                onClick={handleSuccessClose}
+                className="w-full bg-purple-600 hover:bg-purple-700"
+              >
+                Ir a mi Panel
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Error Modal */}
+      {modalState === 'error' && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md animate-in fade-in-0 zoom-in-95">
+            <CardContent className="pt-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <XCircle className="w-8 h-8 text-red-600" />
+              </div>
+              <h2 className="text-2xl font-bold mb-2">Error al Registrar</h2>
+              <p className="text-gray-600 mb-6">
+                {modalMessage}
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleErrorClose}
+                  className="flex-1"
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  onClick={handleErrorClose}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700"
+                >
+                  Intentar de Nuevo
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

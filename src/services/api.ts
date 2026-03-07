@@ -95,15 +95,57 @@ export const authService = {
   },
 
   async register(data: RegisterData): Promise<ApiResponse<User>> {
-    // Registro deshabilitado temporalmente - usar API real en producción
-    await delay(800);
-    
-    return { 
-      success: false, 
-      data: null, 
-      error: 'Registro no disponible', 
-      message: 'Contacte al administrador para crear una cuenta' 
-    };
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok || !responseData.success) {
+        return {
+          success: false,
+          data: null,
+          error: responseData.error ?? 'Error al registrar',
+          message: responseData.message ?? null,
+        };
+      }
+
+      // Map database role to frontend role format
+      const roleMap: Record<string, User['role']> = {
+        'SUPER_ADMIN': 'super_admin',
+        'BUSINESS_ADMIN': 'admin',
+        'STAFF': 'employee',
+      };
+
+      const user: User = {
+        id: responseData.data.id,
+        email: responseData.data.email,
+        name: responseData.data.name,
+        username: responseData.data.name.toLowerCase().replace(/\s+/g, ''),
+        role: roleMap[responseData.data.role] ?? 'admin',
+        status: 'active',
+        businessId: responseData.data.businessId,
+        businessName: responseData.data.businessName,
+        phone: null,
+        avatar: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+
+      return { success: true, data: user, error: null, message: 'Cuenta creada exitosamente' };
+    } catch (error) {
+      console.error('Error en registro:', error);
+      return {
+        success: false,
+        data: null,
+        error: 'Error de conexión',
+        message: 'No se pudo conectar con el servidor',
+      };
+    }
   },
 
   async logout(): Promise<ApiResponse<null>> {
