@@ -1,26 +1,53 @@
 -- =============================================
--- MINIMENU - Script de Inicialización de Base de Datos
+-- MINIMENU - Script de Inicialización (idempotente)
 -- =============================================
--- Ejecuta este script en Supabase SQL Editor
+-- Este script se puede ejecutar múltiples veces sin errores
 
 -- =============================================
--- ENUMS
+-- ENUMS (crear si no existen)
 -- =============================================
 
-CREATE TYPE "UserRole" AS ENUM ('SUPER_ADMIN', 'BUSINESS_ADMIN', 'STAFF');
-CREATE TYPE "BusinessStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_PAYMENT');
-CREATE TYPE "Currency" AS ENUM ('COP', 'USD', 'EUR');
-CREATE TYPE "BillingType" AS ENUM ('MONTHLY', 'YEARLY', 'ONE_TIME', 'LIFETIME');
-CREATE TYPE "OrderType" AS ENUM ('RESTAURANT', 'DELIVERY');
-CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'ON_THE_WAY', 'DELIVERED', 'CANCELLED');
-CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PAID', 'REFUNDED');
+DO $$ BEGIN
+    CREATE TYPE "UserRole" AS ENUM ('SUPER_ADMIN', 'BUSINESS_ADMIN', 'STAFF');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "BusinessStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_PAYMENT');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "Currency" AS ENUM ('COP', 'USD', 'EUR');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "BillingType" AS ENUM ('MONTHLY', 'YEARLY', 'ONE_TIME', 'LIFETIME');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "OrderType" AS ENUM ('RESTAURANT', 'DELIVERY');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'ON_THE_WAY', 'DELIVERED', 'CANCELLED');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'PAID', 'REFUNDED');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
 -- =============================================
--- TABLAS PRINCIPALES
+-- TABLAS (crear si no existen)
 -- =============================================
 
 -- Plans
-CREATE TABLE plans (
+CREATE TABLE IF NOT EXISTS plans (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   slug TEXT UNIQUE NOT NULL,
@@ -43,7 +70,7 @@ CREATE TABLE plans (
 );
 
 -- Businesses
-CREATE TABLE businesses (
+CREATE TABLE IF NOT EXISTS businesses (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   slug TEXT UNIQUE NOT NULL,
@@ -52,7 +79,7 @@ CREATE TABLE businesses (
   "ownerEmail" TEXT NOT NULL,
   phone TEXT DEFAULT '',
   address TEXT DEFAULT '',
-  "planId" TEXT NOT NULL REFERENCES plans(id),
+  "planId" TEXT NOT NULL,
   status "BusinessStatus" DEFAULT 'ACTIVE',
   logo TEXT,
   "primaryColor" TEXT DEFAULT '#8b5cf6',
@@ -61,16 +88,14 @@ CREATE TABLE businesses (
   "updatedAt" TIMESTAMP(3) DEFAULT NOW()
 );
 
-CREATE INDEX businesses_slug_idx ON businesses(slug);
-
 -- Users
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   password TEXT NOT NULL,
   role "UserRole" DEFAULT 'BUSINESS_ADMIN',
-  "businessId" TEXT REFERENCES businesses(id) ON DELETE CASCADE,
+  "businessId" TEXT,
   "resetToken" TEXT,
   "resetTokenExpiry" TIMESTAMP(3),
   avatar TEXT,
@@ -78,12 +103,10 @@ CREATE TABLE users (
   "updatedAt" TIMESTAMP(3) DEFAULT NOW()
 );
 
-CREATE INDEX users_email_idx ON users(email);
-
 -- Categories
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-  "businessId" TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  "businessId" TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
   icon TEXT,
@@ -93,13 +116,11 @@ CREATE TABLE categories (
   "updatedAt" TIMESTAMP(3) DEFAULT NOW()
 );
 
-CREATE INDEX categories_businessId_idx ON categories("businessId");
-
 -- Products
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-  "businessId" TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-  "categoryId" TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  "businessId" TEXT NOT NULL,
+  "categoryId" TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
   price DOUBLE PRECISION DEFAULT 0,
@@ -112,13 +133,10 @@ CREATE TABLE products (
   "updatedAt" TIMESTAMP(3) DEFAULT NOW()
 );
 
-CREATE INDEX products_businessId_idx ON products("businessId");
-CREATE INDEX products_categoryId_idx ON products("categoryId");
-
 -- Menus
-CREATE TABLE menus (
+CREATE TABLE IF NOT EXISTS menus (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-  "businessId" TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  "businessId" TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
   "isActive" BOOLEAN DEFAULT true,
@@ -128,21 +146,19 @@ CREATE TABLE menus (
   "updatedAt" TIMESTAMP(3) DEFAULT NOW()
 );
 
-CREATE INDEX menus_slug_idx ON menus(slug);
-
 -- Menu Categories
-CREATE TABLE menu_categories (
+CREATE TABLE IF NOT EXISTS menu_categories (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-  "menuId" TEXT NOT NULL REFERENCES menus(id) ON DELETE CASCADE,
-  "categoryId" TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  "menuId" TEXT NOT NULL,
+  "categoryId" TEXT NOT NULL,
   "order" INTEGER DEFAULT 0,
   UNIQUE ("menuId", "categoryId")
 );
 
 -- Orders
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-  "businessId" TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  "businessId" TEXT NOT NULL,
   "customerId" TEXT,
   "customerName" TEXT NOT NULL,
   "customerPhone" TEXT,
@@ -168,16 +184,10 @@ CREATE TABLE orders (
   "updatedAt" TIMESTAMP(3) DEFAULT NOW()
 );
 
-CREATE INDEX orders_businessId_idx ON orders("businessId");
-CREATE INDEX orders_status_idx ON orders(status);
-CREATE INDEX orders_orderType_idx ON orders("orderType");
-CREATE INDEX orders_createdAt_idx ON orders("createdAt");
-CREATE INDEX orders_orderNumber_idx ON orders("orderNumber");
-
 -- Order Items
-CREATE TABLE order_items (
+CREATE TABLE IF NOT EXISTS order_items (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-  "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  "orderId" TEXT NOT NULL,
   "productId" TEXT NOT NULL,
   "productName" TEXT NOT NULL,
   quantity INTEGER DEFAULT 1,
@@ -186,10 +196,8 @@ CREATE TABLE order_items (
   notes TEXT
 );
 
-CREATE INDEX order_items_orderId_idx ON order_items("orderId");
-
 -- Payment Gateways
-CREATE TABLE payment_gateways (
+CREATE TABLE IF NOT EXISTS payment_gateways (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT UNIQUE NOT NULL,
   "displayName" TEXT NOT NULL,
@@ -207,7 +215,7 @@ CREATE TABLE payment_gateways (
 );
 
 -- Activity Logs
-CREATE TABLE activity_logs (
+CREATE TABLE IF NOT EXISTS activity_logs (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   "userId" TEXT,
   "businessId" TEXT,
@@ -220,19 +228,18 @@ CREATE TABLE activity_logs (
   "createdAt" TIMESTAMP(3) DEFAULT NOW()
 );
 
-CREATE INDEX activity_logs_userId_idx ON activity_logs("userId");
-CREATE INDEX activity_logs_businessId_idx ON activity_logs("businessId");
-CREATE INDEX activity_logs_createdAt_idx ON activity_logs("createdAt");
-
 -- =============================================
--- DATOS INICIALES
+-- INSERTAR DATOS INICIALES
 -- =============================================
 
 INSERT INTO plans (name, slug, description, price, features, "isActive", "isPublic", "maxUsers", "maxProducts", "maxCategories")
-VALUES ('Gratis', 'gratis', 'Plan gratuito para comenzar', 0, '50 productos,1 usuario,Soporte por email', true, true, 1, 50, 5);
+SELECT 'Gratis', 'gratis', 'Plan gratuito para comenzar', 0, '50 productos,1 usuario', true, true, 1, 50, 5
+WHERE NOT EXISTS (SELECT 1 FROM plans WHERE slug = 'gratis');
 
 INSERT INTO plans (name, slug, description, price, features, "isActive", "isPublic", "maxUsers", "maxProducts", "maxCategories")
-VALUES ('Básico', 'basico', 'Plan básico para negocios en crecimiento', 29000, '200 productos,3 usuarios,Soporte prioritario', true, true, 3, 200, 10);
+SELECT 'Básico', 'basico', 'Plan básico', 29000, '200 productos,3 usuarios', true, true, 3, 200, 10
+WHERE NOT EXISTS (SELECT 1 FROM plans WHERE slug = 'basico');
 
 INSERT INTO plans (name, slug, description, price, features, "isActive", "isPublic", "isPopular", "maxUsers", "maxProducts", "maxCategories")
-VALUES ('Pro', 'pro', 'Plan profesional para negocios establecidos', 59000, 'Productos ilimitados,10 usuarios,Soporte 24/7', true, true, true, 10, 999999, 999);
+SELECT 'Pro', 'pro', 'Plan profesional', 59000, 'Productos ilimitados,10 usuarios', true, true, true, 10, 999999, 999
+WHERE NOT EXISTS (SELECT 1 FROM plans WHERE slug = 'pro');
