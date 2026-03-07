@@ -946,10 +946,26 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     loadProfile();
   }, []);
 
+  // Calculate stats dynamically based on actual orders
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const todayOrders = [...dbRestaurantOrders, ...dbDeliveryOrders].filter(order => {
+    const orderDate = new Date(order.createdAt || order.date);
+    orderDate.setHours(0, 0, 0, 0);
+    return orderDate.getTime() === today.getTime();
+  });
+  
+  const todayRevenue = todayOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+  
+  const pendingOrders = [...dbRestaurantOrders, ...dbDeliveryOrders].filter(order => 
+    order.status === 'pending' || order.status === 'preparing' || order.status === 'confirmed'
+  ).length;
+
   const stats = {
-    todayOrders: 24,
-    todayRevenue: 485000,
-    pendingOrders: 3,
+    todayOrders: todayOrders.length,
+    todayRevenue: todayRevenue,
+    pendingOrders: pendingOrders,
     totalProducts: products.length
   };
 
@@ -972,23 +988,47 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     if (!aiTextPrompt.trim()) return;
     
     setIsAIProcessing(true);
+    setSpeechError(null);
+    
     try {
-      // Simular llamada a API de IA
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Llamar API de IA para generar producto
+      const response = await fetch('/api/ai/generate-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: aiTextPrompt,
+          type: 'text'
+        })
+      });
       
-      // Generar imagen con IA
-      const generatedImage = await generateAIImage('Producto generado por IA', aiTextPrompt);
+      const data = await response.json();
       
-      // Producto generado simulado
+      if (!data.success) {
+        setSpeechError(data.error || 'Error al generar el producto con IA');
+        setIsAIProcessing(false);
+        return;
+      }
+      
+      // Generar imagen con IA (opcional pero mejora el resultado)
+      let generatedImage: string | null = null;
+      
+      try {
+        generatedImage = await generateAIImage(data.product.name, data.product.description);
+      } catch (imgError) {
+        console.warn('[AI Text] Image generation failed, continuing without image');
+      }
+      
       setAiGeneratedProduct({
-        name: 'Producto generado por IA',
-        description: aiTextPrompt,
-        price: 25000,
-        category: 'Platos Principales',
+        name: data.product.name,
+        description: data.product.description,
+        price: data.product.price,
+        category: data.product.category,
         image: generatedImage
       });
+      
     } catch (error) {
-      console.error('Error creating product with AI:', error);
+      console.error('[AI Text] Error creating product:', error);
+      setSpeechError('Error al procesar la solicitud. Por favor intenta de nuevo.');
     } finally {
       setIsAIProcessing(false);
     }
@@ -1086,45 +1126,47 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     }
 
     setIsAIProcessing(true);
+    setSpeechError(null);
+    
     try {
-      // Aquí iría la llamada real a la API de IA
-      // Por ahora simulamos el procesamiento
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Llamar API de IA para generar producto desde la transcripción de voz
+      const response = await fetch('/api/ai/generate-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: transcript,
+          type: 'voice'
+        })
+      });
       
-      // Extraer precio si se menciona
-      const priceMatch = transcript.match(/(\d+)\s*(mil|pesos|cop)?/i);
-      const extractedPrice = priceMatch ? parseInt(priceMatch[1]) * 1000 : 15000;
+      const data = await response.json();
       
-      // Determinar categoría basada en palabras clave
-      let category = 'Platos Principales';
-      const lowerTranscript = transcript.toLowerCase();
-      if (lowerTranscript.includes('bebida') || lowerTranscript.includes('jugo') || lowerTranscript.includes('gaseosa') || lowerTranscript.includes('limonada')) {
-        category = 'Bebidas';
-      } else if (lowerTranscript.includes('postre') || lowerTranscript.includes('dulce') || lowerTranscript.includes('torta') || lowerTranscript.includes('pastel')) {
-        category = 'Postres';
-      } else if (lowerTranscript.includes('entrada') || lowerTranscript.includes('aperitivo') || lowerTranscript.includes('empanada') || lowerTranscript.includes('arepa')) {
-        category = 'Entradas';
+      if (!data.success) {
+        setSpeechError(data.error || 'Error al generar el producto con IA');
+        setIsAIProcessing(false);
+        return;
       }
-
-      // Generar nombre del producto (primeras palabras significativas)
-      const words = transcript.split(' ').filter(w => w.length > 3).slice(0, 4);
-      const generatedName = words.length > 0 
-        ? words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-        : 'Nuevo Producto';
-
-      // Generar imagen con IA
-      const generatedImage = await generateAIImage(generatedName, transcript);
-
+      
+      // Generar imagen con IA (opcional pero mejora el resultado)
+      let generatedImage: string | null = null;
+      
+      try {
+        generatedImage = await generateAIImage(data.product.name, data.product.description);
+      } catch (imgError) {
+        console.warn('[AI Voice] Image generation failed, continuing without image');
+      }
+      
       setAiGeneratedProduct({
-        name: generatedName,
-        description: transcript,
-        price: extractedPrice,
-        category: category,
+        name: data.product.name,
+        description: data.product.description,
+        price: data.product.price,
+        category: data.product.category,
         image: generatedImage
       });
+      
     } catch (error) {
-      console.error('Error processing transcript:', error);
-      setSpeechError('Error al procesar la descripción');
+      console.error('[AI Voice] Error processing transcript:', error);
+      setSpeechError('Error al procesar la solicitud. Por favor intenta de nuevo.');
     } finally {
       setIsAIProcessing(false);
     }
