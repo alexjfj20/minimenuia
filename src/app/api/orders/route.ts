@@ -1,63 +1,73 @@
+// =============================================
+// MINIMENU - Orders API (con pg directo)
+// =============================================
+
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { OrderStatus, PaymentStatus, OrderType, Currency } from '@prisma/client';
-import { generateNextOrderNumber } from '@/lib/order-utils';
+import { Pool } from 'pg';
 
-// =============================================
-// Interfaces
-// =============================================
+export const dynamic = 'force-dynamic';
 
-interface OrderItemInput {
+interface OrderItem {
+  id: string;
+  orderId: string;
   productId: string;
   productName: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-  notes?: string;
+  notes: string | null;
 }
 
-interface CreateOrderInput {
+interface Order {
+  id: string;
   businessId: string;
+  customerId: string | null;
   customerName: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  customerAddress?: string;
-  customerNotes?: string;
-  orderType: OrderType;
+  customerPhone: string | null;
+  customerEmail: string | null;
+  customerAddress: string | null;
+  customerNotes: string | null;
+  orderType: string;
+  orderNumber: string;
   subtotal: number;
   deliveryFee: number;
   tax: number;
   total: number;
-  paymentMethod?: string;
-  neighborhood?: string;
-  estimatedDelivery?: string;
-  invoiceNumber?: string;
-  notes?: string;
-  items: OrderItemInput[];
+  currency: string;
+  status: string;
+  paymentStatus: string;
+  paymentMethod: string | null;
+  neighborhood: string | null;
+  estimatedDelivery: string | null;
+  driverName: string | null;
+  invoiceNumber: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: OrderItem[];
 }
 
-interface UpdateOrderInput {
-  id: string;
-  status?: OrderStatus;
-  paymentStatus?: PaymentStatus;
-  paymentMethod?: string;
-  driverName?: string;
-  notes?: string;
-}
-
-// =============================================
 // GET - List Orders
-// =============================================
-
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    return NextResponse.json(
+      { success: false, error: 'Base de datos no configurada' },
+      { status: 500 }
+    );
+  }
+
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 10000,
+  });
+
   try {
     const { searchParams } = new URL(request.url);
     const businessId = searchParams.get('businessId');
-    const orderType = searchParams.get('orderType') as OrderType | null;
-    const status = searchParams.get('status') as OrderStatus | null;
-    const paymentStatus = searchParams.get('paymentStatus') as PaymentStatus | null;
-    const dateFrom = searchParams.get('dateFrom');
-    const dateTo = searchParams.get('dateTo');
+    const orderType = searchParams.get('orderType');
+    const status = searchParams.get('status');
 
     if (!businessId) {
       return NextResponse.json(
@@ -66,206 +76,278 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Build filter
-    const where: {
-      businessId: string;
-      orderType?: OrderType;
-      status?: OrderStatus;
-      paymentStatus?: PaymentStatus;
-      createdAt?: {
-        gte?: Date;
-        lte?: Date;
-      };
-    } = { businessId };
+    const client = await pool.connect();
 
-    if (orderType) {
-      where.orderType = orderType;
-    }
+    try {
+      let query = `
+        SELECT * FROM orders
+        WHERE "businessId" = $1
+      `;
+      const params: (string | null)[] = [businessId];
+      let paramIndex = 2;
 
-    if (status) {
-      where.status = status;
-    }
-
-    if (paymentStatus) {
-      where.paymentStatus = paymentStatus;
-    }
-
-    if (dateFrom || dateTo) {
-      where.createdAt = {};
-      if (dateFrom) {
-        where.createdAt.gte = new Date(dateFrom);
+      if (orderType) {
+        query += ` AND "orderType" = $${paramIndex}`;
+        params.push(orderType);
+        paramIndex++;
       }
-      if (dateTo) {
-        where.createdAt.lte = new Date(dateTo);
+
+      if (status) {
+        query += ` AND status = $${paramIndex}`;
+        params.push(status);
+        paramIndex++;
       }
+
+      query += ' ORDER BY "createdAt" DESC';
+
+      const ordersResult = await client.query(query, params);
+      const orders: Order[] = ordersResult.rows;
+
+      // Get items for each order
+      for (const order of orders) {
+        const itemsResult = await client.query(
+          'SELECT * FROM order_items WHERE "orderId" = $1',
+          [order.id]
+        );
+        order.items = itemsResult.rows;
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: orders,
+      });
+
+    } finally {
+      client.release();
     }
 
-    const orders = await db.order.findMany({
-      where,
-      include: {
-        items: true
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
-
-    console.log(`[Orders API] GET orders for business ${businessId}: ${orders.length} found`);
-
-    return NextResponse.json({
-      success: true,
-      data: orders
-    });
   } catch (error) {
-    console.error('[Orders API] Error fetching orders:', error);
+    console.error('[Orders API] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Error al obtener pedidos' },
       { status: 500 }
     );
+  } finally {
+    await pool.end();
   }
 }
 
-// =============================================
 // POST - Create Order
-// =============================================
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  try {
-    const body: CreateOrderInput = await request.json();
+  const databaseUrl = process.env.DATABASE_URL;
 
-    // Validate required fields
-    if (!body.businessId || !body.customerName || !body.items || body.items.length === 0) {
+  if (!databaseUrl) {
+    return NextResponse.json(
+      { success: false, error: 'Base de datos no configurada' },
+      { status: 500 }
+    );
+  }
+
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 10000,
+  });
+
+  try {
+    const body = await request.json();
+    const {
+      businessId,
+      customerName,
+      customerPhone,
+      customerEmail,
+      customerAddress,
+      customerNotes,
+      orderType = 'RESTAURANT',
+      subtotal = 0,
+      deliveryFee = 0,
+      tax = 0,
+      total,
+      paymentMethod,
+      neighborhood,
+      estimatedDelivery,
+      invoiceNumber,
+      notes,
+      items = [],
+    } = body;
+
+    if (!businessId || !customerName) {
       return NextResponse.json(
-        { success: false, error: 'Faltan campos requeridos: businessId, customerName, items' },
+        { success: false, error: 'businessId y customerName son requeridos' },
         { status: 400 }
       );
     }
 
-    // Generate order number automatically
-    const orderNumber = await generateNextOrderNumber();
+    const client = await pool.connect();
 
-    // Create order with items
-    const order = await db.order.create({
-      data: {
-        businessId: body.businessId,
-        orderNumber,
-        customerName: body.customerName,
-        customerPhone: body.customerPhone || null,
-        customerEmail: body.customerEmail || null,
-        customerAddress: body.customerAddress || null,
-        customerNotes: body.customerNotes || null,
-        orderType: body.orderType || OrderType.RESTAURANT,
-        subtotal: body.subtotal || 0,
-        deliveryFee: body.deliveryFee || 0,
-        tax: body.tax || 0,
-        total: body.total,
-        currency: Currency.COP,
-        status: OrderStatus.PENDING,
-        paymentStatus: PaymentStatus.PENDING,
-        paymentMethod: body.paymentMethod || null,
-        neighborhood: body.neighborhood || null,
-        estimatedDelivery: body.estimatedDelivery || null,
-        invoiceNumber: body.invoiceNumber || null,
-        notes: body.notes || null,
-        items: {
-          create: body.items.map((item: OrderItemInput) => ({
-            productId: item.productId,
-            productName: item.productName,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
-            notes: item.notes || null
-          }))
-        }
-      },
-      include: {
-        items: true
+    try {
+      // Generate order number
+      const orderNumberResult = await client.query(`
+        SELECT COUNT(*)::int + 1 as next_number FROM orders WHERE "businessId" = $1
+      `, [businessId]);
+      const orderNumber = `ORD-${String(orderNumberResult.rows[0].next_number).padStart(4, '0')}`;
+
+      // Generate UUID for order
+      const idResult = await client.query('SELECT gen_random_uuid() as id');
+      const orderId = idResult.rows[0].id;
+
+      // Create order
+      await client.query(`
+        INSERT INTO orders (
+          id, "businessId", "customerName", "customerPhone", "customerEmail",
+          "customerAddress", "customerNotes", "orderType", "orderNumber",
+          subtotal, "deliveryFee", tax, total, status, "paymentStatus",
+          "paymentMethod", neighborhood, "estimatedDelivery", "invoiceNumber", notes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      `, [
+        orderId, businessId, customerName, customerPhone || null, customerEmail || null,
+        customerAddress || null, customerNotes || null, orderType, orderNumber,
+        subtotal, deliveryFee, tax, total, 'PENDING', 'PENDING',
+        paymentMethod || null, neighborhood || null, estimatedDelivery || null, invoiceNumber || null, notes || null
+      ]);
+
+      // Create order items
+      for (const item of items) {
+        const itemIdResult = await client.query('SELECT gen_random_uuid() as id');
+        const itemId = itemIdResult.rows[0].id;
+
+        await client.query(`
+          INSERT INTO order_items (id, "orderId", "productId", "productName", quantity, "unitPrice", "totalPrice", notes)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [
+          itemId, orderId, item.productId, item.productName, item.quantity || 1,
+          item.unitPrice || 0, item.totalPrice || 0, item.notes || null
+        ]);
       }
-    });
 
-    console.log(`[Orders API] Created order ${order.id} (${orderNumber}) for business ${body.businessId}`);
+      return NextResponse.json({
+        success: true,
+        data: { id: orderId, orderNumber },
+        message: 'Pedido creado exitosamente',
+      });
 
-    return NextResponse.json({
-      success: true,
-      data: order
-    });
+    } finally {
+      client.release();
+    }
+
   } catch (error) {
     console.error('[Orders API] Error creating order:', error);
     return NextResponse.json(
       { success: false, error: 'Error al crear pedido' },
       { status: 500 }
     );
+  } finally {
+    await pool.end();
   }
 }
 
-// =============================================
 // PUT - Update Order
-// =============================================
-
 export async function PUT(request: NextRequest): Promise<NextResponse> {
-  try {
-    const body: UpdateOrderInput = await request.json();
+  const databaseUrl = process.env.DATABASE_URL;
 
-    if (!body.id) {
+  if (!databaseUrl) {
+    return NextResponse.json(
+      { success: false, error: 'Base de datos no configurada' },
+      { status: 500 }
+    );
+  }
+
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 10000,
+  });
+
+  try {
+    const body = await request.json();
+    const { id, status, paymentStatus, paymentMethod, driverName, notes } = body;
+
+    if (!id) {
       return NextResponse.json(
         { success: false, error: 'ID del pedido es requerido' },
         { status: 400 }
       );
     }
 
-    // Build update data
-    const updateData: {
-      status?: OrderStatus;
-      paymentStatus?: PaymentStatus;
-      paymentMethod?: string;
-      driverName?: string;
-      notes?: string;
-    } = {};
+    const client = await pool.connect();
 
-    if (body.status !== undefined) {
-      updateData.status = body.status;
-    }
-    if (body.paymentStatus !== undefined) {
-      updateData.paymentStatus = body.paymentStatus;
-    }
-    if (body.paymentMethod !== undefined) {
-      updateData.paymentMethod = body.paymentMethod;
-    }
-    if (body.driverName !== undefined) {
-      updateData.driverName = body.driverName;
-    }
-    if (body.notes !== undefined) {
-      updateData.notes = body.notes;
-    }
+    try {
+      const updates: string[] = [];
+      const values: (string | null)[] = [];
+      let paramIndex = 1;
 
-    const order = await db.order.update({
-      where: { id: body.id },
-      data: updateData,
-      include: {
-        items: true
+      if (status !== undefined) {
+        updates.push(`status = $${paramIndex}`);
+        values.push(status);
+        paramIndex++;
       }
-    });
+      if (paymentStatus !== undefined) {
+        updates.push(`"paymentStatus" = $${paramIndex}`);
+        values.push(paymentStatus);
+        paramIndex++;
+      }
+      if (paymentMethod !== undefined) {
+        updates.push(`"paymentMethod" = $${paramIndex}`);
+        values.push(paymentMethod);
+        paramIndex++;
+      }
+      if (driverName !== undefined) {
+        updates.push(`"driverName" = $${paramIndex}`);
+        values.push(driverName);
+        paramIndex++;
+      }
+      if (notes !== undefined) {
+        updates.push(`notes = $${paramIndex}`);
+        values.push(notes);
+        paramIndex++;
+      }
 
-    console.log(`[Orders API] Updated order ${body.id}`);
+      if (updates.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'No hay campos para actualizar' },
+          { status: 400 }
+        );
+      }
 
-    return NextResponse.json({
-      success: true,
-      data: order
-    });
+      values.push(id);
+      const query = `UPDATE orders SET ${updates.join(', ')} WHERE id = $${paramIndex}`;
+
+      await client.query(query, values);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Pedido actualizado',
+      });
+
+    } finally {
+      client.release();
+    }
+
   } catch (error) {
     console.error('[Orders API] Error updating order:', error);
     return NextResponse.json(
       { success: false, error: 'Error al actualizar pedido' },
       { status: 500 }
     );
+  } finally {
+    await pool.end();
   }
 }
 
-// =============================================
 // DELETE - Delete Order
-// =============================================
-
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    return NextResponse.json(
+      { success: false, error: 'Base de datos no configurada' },
+      { status: 500 }
+    );
+  }
+
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    connectionTimeoutMillis: 10000,
+  });
+
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -277,27 +359,30 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Delete order items first (cascade)
-    await db.orderItem.deleteMany({
-      where: { orderId: id }
-    });
+    const client = await pool.connect();
 
-    // Delete order
-    await db.order.delete({
-      where: { id }
-    });
+    try {
+      // Delete order items first
+      await client.query('DELETE FROM order_items WHERE "orderId" = $1', [id]);
+      // Delete order
+      await client.query('DELETE FROM orders WHERE id = $1', [id]);
 
-    console.log(`[Orders API] Deleted order ${id}`);
+      return NextResponse.json({
+        success: true,
+        message: 'Pedido eliminado',
+      });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Pedido eliminado correctamente'
-    });
+    } finally {
+      client.release();
+    }
+
   } catch (error) {
     console.error('[Orders API] Error deleting order:', error);
     return NextResponse.json(
       { success: false, error: 'Error al eliminar pedido' },
       { status: 500 }
     );
+  } finally {
+    await pool.end();
   }
 }
