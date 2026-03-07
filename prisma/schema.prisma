@@ -1,0 +1,484 @@
+// =============================================
+// MINIMENU - Prisma Schema
+// =============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================
+// User & Authentication
+// =============================================
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String
+  password          String   // Hashed password
+  role              UserRole @default(BUSINESS_ADMIN)
+  businessId        String?
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+  avatar            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  business    Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@map("users")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  BUSINESS_ADMIN
+  STAFF
+}
+
+// =============================================
+// Business
+// =============================================
+
+model Business {
+  id             String         @id @default(cuid())
+  name           String
+  slug           String         @unique
+  ownerId        String
+  ownerName      String
+  ownerEmail     String
+  phone          String
+  address        String
+  planId         String
+  status         BusinessStatus @default(ACTIVE)
+  logo           String?
+  primaryColor   String         @default("#8b5cf6")
+  secondaryColor String         @default("#ffffff")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  plan           Plan           @relation(fields: [planId], references: [id])
+  users          User[]
+  categories     Category[]
+  products       Product[]
+  menus          Menu[]
+  orders         Order[]
+  businessModules BusinessModule[]
+  businessServices BusinessService[]
+
+  @@index([slug])
+  @@index([status])
+  @@map("businesses")
+}
+
+enum BusinessStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_PAYMENT
+}
+
+// =============================================
+// Plans
+// =============================================
+
+model Plan {
+  id            String      @id @default(cuid())
+  name          String
+  slug          String      @unique
+  description   String
+  price         Float
+  currency      Currency    @default(COP)
+  period        BillingType @default(MONTHLY)
+  features      String      // JSON array of features
+  isActive      Boolean     @default(true)
+  isPublic      Boolean     @default(true)
+  isPopular     Boolean     @default(false)
+  order         Int         @default(0)
+  icon          String      @default("zap")
+  color         String      @default("#8b5cf6")
+  maxUsers      Int         @default(1)
+  maxProducts   Int         @default(50)
+  maxCategories Int         @default(5)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  businesses    Business[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@map("plans")
+}
+
+enum Currency {
+  COP
+  USD
+  EUR
+}
+
+enum BillingType {
+  MONTHLY
+  YEARLY
+  ONE_TIME
+  LIFETIME
+}
+
+// =============================================
+// Modules
+// =============================================
+
+model Module {
+  id          String       @id @default(cuid())
+  name        String
+  description String
+  type        ModuleType   @default(ADDON)
+  icon        String       @default("puzzle")
+  status      ModuleStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  businessModules BusinessModule[]
+
+  @@index([type])
+  @@index([status])
+  @@map("modules")
+}
+
+enum ModuleType {
+  CORE
+  ADDON
+}
+
+enum ModuleStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// =============================================
+// System Services
+// =============================================
+
+model SystemService {
+  id          String        @id @default(cuid())
+  name        String
+  description String
+  price       Float
+  currency    Currency      @default(COP)
+  billingType BillingType   @default(MONTHLY)
+  status      ServiceStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  businessServices BusinessService[]
+
+  @@index([status])
+  @@map("system_services")
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// =============================================
+// Business - Module/Service Relations
+// =============================================
+
+model BusinessModule {
+  id          String   @id @default(cuid())
+  businessId  String
+  moduleId    String
+  status      BusinessStatus @default(ACTIVE)
+  assignedAt  DateTime @default(now())
+
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  module      Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, moduleId])
+  @@map("business_modules")
+}
+
+model BusinessService {
+  id          String   @id @default(cuid())
+  businessId  String
+  serviceId   String
+  status      BusinessStatus @default(ACTIVE)
+  assignedAt  DateTime @default(now())
+
+  business    Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  service     SystemService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, serviceId])
+  @@map("business_services")
+}
+
+// =============================================
+// Categories & Products
+// =============================================
+
+model Category {
+  id          String   @id @default(cuid())
+  businessId  String
+  name        String
+  description String?
+  icon        String?
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  products      Product[]
+  menuCategories MenuCategory[]
+
+  @@index([businessId])
+  @@map("categories")
+}
+
+model Product {
+  id          String        @id @default(cuid())
+  businessId  String
+  categoryId  String
+  name        String
+  description String?
+  price       Float
+  currency    Currency      @default(COP)
+  image       String?
+  isAvailable Boolean       @default(true)
+  isFeatured  Boolean       @default(false)
+  order       Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([categoryId])
+  @@map("products")
+}
+
+// =============================================
+// Menus
+// =============================================
+
+model Menu {
+  id          String   @id @default(cuid())
+  businessId  String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  qrCode      String?
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business     Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  menuCategories MenuCategory[]
+
+  @@index([slug])
+  @@map("menus")
+}
+
+model MenuCategory {
+  id         String   @id @default(cuid())
+  menuId     String
+  categoryId String
+  order      Int      @default(0)
+
+  menu       Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([menuId, categoryId])
+  @@map("menu_categories")
+}
+
+// =============================================
+// Orders
+// =============================================
+
+model Order {
+  id              String        @id @default(cuid())
+  businessId      String
+  customerId      String?
+  customerName    String
+  customerPhone   String?
+  customerEmail   String?
+  customerAddress String?
+  customerNotes   String?
+  
+  // Tipo de pedido
+  orderType       OrderType     @default(RESTAURANT)
+  
+  // Número de pedido amigable (ORD-0001, ORD-0002, etc.)
+  orderNumber     String        @unique
+  
+  // Montos
+  subtotal        Float         @default(0)
+  deliveryFee     Float         @default(0)
+  tax             Float         @default(0)
+  total           Float
+  currency        Currency      @default(COP)
+  
+  // Estado
+  status          OrderStatus   @default(PENDING)
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   String?       // Nequi, Daviplata, Cash, etc.
+  
+  // Domicilio específico
+  neighborhood    String?
+  estimatedDelivery String?
+  driverName      String?
+  invoiceNumber   String?
+  
+  // Timestamps
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  business        Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
+
+  @@index([businessId])
+  @@index([status])
+  @@index([orderType])
+  @@index([createdAt])
+  @@index([orderNumber])
+  @@map("orders")
+}
+
+enum OrderType {
+  RESTAURANT
+  DELIVERY
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  ON_THE_WAY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String   // Reference to product (no FK constraint - products may come from JSON)
+  productName String
+  quantity    Int
+  unitPrice   Float
+  totalPrice  Float
+  notes       String?
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// =============================================
+// Integrations
+// =============================================
+
+model Integration {
+  id                  String             @id @default(cuid())
+  name                String
+  description         String
+  iconSvg             String
+  status              IntegrationStatus  @default(ACTIVE)
+  requiresManualSetup Boolean           @default(false)
+  setupInstructions   String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  businessIntegrations BusinessIntegration[]
+
+  @@map("integrations")
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model BusinessIntegration {
+  id             String   @id @default(cuid())
+  businessId     String
+  integrationId  String
+  config         Json?    // JSON field for integration-specific config
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  integration    Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, integrationId])
+  @@map("business_integrations")
+}
+
+// =============================================
+// Payment Gateways Configuration
+// =============================================
+
+model PaymentGateway {
+  id            String           @id @default(cuid())
+  name          String           @unique
+  displayName   String
+  type          GatewayType
+  enabled       Boolean          @default(false)
+  mode          GatewayMode      @default(SANDBOX)
+  publicKey     String?
+  secretKey     String?
+  accountId     String?
+  accountHolder String?
+  qrCodeUrl     String?
+  instructions  String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@map("payment_gateways")
+}
+
+enum GatewayType {
+  API          // Stripe, Mercado Pago, PayPal
+  MANUAL       // Nequi, Bancolombia, Daviplata
+}
+
+enum GatewayMode {
+  SANDBOX
+  PRODUCTION
+}
+
+// =============================================
+// Activity Logs
+// =============================================
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  businessId  String?
+  action      String
+  entityType  String
+  entityId    String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([businessId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
