@@ -312,111 +312,8 @@ const defaultCategories: Category[] = [
 const defaultPrinterTypes = ['Térmica', 'Inyección', 'Láser', 'Matricial'];
 const defaultPrinterAreas = ['Cocina', 'Barra', 'Caja', 'General'];
 
-const mockOrders: Order[] = [
-  { id: 'ORD-001', customer: 'Pedro Martínez', items: 3, total: 80000, status: 'pending', time: '12:30 PM', date: '2025-02-28', phone: '+57 300 111 2222', address: 'Calle 10 #20-30', notes: 'Sin cebolla' },
-  { id: 'ORD-002', customer: 'Laura Sánchez', items: 1, total: 12000, status: 'preparing', time: '12:15 PM', date: '2025-02-28', phone: '+57 300 333 4444', address: 'Carrera 5 #15-25' },
-  { id: 'ORD-003', customer: 'Carlos López', items: 5, total: 95000, status: 'ready', time: '11:45 AM', date: '2025-02-27', phone: '+57 300 555 6666', address: 'Av. Principal #45-67' },
-  { id: 'ORD-004', customer: 'Ana García', items: 2, total: 43000, status: 'delivered', time: '11:00 AM', date: '2025-02-27', phone: '+57 300 777 8888', address: 'Diagonal 8 #12-34', notes: 'Enviar factura' }
-];
-
-// Mock delivery orders data
-const mockDeliveryOrders: DeliveryOrder[] = [
-  {
-    id: 'DOM-001',
-    invoiceNumber: 'FAC-2024-001',
-    customer: 'María Rodríguez',
-    phone: '+57 301 234 5678',
-    address: 'Calle 45 #67-89, Apto 302',
-    neighborhood: 'Chapinero',
-    items: 4,
-    subtotal: 65000,
-    deliveryFee: 5000,
-    total: 70000,
-    status: 'pending',
-    paymentMethod: 'cash',
-    paymentStatus: 'pending',
-    notes: 'Portero azul, timbre 3',
-    createdAt: '14:30',
-    date: '2025-02-28',
-    estimatedDelivery: '15:15'
-  },
-  {
-    id: 'DOM-002',
-    invoiceNumber: 'FAC-2024-002',
-    customer: 'Juan Pérez',
-    phone: '+57 302 345 6789',
-    address: 'Carrera 10 #20-30',
-    neighborhood: 'La Candelaria',
-    items: 2,
-    subtotal: 42000,
-    deliveryFee: 4000,
-    total: 46000,
-    status: 'on_the_way',
-    paymentMethod: 'transfer',
-    paymentStatus: 'paid',
-    createdAt: '13:45',
-    date: '2025-02-28',
-    estimatedDelivery: '14:30',
-    driver: 'Carlos Mensajero'
-  },
-  {
-    id: 'DOM-003',
-    invoiceNumber: 'FAC-2024-003',
-    customer: 'Ana Martínez',
-    phone: '+57 303 456 7890',
-    address: 'Av. Caracas #50-60, Local 5',
-    neighborhood: 'Centro',
-    items: 6,
-    subtotal: 120000,
-    deliveryFee: 6000,
-    total: 126000,
-    status: 'preparing',
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
-    notes: 'Edificio de oficinas, piso 3',
-    createdAt: '13:00',
-    date: '2025-02-27',
-    estimatedDelivery: '14:00'
-  },
-  {
-    id: 'DOM-004',
-    invoiceNumber: 'FAC-2024-004',
-    customer: 'Luis Gómez',
-    phone: '+57 304 567 8901',
-    address: 'Diagonal 30 #15-25',
-    neighborhood: 'Teusaquillo',
-    items: 3,
-    subtotal: 55000,
-    deliveryFee: 5000,
-    total: 60000,
-    status: 'delivered',
-    paymentMethod: 'cash',
-    paymentStatus: 'paid',
-    createdAt: '11:30',
-    date: '2025-02-27',
-    estimatedDelivery: '12:15',
-    driver: 'Pedro Mensajero'
-  },
-  {
-    id: 'DOM-005',
-    invoiceNumber: 'FAC-2024-005',
-    customer: 'Carolina Silva',
-    phone: '+57 305 678 9012',
-    address: 'Calle 80 #15-40',
-    neighborhood: 'Chapinero',
-    items: 1,
-    subtotal: 25000,
-    deliveryFee: 4000,
-    total: 29000,
-    status: 'cancelled',
-    paymentMethod: 'transfer',
-    paymentStatus: 'refunded',
-    notes: 'Cliente canceló por demora',
-    createdAt: '10:00',
-    date: '2025-02-26',
-    estimatedDelivery: '10:45'
-  }
-];
+// NOTE: Mock orders removed - all orders now come from database (SaaS multi-tenant)
+// New accounts start with NO orders
 
 // --- Helper functions for OrderCard (must be outside component) ---
 function getTimerColor(minutes: number): string {
@@ -550,6 +447,110 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
     loadProducts();
   }, []);
+
+  // --- Load orders from API on mount ---
+  useEffect(() => {
+    const loadOrders = async (): Promise<void> => {
+      setIsLoadingOrders(true);
+      try {
+        const response = await fetch('/api/orders');
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+          // Separate orders by type
+          const restaurantOrders: Order[] = [];
+          const deliveryOrders: DeliveryOrder[] = [];
+          
+          for (const order of data.data) {
+            if (order.orderType === 'RESTAURANT' || order.orderType === 'restaurante') {
+              restaurantOrders.push({
+                id: order.id,
+                orderNumber: order.orderNumber,
+                customer: order.customerName,
+                items: order.items?.length || 0,
+                total: Number(order.total) || 0,
+                status: mapOrderStatus(order.status),
+                time: new Date(order.createdAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+                date: new Date(order.createdAt).toLocaleDateString('es-CO'),
+                phone: order.customerPhone || undefined,
+                address: order.customerAddress || undefined,
+                notes: order.notes || undefined,
+                type: 'restaurante',
+                createdAt: order.createdAt,
+                paymentStatus: order.paymentStatus?.toLowerCase() as 'pending' | 'paid' | 'refunded' || 'pending'
+              });
+            } else {
+              deliveryOrders.push({
+                id: order.id,
+                orderNumber: order.orderNumber,
+                invoiceNumber: order.invoiceNumber || order.orderNumber,
+                customer: order.customerName,
+                phone: order.customerPhone || '',
+                address: order.customerAddress || '',
+                neighborhood: order.neighborhood || '',
+                items: order.items?.length || 0,
+                subtotal: Number(order.subtotal) || 0,
+                deliveryFee: Number(order.deliveryFee) || 0,
+                total: Number(order.total) || 0,
+                status: mapDeliveryStatus(order.status),
+                paymentMethod: (order.paymentMethod?.toLowerCase() as 'cash' | 'card' | 'transfer') || 'cash',
+                paymentStatus: order.paymentStatus?.toLowerCase() as 'pending' | 'paid' | 'refunded' || 'pending',
+                notes: order.notes || undefined,
+                createdAt: new Date(order.createdAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+                date: new Date(order.createdAt).toLocaleDateString('es-CO'),
+                estimatedDelivery: order.estimatedDelivery || '',
+                driver: order.driverName || undefined
+              });
+            }
+          }
+          
+          setDbRestaurantOrders(restaurantOrders);
+          setDbDeliveryOrders(deliveryOrders);
+          console.log('[Orders] Loaded', restaurantOrders.length, 'restaurant orders and', deliveryOrders.length, 'delivery orders from API');
+        }
+      } catch (error) {
+        console.error('[Orders] Error loading orders:', error);
+      } finally {
+        setIsLoadingOrders(false);
+      }
+    };
+
+    loadOrders();
+  }, []);
+
+  // Helper function to map order status
+  const mapOrderStatus = (status: string): 'pending' | 'preparing' | 'ready' | 'delivered' => {
+    const statusMap: Record<string, 'pending' | 'preparing' | 'ready' | 'delivered'> = {
+      'PENDING': 'pending',
+      'PREPARING': 'preparing',
+      'READY': 'ready',
+      'DELIVERED': 'delivered',
+      'pending': 'pending',
+      'preparing': 'preparing',
+      'ready': 'ready',
+      'delivered': 'delivered'
+    };
+    return statusMap[status] || 'pending';
+  };
+
+  // Helper function to map delivery status
+  const mapDeliveryStatus = (status: string): 'pending' | 'confirmed' | 'preparing' | 'on_the_way' | 'delivered' | 'cancelled' => {
+    const statusMap: Record<string, 'pending' | 'confirmed' | 'preparing' | 'on_the_way' | 'delivered' | 'cancelled'> = {
+      'PENDING': 'pending',
+      'CONFIRMED': 'confirmed',
+      'PREPARING': 'preparing',
+      'ON_THE_WAY': 'on_the_way',
+      'DELIVERED': 'delivered',
+      'CANCELLED': 'cancelled',
+      'pending': 'pending',
+      'confirmed': 'confirmed',
+      'preparing': 'preparing',
+      'on_the_way': 'on_the_way',
+      'delivered': 'delivered',
+      'cancelled': 'cancelled'
+    };
+    return statusMap[status] || 'pending';
+  };
   
   // --- Product Form State ---
   const [productForm, setProductForm] = useState({
@@ -745,6 +746,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [dbRestaurantOrders, setDbRestaurantOrders] = useState<Order[]>([]);
   const [dbDeliveryOrders, setDbDeliveryOrders] = useState<DeliveryOrder[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+
+  // --- Category Modal States ---
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({
+    name: '',
+    description: '',
+    icon: '📦'
+  });
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
 
   // --- TPV Restaurante States ---
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -1482,7 +1492,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       return; // Category already exists
     }
     
-    // Create new category
+    // Create new category locally (for immediate UI update)
     const newCategory: Category = {
       id: `cat-${Date.now()}`,
       name: trimmedName,
@@ -1501,7 +1511,92 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     setNewCategoryName('');
     setNewCategoryIcon('📦');
     
+    // Save to API
+    saveCategoryToAPI({ name: trimmedName, icon: newCategoryIcon });
+    
     console.log('[Categories] Created new category:', trimmedName);
+  };
+
+  // --- Save Category to API ---
+  const saveCategoryToAPI = async (categoryData: { name: string; icon: string; description?: string }): Promise<void> => {
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: categoryData.name,
+          icon: categoryData.icon,
+          description: categoryData.description || ''
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.category) {
+        console.log('[Categories] Saved to API:', data.category.id);
+        // Update with the real ID from database
+        setCategories(prev => prev.map(cat => 
+          cat.name === categoryData.name ? { ...cat, id: data.category.id } : cat
+        ));
+      } else {
+        console.error('[Categories] Failed to save:', data.error);
+      }
+    } catch (error) {
+      console.error('[Categories] Error saving category:', error);
+    }
+  };
+
+  // --- Handle Save Category from Modal ---
+  const handleSaveCategoryFromModal = async (): Promise<void> => {
+    const trimmedName = categoryForm.name.trim();
+    if (!trimmedName) return;
+    
+    // Check if category already exists
+    if (categories.some(cat => cat.name.toLowerCase() === trimmedName.toLowerCase())) {
+      setToastMessage({ type: 'error', message: 'Ya existe una categoría con ese nombre' });
+      return;
+    }
+    
+    setIsSavingCategory(true);
+    
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: trimmedName,
+          icon: categoryForm.icon,
+          description: categoryForm.description
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.category) {
+        // Add to categories list with real ID
+        const newCategory: Category = {
+          id: data.category.id,
+          name: trimmedName,
+          icon: categoryForm.icon,
+          order: categories.length + 1
+        };
+        
+        setCategories(prev => [...prev, newCategory]);
+        console.log('[Categories] Created from modal:', data.category.id);
+        
+        // Close modal and reset form
+        setShowCategoryModal(false);
+        setCategoryForm({ name: '', description: '', icon: '📦' });
+        setToastMessage({ type: 'success', message: 'Categoría creada exitosamente' });
+      } else {
+        setToastMessage({ type: 'error', message: data.error || 'Error al crear categoría' });
+      }
+    } catch (error) {
+      console.error('[Categories] Error creating category:', error);
+      setToastMessage({ type: 'error', message: 'Error al crear categoría' });
+    } finally {
+      setIsSavingCategory(false);
+    }
   };
 
   // ============================================================================
@@ -2451,22 +2546,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       let deliveryOrder = dbDeliveryOrders.find(d => d.id === unifiedOrder.id);
       if (deliveryOrder) {
         openDeliveryDetail(deliveryOrder);
-        return;
-      }
-      // Si no se encuentra, buscar en mockDeliveryOrders
-      deliveryOrder = mockDeliveryOrders.find(d => d.id === unifiedOrder.id);
-      if (deliveryOrder) {
-        openDeliveryDetail(deliveryOrder);
       }
     } else {
-      // Buscar primero en dbRestaurantOrders (pedidos de la base de datos)
+      // Buscar en dbRestaurantOrders (pedidos de la base de datos)
       let restaurantOrder = dbRestaurantOrders.find(o => o.id === unifiedOrder.id);
-      if (restaurantOrder) {
-        openOrderDetail(restaurantOrder);
-        return;
-      }
-      // Si no se encuentra, buscar en mockOrders
-      restaurantOrder = mockOrders.find(o => o.id === unifiedOrder.id);
       if (restaurantOrder) {
         openOrderDetail(restaurantOrder);
       }
@@ -2493,23 +2576,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     
     setIsSavingOrderChanges(true);
     try {
-      // Verificar si es un pedido de demostración (mock)
-      const isMockOrder = selectedOrder.id.startsWith('ORD-');
-      
-      if (isMockOrder) {
-        // Para pedidos de demostración, solo actualizar localmente
-        // Buscar y actualizar en mockOrders
-        const orderIndex = mockOrders.findIndex(o => o.id === selectedOrder.id);
-        if (orderIndex !== -1) {
-          mockOrders[orderIndex] = { ...selectedOrder };
-        }
-        
-        setToastMessage({ type: 'success', message: `Pedido de demostración ${selectedOrder.id} actualizado (solo local)` });
-        closeOrderDetail();
-        return;
-      }
-      
-      // Guardar en la base de datos via API para pedidos reales
+      // Guardar en la base de datos via API
       const response = await fetch('/api/orders', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -2527,6 +2594,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       if (!data.success) {
         throw new Error(data.error || 'Error al guardar');
       }
+      
+      // Update local state
+      setDbRestaurantOrders(prev => prev.map(o => 
+        o.id === selectedOrder.id ? selectedOrder : o
+      ));
       
       // Mostrar mensaje de éxito
       setToastMessage({ type: 'success', message: `Pedido ${selectedOrder.id} actualizado correctamente` });
@@ -2568,22 +2640,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     
     setIsSavingDeliveryChanges(true);
     try {
-      // Verificar si es un pedido de demostración (mock)
-      const isMockDelivery = selectedDelivery.id.startsWith('DOM-');
-      
-      if (isMockDelivery) {
-        // Para pedidos de demostración, solo actualizar localmente
-        const deliveryIndex = mockDeliveryOrders.findIndex(d => d.id === selectedDelivery.id);
-        if (deliveryIndex !== -1) {
-          mockDeliveryOrders[deliveryIndex] = { ...selectedDelivery };
-        }
-        
-        setToastMessage({ type: 'success', message: `Pedido de demostración ${selectedDelivery.invoiceNumber} actualizado (solo local)` });
-        closeDeliveryDetail();
-        return;
-      }
-      
-      // Guardar en la base de datos via API para pedidos reales
+      // Guardar en la base de datos via API
       const response = await fetch('/api/orders', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -2603,6 +2660,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         throw new Error(data.error || 'Error al guardar');
       }
       
+      // Update local state
+      setDbDeliveryOrders(prev => prev.map(d => 
+        d.id === selectedDelivery.id ? selectedDelivery : d
+      ));
+      
       // Mostrar mensaje de éxito
       setToastMessage({ type: 'success', message: `Pedido de domicilio ${selectedDelivery.invoiceNumber} actualizado correctamente` });
       
@@ -2617,7 +2679,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   };
 
   const getFilteredDeliveries = (): DeliveryOrder[] => {
-    return mockDeliveryOrders.filter(delivery => {
+    return dbDeliveryOrders.filter(delivery => {
       const matchesFilter = deliveryFilter === 'all' || delivery.status === deliveryFilter;
       const matchesSearch = !deliverySearch || 
         delivery.customer.toLowerCase().includes(deliverySearch.toLowerCase()) ||
@@ -2883,7 +2945,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   // Get filtered orders (combined with date filter)
   const getFilteredOrders = (): Order[] => {
-    return getFilteredOrdersByDate(mockOrders);
+    return getFilteredOrdersByDate(dbRestaurantOrders);
   };
 
   // Get filtered deliveries (combined with date filter) - replaces original
@@ -3094,12 +3156,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     return '';
   };
 
-  // Get all unified orders (restaurant + delivery) - combines DB orders with mock data
+  // Get all unified orders (restaurant + delivery) - ONLY from database (no mock data)
   const getAllUnifiedOrders = (): UnifiedOrder[] => {
-    // Use database orders if available, otherwise fall back to mock data
-    const restaurantOrders: UnifiedOrder[] = (dbRestaurantOrders.length > 0 ? dbRestaurantOrders : mockOrders).map(order => ({
+    // Only use database orders - new accounts start with NO orders (SaaS multi-tenant)
+    const restaurantOrders: UnifiedOrder[] = dbRestaurantOrders.map(order => ({
       id: order.id,
-      orderNumber: order.orderNumber, // Número amigable del pedido (ORD-0001)
+      orderNumber: order.orderNumber,
       customer: order.customer,
       items: order.items,
       total: order.total,
@@ -3113,9 +3175,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       createdAt: order.createdAt ?? new Date().toISOString()
     }));
     
-    const deliveryOrders: UnifiedOrder[] = (dbDeliveryOrders.length > 0 ? dbDeliveryOrders : mockDeliveryOrders).map(order => ({
+    const deliveryOrders: UnifiedOrder[] = dbDeliveryOrders.map(order => ({
       id: order.id,
-      orderNumber: order.orderNumber, // Número amigable del pedido (ORD-0001)
+      orderNumber: order.orderNumber,
       customer: order.customer,
       items: order.items,
       total: order.total,
@@ -3230,7 +3292,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   // Check for new orders and notify
   useEffect(() => {
-    const currentCount = mockOrders.length + mockDeliveryOrders.length;
+    const currentCount = dbRestaurantOrders.length + dbDeliveryOrders.length;
     
     if (previousOrderCount > 0 && currentCount > previousOrderCount) {
       const newCount = currentCount - previousOrderCount;
@@ -3238,7 +3300,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     }
     
     setPreviousOrderCount(currentCount);
-  }, [mockOrders.length, mockDeliveryOrders.length]);
+  }, [dbRestaurantOrders.length, dbDeliveryOrders.length]);
 
   // --- Ticket and PDF Functions ---
   const printThermalTicket = (delivery: DeliveryOrder): void => {
@@ -5171,23 +5233,34 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {mockOrders.map(order => (
-                    <div key={order.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                          <ShoppingCart className="w-5 h-5 text-gray-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium">{order.customer}</p>
-                          <p className="text-sm text-gray-500">{order.orderNumber ?? order.id} • {order.items} items</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium">${order.total.toLocaleString()}</p>
-                        <StatusBadge status={order.status} />
-                      </div>
+                  {dbRestaurantOrders.length === 0 && dbDeliveryOrders.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <ShoppingCart className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p>No hay pedidos aún</p>
+                      <p className="text-sm">Los pedidos aparecerán aquí cuando los clientes realicen compras</p>
                     </div>
-                  ))}
+                  ) : (
+                    [...dbRestaurantOrders, ...dbDeliveryOrders]
+                      .sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime())
+                      .slice(0, 5)
+                      .map(order => (
+                        <div key={order.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                              <ShoppingCart className="w-5 h-5 text-gray-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{order.customer}</p>
+                              <p className="text-sm text-gray-500">{order.orderNumber ?? order.id} • {order.items} items</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium">${order.total.toLocaleString()}</p>
+                            <StatusBadge status={order.status} />
+                          </div>
+                        </div>
+                      ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -5386,7 +5459,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               </TabsContent>
               
               <TabsContent value="categorias" className="space-y-6">
-                <Button className="bg-purple-600 hover:bg-purple-700">
+                <Button 
+                  className="bg-purple-600 hover:bg-purple-700"
+                  onClick={() => setShowCategoryModal(true)}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Agregar Categoría
                 </Button>
@@ -10508,6 +10584,101 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Category Modal */}
+      <Dialog open={showCategoryModal} onOpenChange={(open) => {
+        setShowCategoryModal(open);
+        if (!open) setCategoryForm({ name: '', description: '', icon: '📦' });
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-purple-600" />
+              Nueva Categoría
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center gap-3">
+              <Label className="text-sm w-16">Ícono:</Label>
+              <select
+                className="h-10 rounded-md border border-gray-300 px-3 text-lg"
+                value={categoryForm.icon}
+                onChange={(e) => setCategoryForm(prev => ({ ...prev, icon: e.target.value }))}
+              >
+                <option value="📦">📦 Paquete</option>
+                <option value="🍔">🍔 Hamburguesa</option>
+                <option value="🍕">🍕 Pizza</option>
+                <option value="🌮">🌮 Tacos</option>
+                <option value="🍜">🍜 Fideos</option>
+                <option value="🍣">🍣 Sushi</option>
+                <option value="🍰">🍰 Postre</option>
+                <option value="🥤">🥤 Bebida</option>
+                <option value="🥗">🥗 Ensalada</option>
+                <option value="🍳">🍳 Desayuno</option>
+                <option value="🥩">🥩 Carne</option>
+                <option value="🍟">🍟 Acompañamiento</option>
+                <option value="☕">☕ Café</option>
+                <option value="🍦">🍦 Helado</option>
+              </select>
+            </div>
+            <div>
+              <Label>Nombre de la Categoría *</Label>
+              <Input 
+                placeholder="Ej: Platos Principales" 
+                value={categoryForm.name}
+                onChange={(e) => setCategoryForm(prev => ({ ...prev, name: e.target.value }))}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Descripción (Opcional)</Label>
+              <Input 
+                placeholder="Breve descripción de la categoría" 
+                value={categoryForm.description}
+                onChange={(e) => setCategoryForm(prev => ({ ...prev, description: e.target.value }))}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowCategoryModal(false);
+                setCategoryForm({ name: '', description: '', icon: '📦' });
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleSaveCategoryFromModal}
+              disabled={!categoryForm.name.trim() || isSavingCategory}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {isSavingCategory ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                'Crear Categoría'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Toast Message */}
+      {toastMessage && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 ${
+            toastMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+          }`}>
+            {toastMessage.type === 'success' ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+            <span className="text-sm font-medium">{toastMessage.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

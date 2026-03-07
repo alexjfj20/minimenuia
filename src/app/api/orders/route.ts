@@ -1,6 +1,8 @@
 // =============================================
 // MINIMENU - Orders API (con pg directo)
 // =============================================
+// CRÍTICO: Cada negocio tiene sus propios pedidos aislados por businessId
+// Las cuentas nuevas empiezan SIN pedidos (SaaS multi-tenant)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
@@ -47,7 +49,26 @@ interface Order {
   items?: OrderItem[];
 }
 
-// GET - List Orders
+// ============================================================================
+// HELPER: Get businessId from session cookie
+// ============================================================================
+
+function getBusinessIdFromSession(request: NextRequest): string | null {
+  const sessionCookie = request.cookies.get('session');
+  
+  if (!sessionCookie) {
+    return null;
+  }
+
+  try {
+    const session = JSON.parse(sessionCookie.value);
+    return session.businessId || null;
+  } catch {
+    return null;
+  }
+}
+
+// GET - List Orders for authenticated business
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const databaseUrl = process.env.DATABASE_URL;
 
@@ -58,6 +79,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Obtener businessId de la sesión
+  const businessId = getBusinessIdFromSession(request);
+
+  if (!businessId) {
+    return NextResponse.json(
+      { success: false, error: 'No autenticado o sin negocio asociado' },
+      { status: 401 }
+    );
+  }
+
   const pool = new Pool({
     connectionString: databaseUrl,
     connectionTimeoutMillis: 10000,
@@ -65,16 +96,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     const { searchParams } = new URL(request.url);
-    const businessId = searchParams.get('businessId');
     const orderType = searchParams.get('orderType');
     const status = searchParams.get('status');
-
-    if (!businessId) {
-      return NextResponse.json(
-        { success: false, error: 'businessId es requerido' },
-        { status: 400 }
-      );
-    }
 
     const client = await pool.connect();
 
@@ -83,7 +106,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         SELECT * FROM orders
         WHERE "businessId" = $1
       `;
-      const params: (string | null)[] = [businessId];
+      const params: string[] = [businessId];
       let paramIndex = 2;
 
       if (orderType) {
@@ -111,6 +134,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
         order.items = itemsResult.rows;
       }
+
+      console.log('[Orders API] GET for business:', businessId, '- Orders:', orders.length);
 
       return NextResponse.json({
         success: true,
@@ -143,6 +168,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Obtener businessId de la sesión
+  const businessId = getBusinessIdFromSession(request);
+
+  if (!businessId) {
+    return NextResponse.json(
+      { success: false, error: 'No autenticado o sin negocio asociado' },
+      { status: 401 }
+    );
+  }
+
   const pool = new Pool({
     connectionString: databaseUrl,
     connectionTimeoutMillis: 10000,
@@ -151,7 +186,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
     const {
-      businessId,
       customerName,
       customerPhone,
       customerEmail,
@@ -170,9 +204,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       items = [],
     } = body;
 
-    if (!businessId || !customerName) {
+    if (!customerName) {
       return NextResponse.json(
-        { success: false, error: 'businessId y customerName son requeridos' },
+        { success: false, error: 'customerName es requerido' },
         { status: 400 }
       );
     }
@@ -219,6 +253,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         ]);
       }
 
+      console.log('[Orders API] Order created:', orderId, orderNumber, 'for business:', businessId);
+
       return NextResponse.json({
         success: true,
         data: { id: orderId, orderNumber },
@@ -251,6 +287,16 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Obtener businessId de la sesión
+  const businessId = getBusinessIdFromSession(request);
+
+  if (!businessId) {
+    return NextResponse.json(
+      { success: false, error: 'No autenticado o sin negocio asociado' },
+      { status: 401 }
+    );
+  }
+
   const pool = new Pool({
     connectionString: databaseUrl,
     connectionTimeoutMillis: 10000,
@@ -270,6 +316,19 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     const client = await pool.connect();
 
     try {
+      // Verify order belongs to this business
+      const checkResult = await client.query(
+        'SELECT id FROM orders WHERE id = $1 AND "businessId" = $2',
+        [id, businessId]
+      );
+
+      if (checkResult.rows.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Pedido no encontrado o no autorizado' },
+          { status: 404 }
+        );
+      }
+
       const updates: string[] = [];
       const values: (string | null)[] = [];
       let paramIndex = 1;
@@ -308,9 +367,12 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       }
 
       values.push(id);
-      const query = `UPDATE orders SET ${updates.join(', ')} WHERE id = $${paramIndex}`;
+      values.push(businessId);
+      const query = `UPDATE orders SET ${updates.join(', ')} WHERE id = $${paramIndex} AND "businessId" = $${paramIndex + 1}`;
 
       await client.query(query, values);
+
+      console.log('[Orders API] Order updated:', id, 'for business:', businessId);
 
       return NextResponse.json({
         success: true,
@@ -343,6 +405,16 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Obtener businessId de la sesión
+  const businessId = getBusinessIdFromSession(request);
+
+  if (!businessId) {
+    return NextResponse.json(
+      { success: false, error: 'No autenticado o sin negocio asociado' },
+      { status: 401 }
+    );
+  }
+
   const pool = new Pool({
     connectionString: databaseUrl,
     connectionTimeoutMillis: 10000,
@@ -364,8 +436,20 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     try {
       // Delete order items first
       await client.query('DELETE FROM order_items WHERE "orderId" = $1', [id]);
-      // Delete order
-      await client.query('DELETE FROM orders WHERE id = $1', [id]);
+      // Delete order (only if belongs to this business)
+      const result = await client.query(
+        'DELETE FROM orders WHERE id = $1 AND "businessId" = $2 RETURNING id',
+        [id, businessId]
+      );
+
+      if (result.rows.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Pedido no encontrado o no autorizado' },
+          { status: 404 }
+        );
+      }
+
+      console.log('[Orders API] Order deleted:', id, 'for business:', businessId);
 
       return NextResponse.json({
         success: true,
