@@ -434,9 +434,54 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         const data = await response.json();
         
         if (data.success && data.data) {
-          setProducts(data.data.products || []);
-          setCategories(data.data.categories || defaultCategories);
-          console.log('[Products] Loaded', data.data.products?.length || 0, 'products from API');
+          // Transform backend fields to frontend interface
+          const transformedProducts: Product[] = (data.data.products || []).map((p: {
+            id: string;
+            name: string;
+            description?: string;
+            price: number;
+            categoryId?: string;
+            image?: string | null;
+            isAvailable?: boolean;
+            isFeatured?: boolean;
+            stock?: number;
+            onSale?: boolean;
+            salePrice?: number;
+            saleStartDate?: string;
+            saleEndDate?: string;
+          }) => ({
+            id: p.id,
+            name: p.name || '',
+            description: p.description || '',
+            price: Number(p.price) || 0,
+            category: p.categoryId || '', // Map categoryId to category
+            available: p.isAvailable ?? true, // Map isAvailable to available
+            featured: p.isFeatured ?? false, // Map isFeatured to featured
+            image: p.image || null,
+            stock: p.stock ?? 0,
+            requiereEmpaque: false,
+            onSale: p.onSale ?? false,
+            salePrice: p.salePrice,
+            saleStartDate: p.saleStartDate,
+            saleEndDate: p.saleEndDate
+          }));
+          
+          // Transform categories
+          const transformedCategories: Category[] = (data.data.categories || []).map((c: {
+            id: string;
+            name: string;
+            icon?: string;
+            order?: number;
+          }) => ({
+            id: c.id,
+            name: c.name || '',
+            icon: c.icon || '📦',
+            order: c.order || 0
+          }));
+          
+          setProducts(transformedProducts);
+          setCategories(transformedCategories.length > 0 ? transformedCategories : defaultCategories);
+          console.log('[Products] Loaded', transformedProducts.length, 'products from API');
         }
       } catch (error) {
         console.error('[Products] Error loading products:', error);
@@ -1015,7 +1060,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       try {
         generatedImage = await generateAIImage(data.product.name, data.product.description);
       } catch (imgError) {
-        console.warn('[AI Text] Image generation failed, continuing without image');
+        console.warn('[AI Text] Image generation failed, continuing without image:', imgError);
+        // Clear any error that might have been set by generateAIImage
+        // Image generation failure should not block product creation
       }
       
       setAiGeneratedProduct({
@@ -1175,23 +1222,60 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- Product Save Functions ---
   const addProductToList = async (product: Omit<Product, 'id'>): Promise<void> => {
     try {
+      // Find the category ID from the category name
+      const categoryObj = categories.find(c => c.name === product.category);
+      const categoryId = categoryObj?.id || null;
+      
+      // Transform frontend fields to backend expected fields
+      const payload = {
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        categoryId: categoryId, // Send categoryId instead of category name
+        available: product.available,
+        featured: product.featured,
+        image: product.image,
+        stock: product.stock,
+        onSale: product.onSale,
+        salePrice: product.salePrice,
+        saleStartDate: product.saleStartDate,
+        saleEndDate: product.saleEndDate
+      };
+      
       const response = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(product)
+        body: JSON.stringify(payload)
       });
       
       const data = await response.json();
       
       if (data.success && data.product) {
-        setProducts(prev => [...prev, data.product as Product]);
-        console.log('[Products] Added product:', data.product.name);
+        // Transform backend response back to frontend interface
+        const newProduct: Product = {
+          id: data.product.id,
+          name: data.product.name || '',
+          description: data.product.description || '',
+          price: Number(data.product.price) || 0,
+          category: product.category, // Keep the category name for frontend
+          available: data.product.isAvailable ?? true,
+          featured: data.product.isFeatured ?? false,
+          image: data.product.image || null,
+          stock: data.product.stock ?? 0,
+          requiereEmpaque: false,
+          onSale: data.product.onSale ?? false,
+          salePrice: data.product.salePrice,
+          saleStartDate: data.product.saleStartDate,
+          saleEndDate: data.product.saleEndDate
+        };
+        setProducts(prev => [...prev, newProduct]);
+        console.log('[Products] Added product:', newProduct.name);
         
         // Update categories if a new one was added
-        if (data.product.category && !categories.find(c => c.name === data.product.category)) {
+        if (product.category && !categories.find(c => c.name === product.category)) {
           setCategories(prev => [...prev, {
             id: `cat-${Date.now()}`,
-            name: data.product.category,
+            name: product.category,
             icon: '🍴',
             order: prev.length + 1
           }]);
@@ -1288,15 +1372,14 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       } catch (fetchError) {
         clearTimeout(timeoutId);
         
-        // Handle network-level errors
+        // Handle network-level errors - just log, don't show error to user
+        // Image generation is optional, product can be created without image
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          console.warn('[AI Image] Request timed out');
-          setSpeechError('La generación está tomando mucho tiempo. El producto se guardará sin imagen.');
+          console.warn('[AI Image] Request timed out - continuing without image');
           return null;
         }
         
         console.warn('[AI Image] Network error:', fetchError instanceof Error ? fetchError.message : 'Unknown');
-        setSpeechError('Error de conexión. El producto se guardará sin imagen.');
         return null;
       }
       
@@ -1304,38 +1387,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
       // Handle HTTP error responses
       if (!response.ok) {
-        let errorMessage = 'Error al generar la imagen';
-        
-        try {
-          const responseText = await response.text();
-          
-          // Handle HTML error pages (502, 503, 504 from load balancers)
-          if (responseText.includes('<html>') || responseText.includes('<!DOCTYPE')) {
-            const statusMessage = response.statusText || 'Service Unavailable';
-            console.warn(`[AI Image] Server returned HTML error: ${response.status} ${statusMessage}`);
-            
-            // Map common status codes to user-friendly messages
-            if (response.status === 502 || response.status === 503 || response.status === 504) {
-              errorMessage = 'El servidor de imágenes está temporalmente no disponible. El producto se guardará sin imagen.';
-            } else {
-              errorMessage = `Error del servidor (${response.status}). El producto se guardará sin imagen.`;
-            }
-          } else if (responseText) {
-            // Try to parse as JSON
-            try {
-              const errorData = JSON.parse(responseText) as { error?: string };
-              errorMessage = errorData.error || errorMessage;
-            } catch {
-              // Not JSON, use status text
-              errorMessage = response.statusText || errorMessage;
-            }
-          }
-        } catch {
-          errorMessage = 'Error al procesar la respuesta del servidor';
-        }
-        
-        console.warn('[AI Image] Generation failed:', errorMessage);
-        setSpeechError(errorMessage);
+        console.warn(`[AI Image] HTTP error: ${response.status} ${response.statusText}`);
         return null;
       }
 
@@ -1346,22 +1398,18 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         data = await response.json();
       } catch {
         console.warn('[AI Image] Failed to parse JSON response');
-        setSpeechError('Error al procesar la respuesta. El producto se guardará sin imagen.');
         return null;
       }
 
       // Validate response data
       if (!data.success || !data.image) {
-        const errorMsg = data.error || 'Respuesta inválida del servidor';
-        console.warn('[AI Image] Unsuccessful response:', errorMsg);
-        setSpeechError(errorMsg);
+        console.warn('[AI Image] Unsuccessful response:', data.error || 'Unknown error');
         return null;
       }
 
       // Validate image format
       if (!data.image.startsWith('data:image/')) {
         console.warn('[AI Image] Invalid image format received');
-        setSpeechError('Formato de imagen inválido. El producto se guardará sin imagen.');
         return null;
       }
 
@@ -1372,7 +1420,6 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     } catch (unexpectedError) {
       const errorMsg = unexpectedError instanceof Error ? unexpectedError.message : 'Error desconocido';
       console.warn('[AI Image] Unexpected error:', errorMsg);
-      setSpeechError('Error inesperado. El producto se guardará sin imagen.');
       return null;
     } finally {
       setIsGeneratingImage(false);
@@ -1389,7 +1436,13 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       category: aiGeneratedProduct.category,
       available: true,
       featured: false,
-      image: aiGeneratedProduct.image
+      image: aiGeneratedProduct.image,
+      stock: 0,
+      requiereEmpaque: false,
+      onSale: false,
+      salePrice: 0,
+      saleStartDate: '',
+      saleEndDate: ''
     });
     
     setShowAITextModal(false);
@@ -1401,6 +1454,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const handleSaveProduct = async (): Promise<void> => {
     if (!productForm.name.trim() || productForm.price <= 0) return;
     
+    // Find the category ID from the category name
+    const categoryObj = categories.find(c => c.name === productForm.category);
+    const categoryId = categoryObj?.id || null;
+    
     if (editingProduct) {
       // Update existing product via API
       try {
@@ -1409,19 +1466,45 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: editingProduct.id,
-            ...productForm
+            name: productForm.name,
+            description: productForm.description,
+            price: productForm.price,
+            categoryId: categoryId,
+            available: productForm.available,
+            featured: productForm.featured,
+            image: productForm.image,
+            stock: productForm.stock,
+            onSale: productForm.onSale,
+            salePrice: productForm.salePrice,
+            saleStartDate: productForm.saleStartDate,
+            saleEndDate: productForm.saleEndDate
           })
         });
         
         const data = await response.json();
         
         if (data.success && data.product) {
+          // Transform backend response back to frontend interface
+          const updatedProduct: Product = {
+            id: data.product.id,
+            name: data.product.name || '',
+            description: data.product.description || '',
+            price: Number(data.product.price) || 0,
+            category: productForm.category, // Keep the category name for frontend
+            available: data.product.isAvailable ?? true,
+            featured: data.product.isFeatured ?? false,
+            image: data.product.image || null,
+            stock: data.product.stock ?? 0,
+            requiereEmpaque: false,
+            onSale: data.product.onSale ?? false,
+            salePrice: data.product.salePrice,
+            saleStartDate: data.product.saleStartDate,
+            saleEndDate: data.product.saleEndDate
+          };
           setProducts(prev => prev.map(p => 
-            p.id === editingProduct.id 
-              ? (data.product as Product)
-              : p
+            p.id === editingProduct.id ? updatedProduct : p
           ));
-          console.log('[Products] Updated product:', data.product.name);
+          console.log('[Products] Updated product:', updatedProduct.name);
         }
       } catch (error) {
         console.error('[Products] Error updating product:', error);
