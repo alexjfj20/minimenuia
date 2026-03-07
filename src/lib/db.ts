@@ -12,10 +12,19 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient(): PrismaClient {
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-    // Configuración importante para serverless
+    // Configuración para Supabase con PgBouncer
     datasources: {
       db: {
         url: process.env.DATABASE_URL,
+      },
+    },
+    // Configuración importante para serverless con Supabase
+    __internal: {
+      engine: {
+        // Usar el modo de conexión correcto para Supabase
+        connection: {
+          pgbouncer: true,
+        },
       },
     },
   });
@@ -29,7 +38,7 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = db;
 }
 
-// Función para verificar conexión
+// Función para verificar conexión (usando consulta simple sin prepared statement)
 export async function checkDatabaseConnection(): Promise<{
   success: boolean;
   message: string;
@@ -37,9 +46,9 @@ export async function checkDatabaseConnection(): Promise<{
   details?: unknown;
 }> {
   try {
-    // Intentar una consulta simple
-    await db.$queryRaw`SELECT 1 as test`;
-    
+    // Usar $executeRaw en lugar de $queryRaw para evitar prepared statements
+    await db.$executeRaw`SELECT 1`;
+
     return {
       success: true,
       message: 'Database connection successful',
@@ -47,14 +56,13 @@ export async function checkDatabaseConnection(): Promise<{
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorType = error?.constructor?.name || 'Unknown';
-    
+
     return {
       success: false,
       message: 'Database connection failed',
       error: errorMessage,
       details: {
         type: errorType,
-        // No exponer información sensible
         hasDatabaseUrl: !!process.env.DATABASE_URL,
         hasDirectUrl: !!process.env.DIRECT_URL,
         nodeEnv: process.env.NODE_ENV,
