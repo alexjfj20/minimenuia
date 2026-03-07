@@ -1,8 +1,7 @@
 -- =============================================
 -- MINIMENU - Script de Inicialización de Base de Datos
 -- =============================================
--- Ejecuta este script en Supabase SQL Editor:
--- https://supabase.com/dashboard/project/zobvdpegchzgwntemzou/sql
+-- Ejecuta este script en Supabase SQL Editor
 
 -- =============================================
 -- ENUMS
@@ -33,7 +32,7 @@ CREATE TABLE plans (
   "isActive" BOOLEAN DEFAULT true,
   "isPublic" BOOLEAN DEFAULT true,
   "isPopular" BOOLEAN DEFAULT false,
-  order INTEGER DEFAULT 0,
+  "order" INTEGER DEFAULT 0,
   icon TEXT DEFAULT 'zap',
   color TEXT DEFAULT '#8b5cf6',
   "maxUsers" INTEGER DEFAULT 1,
@@ -229,20 +228,11 @@ CREATE INDEX activity_logs_createdAt_idx ON activity_logs("createdAt");
 -- DATOS INICIALES
 -- =============================================
 
--- Plan Gratuito
 INSERT INTO plans (name, slug, description, price, features, "isActive", "isPublic", "maxUsers", "maxProducts", "maxCategories")
 VALUES ('Gratis', 'gratis', 'Plan gratuito para comenzar', 0, '50 productos,1 usuario,Soporte por email', true, true, 1, 50, 5);
 
--- Plan Básico
 INSERT INTO plans (name, slug, description, price, features, "isActive", "isPublic", "maxUsers", "maxProducts", "maxCategories")
 VALUES ('Básico', 'basico', 'Plan básico para negocios en crecimiento', 29000, '200 productos,3 usuarios,Soporte prioritario', true, true, 3, 200, 10);
 
--- Plan Pro
 INSERT INTO plans (name, slug, description, price, features, "isActive", "isPublic", "isPopular", "maxUsers", "maxProducts", "maxCategories")
 VALUES ('Pro', 'pro', 'Plan profesional para negocios establecidos', 59000, 'Productos ilimitados,10 usuarios,Soporte 24/7', true, true, true, 10, 999999, 999);
-
--- =============================================
--- ¡LISTO!
--- =============================================
--- La base de datos está configurada.
--- Ahora visita: https://minimenuia.vercel.app/api/db/init
