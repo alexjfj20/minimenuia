@@ -5,13 +5,15 @@
 
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(): Promise<NextResponse> {
   const databaseUrl = process.env.DATABASE_URL || '';
   const directUrl = process.env.DIRECT_URL || '';
 
-  // Valores correctos esperados
-  const correctDatabaseUrl = 'postgresql://postgres.qsymkskyiaemvynumfal:MinimenuIA159%24@aws-0-us-east-1.pooler.supabase.com:6543/postgres';
-  const correctDirectUrl = 'postgresql://postgres.qsymkskyiaemvynumfal:MinimenuIA159%24@db.qsymkskyiaemvynumfal.supabase.co:5432/postgres';
+  // Valores correctos esperados con la NUEVA contraseña: Azul1340134
+  const correctDatabaseUrl = 'postgresql://postgres.qsymkskyiaemvynumfal:Azul1340134@aws-0-us-east-1.pooler.supabase.com:6543/postgres';
+  const correctDirectUrl = 'postgresql://postgres.qsymkskyiaemvynumfal:Azul1340134@db.qsymkskyiaemvynumfal.supabase.co:5432/postgres';
 
   // Función para enmascarar URL (ocultar contraseña)
   const maskUrl = (url: string): string => {
@@ -56,10 +58,10 @@ export async function GET(): Promise<NextResponse> {
     issues.push('DATABASE_URL no está configurada');
   } else if (!isDatabaseUrlCorrect) {
     if (dbInfo?.host !== 'aws-0-us-east-1.pooler.supabase.com') {
-      issues.push(`DATABASE_URL tiene host incorrecto: ${dbInfo?.host} (debe ser: aws-0-us-east-1.pooler.supabase.com)`);
+      issues.push(`DATABASE_URL tiene host incorrecto: ${dbInfo?.host}`);
     }
     if (dbInfo?.port !== '6543') {
-      issues.push(`DATABASE_URL tiene puerto incorrecto: ${dbInfo?.port} (debe ser: 6543)`);
+      issues.push(`DATABASE_URL tiene puerto incorrecto: ${dbInfo?.port}`);
     }
     if (dbInfo?.user !== 'postgres.qsymkskyiaemvynumfal') {
       issues.push(`DATABASE_URL tiene usuario incorrecto: ${dbInfo?.user}`);
@@ -70,10 +72,10 @@ export async function GET(): Promise<NextResponse> {
     issues.push('DIRECT_URL no está configurada');
   } else if (!isDirectUrlCorrect) {
     if (directInfo?.host !== 'db.qsymkskyiaemvynumfal.supabase.co') {
-      issues.push(`DIRECT_URL tiene host incorrecto: ${directInfo?.host} (debe ser: db.qsymkskyiaemvynumfal.supabase.co)`);
+      issues.push(`DIRECT_URL tiene host incorrecto: ${directInfo?.host}`);
     }
     if (directInfo?.port !== '5432') {
-      issues.push(`DIRECT_URL tiene puerto incorrecto: ${directInfo?.port} (debe ser: 5432)`);
+      issues.push(`DIRECT_URL tiene puerto incorrecto: ${directInfo?.port}`);
     }
   }
 
@@ -99,12 +101,10 @@ export async function GET(): Promise<NextResponse> {
     issues: issues.length > 0 ? issues : undefined,
     fixInstructions: allCorrect ? undefined : {
       step1: 'Ve a Vercel Dashboard > Tu Proyecto > Settings > Environment Variables',
-      step2: 'Elimina las variables DATABASE_URL y DIRECT_URL existentes',
-      step3: 'Crea DATABASE_URL con este valor EXACTO:',
+      step2: 'Actualiza las variables con estos valores EXACTOS:',
       databaseUrlValue: correctDatabaseUrl,
-      step4: 'Crea DIRECT_URL con este valor EXACTO:',
       directUrlValue: correctDirectUrl,
-      step5: 'Guarda y haz Redeploy del proyecto',
+      step3: 'Guarda y haz Redeploy del proyecto',
     },
   });
 }

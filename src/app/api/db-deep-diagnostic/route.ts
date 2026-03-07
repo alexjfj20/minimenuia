@@ -18,8 +18,6 @@ export async function GET(): Promise<NextResponse> {
         protocol: parsed.protocol,
         username: parsed.username,
         passwordLength: parsed.password?.length || 0,
-        passwordHasDollar: parsed.password?.includes('$') || false,
-        passwordHasEncodedDollar: parsed.password?.includes('%24') || false,
         host: parsed.hostname,
         port: parsed.port,
         database: parsed.pathname.replace('/', ''),
@@ -35,8 +33,8 @@ export async function GET(): Promise<NextResponse> {
   // Verificar si el proyecto de Supabase existe
   const projectId = 'qsymkskyiaemvynumfal';
 
-  // Crear URL de prueba con contraseña conocida
-  const expectedUrl = `postgresql://postgres.${projectId}:MinimenuIA159%24@aws-0-us-east-1.pooler.supabase.com:6543/postgres`;
+  // Crear URL esperada con la NUEVA contraseña: Azul1340134
+  const expectedUrl = `postgresql://postgres.${projectId}:Azul1340134@aws-0-us-east-1.pooler.supabase.com:6543/postgres`;
 
   // Comparar
   const comparison = {
@@ -71,21 +69,18 @@ export async function GET(): Promise<NextResponse> {
     comparison,
     issues: issues.length > 0 ? issues : ['Las URLs coinciden exactamente'],
     exactMatch: comparison.exactMatch,
+    expectedValues: {
+      DATABASE_URL: `postgresql://postgres.${projectId}:Azul1340134@aws-0-us-east-1.pooler.supabase.com:6543/postgres`,
+      DIRECT_URL: `postgresql://postgres.${projectId}:Azul1340134@db.${projectId}.supabase.co:5432/postgres`,
+    },
     possibleCauses: comparison.exactMatch ? [
-      'La contraseña en Supabase puede ser diferente a MinimenuIA159$',
+      'La contraseña en Supabase puede ser diferente',
       'El proyecto de Supabase puede estar pausado o eliminado',
       'El usuario de base de datos puede haber sido cambiado',
       'Puede haber restricciones de IP en Supabase',
     ] : [
       'Las URLs no coinciden exactamente',
       'Verifica que copiaste el valor correcto en Vercel',
-    ],
-    nextSteps: [
-      '1. Ve a Supabase Dashboard (https://supabase.com)',
-      '2. Selecciona el proyecto qsymkskyiaemvynumfal',
-      '3. Ve a Settings > Database',
-      '4. Verifica la contraseña actual de la base de datos',
-      '5. Si es diferente, actualiza DATABASE_URL y DIRECT_URL en Vercel',
     ],
   });
 }
