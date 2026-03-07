@@ -32,6 +32,34 @@ function createAuthStore() {
 
 const authStore = createAuthStore();
 
+// ============================================================================
+// LIMPIAR STORAGE - Para cuentas nuevas
+// ============================================================================
+
+function clearBusinessStorage(): void {
+  if (typeof window === 'undefined') return;
+  
+  // Limpiar localStorage de datos de negocio anteriores
+  const keysToRemove = [
+    'minimenu_businesses',
+    'minimenu_services',
+    'minimenu_modules',
+    'minimenu_plans',
+    'minimenu_payment_config',
+    'minimenu_ai_config',
+    'minimenu_library_items',
+    'business_profile',
+    'business_products',
+    'business_categories',
+  ];
+
+  keysToRemove.forEach(key => {
+    localStorage.removeItem(key);
+  });
+
+  console.log('[Auth] Storage limpiado para nueva cuenta');
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const user = useSyncExternalStore(
     authStore.subscribe,
@@ -46,6 +74,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await authService.login(credentials);
     
     if (response.success && response.data) {
+      // Limpiar storage antes de establecer el nuevo usuario
+      clearBusinessStorage();
       authStore.setUser(response.data);
       setIsLoading(false);
       return { success: true };
@@ -57,6 +87,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = useCallback(async (data: RegisterData) => {
     setIsLoading(true);
+    
+    // Limpiar storage ANTES del registro para cuenta limpia
+    clearBusinessStorage();
+    
     const response = await authService.register(data);
     
     if (response.success && response.data) {
@@ -70,16 +104,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // Limpiar storage al cerrar sesión
+    clearBusinessStorage();
     await authService.logout();
     authStore.setUser(null);
   }, []);
 
-  // Initialize from localStorage on mount
+  // Initialize from session cookie on mount
   React.useEffect(() => {
-    const storedUser = authService.getCurrentUser();
-    if (storedUser) {
-      authStore.setUser(storedUser);
-    }
+    const initAuth = async () => {
+      try {
+        const storedUser = await authService.getCurrentUser();
+        if (storedUser) {
+          authStore.setUser(storedUser);
+        }
+      } catch (error) {
+        console.error('[Auth] Error initializing:', error);
+      }
+    };
+    initAuth();
   }, []);
 
   const value: AuthContextType = {
