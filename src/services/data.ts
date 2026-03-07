@@ -23,7 +23,7 @@ import type {
 export const mockUsers: User[] = [
   {
     id: 'user-super-1',
-    email: 'admin@minimenu.com',
+    email: 'auditsemseo@gmail.com',
     name: 'Super Admin',
     username: 'superadmin',
     role: 'super_admin',

@@ -36,6 +36,12 @@ interface UpdateProfileRequest {
   // Imágenes del negocio
   avatar?: string | null;
   banner?: string | null;
+  bannerEnabled?: boolean;
+  // Franja Hero Sutil
+  heroImageUrl?: string | null;
+  showHeroBanner?: boolean;
+  // Favicon (Icono de Favoritos)
+  favicon?: string | null;
   // Propina Voluntaria
   tipEnabled?: boolean;
   tipPercentageDefault?: number;
@@ -93,6 +99,12 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
       // Imágenes del negocio
       ...(body.avatar !== undefined && { avatar: body.avatar }),
       ...(body.banner !== undefined && { banner: body.banner }),
+      ...(body.bannerEnabled !== undefined && { bannerEnabled: body.bannerEnabled }),
+      // Franja Hero Sutil
+      ...(body.heroImageUrl !== undefined && { heroImageUrl: body.heroImageUrl }),
+      ...(body.showHeroBanner !== undefined && { showHeroBanner: body.showHeroBanner }),
+      // Favicon (Icono de Favoritos)
+      ...(body.favicon !== undefined && { favicon: body.favicon }),
       // Propina Voluntaria
       ...(body.tipEnabled !== undefined && { tipEnabled: body.tipEnabled }),
       ...(body.tipPercentageDefault !== undefined && { tipPercentageDefault: body.tipPercentageDefault }),

@@ -1065,7 +1065,7 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
             </div>
             <div>
               <p className="font-medium text-sm">Super Admin</p>
-              <p className="text-xs text-gray-400">admin@minimenu.com</p>
+              <p className="text-xs text-gray-400">auditsemseo@gmail.com</p>
             </div>
           </div>
           <Button

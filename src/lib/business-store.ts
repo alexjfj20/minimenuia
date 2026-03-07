@@ -26,6 +26,7 @@ export interface PaymentMethodConfig {
 export interface BusinessProfile {
   id: string;
   name: string;
+  description?: string;
   phone: string;
   address: string;
   primaryColor: string;
@@ -39,7 +40,14 @@ export interface BusinessProfile {
   impoconsumo?: number;
   // Imágenes del negocio
   avatar?: string | null;
+  logo?: string | null;
   banner?: string | null;
+  bannerEnabled?: boolean;
+  // Franja Hero Sutil
+  heroImageUrl?: string | null;
+  showHeroBanner?: boolean;
+  // Favicon (Icono de Favoritos) - 16x16 o 32x32 píxeles
+  favicon?: string | null;
   // Propina Voluntaria
   tipEnabled?: boolean;
   tipPercentageDefault?: number;
@@ -63,6 +71,7 @@ const PROFILE_FILE = path.join(DATA_DIR, 'business_profile.json');
 const DEFAULT_PROFILE: BusinessProfile = {
   id: 'business-1',
   name: 'Restaurante El Sabor',
+  description: 'El mejor sabor de la ciudad',
   phone: '+57 300 123 4567',
   address: 'Calle 123 #45-67, Bogotá',
   primaryColor: '#8b5cf6',
@@ -77,6 +86,12 @@ const DEFAULT_PROFILE: BusinessProfile = {
   // Imágenes del negocio
   avatar: null,
   banner: null,
+  bannerEnabled: true,
+  // Franja Hero Sutil
+  heroImageUrl: null,
+  showHeroBanner: false,
+  // Favicon (Icono de Favoritos)
+  favicon: null,
   // Propina Voluntaria - Configuración por defecto
   tipEnabled: true,
   tipPercentageDefault: 10,

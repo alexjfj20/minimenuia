@@ -19,6 +19,11 @@ export interface Product {
   stock: number;
   createdAt: string;
   updatedAt: string;
+  // Campos de Oferta
+  onSale?: boolean;
+  salePrice?: number;
+  saleStartDate?: string;
+  saleEndDate?: string;
 }
 
 interface Category {
@@ -51,6 +56,11 @@ interface CreateProductRequest {
   featured?: boolean;
   image?: string | null;
   stock?: number;
+  // Campos de Oferta
+  onSale?: boolean;
+  salePrice?: number;
+  saleStartDate?: string;
+  saleEndDate?: string;
 }
 
 interface UpdateProductRequest {
@@ -63,6 +73,11 @@ interface UpdateProductRequest {
   featured?: boolean;
   image?: string | null;
   stock?: number;
+  // Campos de Oferta
+  onSale?: boolean;
+  salePrice?: number;
+  saleStartDate?: string;
+  saleEndDate?: string;
 }
 
 // ============================================================================
@@ -217,7 +232,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProductsR
       image: body.image || null,
       stock: body.stock ?? 0,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      // Campos de Oferta
+      onSale: body.onSale ?? false,
+      salePrice: body.salePrice,
+      saleStartDate: body.saleStartDate,
+      saleEndDate: body.saleEndDate
     };
     
     // Add product
@@ -296,6 +316,11 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProductsRe
       ...(body.featured !== undefined && { featured: body.featured }),
       ...(body.image !== undefined && { image: body.image }),
       ...(body.stock !== undefined && { stock: Number(body.stock) }),
+      // Campos de Oferta
+      ...(body.onSale !== undefined && { onSale: body.onSale }),
+      ...(body.salePrice !== undefined && { salePrice: body.salePrice }),
+      ...(body.saleStartDate !== undefined && { saleStartDate: body.saleStartDate }),
+      ...(body.saleEndDate !== undefined && { saleEndDate: body.saleEndDate }),
       updatedAt: new Date().toISOString()
     };
     

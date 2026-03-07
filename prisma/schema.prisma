@@ -1,5 +1,5 @@
 // =============================================
-// MINIMENU - Prisma Schema
+// MINIMENU - Prisma Schema (PostgreSQL)
 // =============================================
 
 generator client {
@@ -7,8 +7,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // =============================================
@@ -16,14 +17,17 @@ datasource db {
 // =============================================
 
 model User {
-  id          String   @id @default(cuid())
-  email       String   @unique
-  name        String
-  password    String   // Hashed password
-  role        UserRole @default(BUSINESS_ADMIN)
-  businessId  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String
+  password          String   // Hashed password
+  role              UserRole @default(BUSINESS_ADMIN)
+  businessId        String?
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+  avatar            String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   business    Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
@@ -48,8 +52,8 @@ model Business {
   ownerId        String
   ownerName      String
   ownerEmail     String
-  phone          String
-  address        String
+  phone          String         @default("")
+  address        String         @default("")
   planId         String
   status         BusinessStatus @default(ACTIVE)
   logo           String?
@@ -88,10 +92,10 @@ model Plan {
   name          String
   slug          String      @unique
   description   String
-  price         Float
+  price         Float       @default(0)
   currency      Currency    @default(COP)
   period        BillingType @default(MONTHLY)
-  features      String      // JSON array of features
+  features      String      @default("") // JSON array of features
   isActive      Boolean     @default(true)
   isPublic      Boolean     @default(true)
   isPopular     Boolean     @default(false)
@@ -131,7 +135,7 @@ enum BillingType {
 model Module {
   id          String       @id @default(cuid())
   name        String
-  description String
+  description String       @default("")
   type        ModuleType   @default(ADDON)
   icon        String       @default("puzzle")
   status      ModuleStatus @default(ACTIVE)
@@ -162,8 +166,8 @@ enum ModuleStatus {
 model SystemService {
   id          String        @id @default(cuid())
   name        String
-  description String
-  price       Float
+  description String        @default("")
+  price       Float         @default(0)
   currency    Currency      @default(COP)
   billingType BillingType   @default(MONTHLY)
   status      ServiceStatus @default(ACTIVE)
@@ -242,7 +246,7 @@ model Product {
   categoryId  String
   name        String
   description String?
-  price       Float
+  price       Float         @default(0)
   currency    Currency      @default(COP)
   image       String?
   isAvailable Boolean       @default(true)
@@ -253,7 +257,6 @@ model Product {
 
   business    Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  orderItems  OrderItem[]
 
   @@index([businessId])
   @@index([categoryId])
@@ -312,11 +315,14 @@ model Order {
   // Tipo de pedido
   orderType       OrderType     @default(RESTAURANT)
   
+  // Número de pedido amigable (ORD-0001, ORD-0002, etc.)
+  orderNumber     String        @unique
+  
   // Montos
   subtotal        Float         @default(0)
   deliveryFee     Float         @default(0)
   tax             Float         @default(0)
-  total           Float
+  total           Float         @default(0)
   currency        Currency      @default(COP)
   
   // Estado
@@ -342,6 +348,7 @@ model Order {
   @@index([status])
   @@index([orderType])
   @@index([createdAt])
+  @@index([orderNumber])
   @@map("orders")
 }
 
@@ -369,15 +376,14 @@ enum PaymentStatus {
 model OrderItem {
   id          String   @id @default(cuid())
   orderId     String
-  productId   String
+  productId   String   // Reference to product (no FK constraint - products may come from JSON)
   productName String
-  quantity    Int
-  unitPrice   Float
-  totalPrice  Float
+  quantity    Int      @default(1)
+  unitPrice   Float    @default(0)
+  totalPrice  Float    @default(0)
   notes       String?
 
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
   @@map("order_items")
@@ -390,8 +396,8 @@ model OrderItem {
 model Integration {
   id                  String             @id @default(cuid())
   name                String
-  description         String
-  iconSvg             String
+  description         String             @default("")
+  iconSvg             String             @default("")
   status              IntegrationStatus  @default(ACTIVE)
   requiresManualSetup Boolean           @default(false)
   setupInstructions   String?

@@ -6,3 +6,5 @@ export { BusinessAdminPanel } from './BusinessAdminPanel';
 export { LandingPage } from './LandingPage';
 export { LoginView } from './LoginView';
 export { RegisterView } from './RegisterView';
+export { ForgotPasswordView } from './ForgotPasswordView';
+export { FeaturesPage } from './FeaturesPage';

@@ -53,7 +53,15 @@ import {
   Calendar,
   RefreshCw,
   LayoutGrid,
-  CreditCard
+  CreditCard,
+  List,
+  Bike,
+  BarChart3,
+  Building2,
+  Pencil,
+  Eye,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 // --- Speech Recognition Types ---
@@ -132,11 +140,17 @@ interface Product {
   image: string | null;
   stock: number;
   requiereEmpaque?: boolean;
+  // Campos de Oferta
+  onSale?: boolean;
+  salePrice?: number;
+  saleStartDate?: string;
+  saleEndDate?: string;
 }
 
 // --- Order Interface ---
 interface Order {
   id: string;
+  orderNumber?: string; // Número amigable del pedido (ORD-0001)
   customer: string;
   items: number;
   total: number;
@@ -154,6 +168,7 @@ interface Order {
 // --- Unified Order Interface for 3-column view ---
 interface UnifiedOrder {
   id: string;
+  orderNumber?: string; // Número amigable del pedido (ORD-0001)
   customer: string;
   items: number;
   total: number;
@@ -170,6 +185,7 @@ interface UnifiedOrder {
 // --- Delivery Order Interface ---
 interface DeliveryOrder {
   id: string;
+  orderNumber?: string; // Número amigable del pedido (ORD-0001)
   invoiceNumber: string;
   customer: string;
   phone: string;
@@ -223,6 +239,7 @@ interface DeliveryCartItem {
 // Delivery Invoice for TPV Domicilio
 interface DeliveryInvoice {
   id: string;
+  orderNumber?: string; // Número amigable del pedido (ORD-0001)
   invoiceNumber: string;
   customerName: string;
   customerPhone: string;
@@ -269,6 +286,7 @@ interface RestaurantInvoice {
   status: 'paid' | 'pending' | 'cancelled';
   createdAt: string;
   notes?: string;
+  source?: 'tpv' | 'cart'; // Origin: TPV or Shopping Cart
 }
 
 // --- Payment Method Config Interface ---
@@ -413,7 +431,8 @@ function getTimerBackground(minutes: number): string {
 }
 
 function shouldShowTimer(status: string): boolean {
-  return ['pending', 'preparing', 'confirmed'].includes(status);
+  // Estados activos para mostrar timer: pendiente, preparando, confirmado, en_camino
+  return ['pending', 'preparing', 'confirmed', 'on_the_way'].includes(status);
 }
 
 // --- Order Card Component for Kanban View ---
@@ -460,7 +479,9 @@ function OrderCard({ order, timer, onView }: OrderCardProps): JSX.Element {
       {/* Header */}
       <div className="flex justify-between items-start mb-2">
         <div>
-          <span className="font-bold text-sm text-gray-900">{order.id}</span>
+          <span className="font-bold text-sm text-gray-900">
+            {order.orderNumber ?? order.id}
+          </span>
           <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${order.type === 'restaurante' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
             {order.type === 'restaurante' ? '🍽️' : '🚚'}
           </span>
@@ -540,7 +561,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     featured: false,
     image: null as string | null,
     stock: 0,
-    requiereEmpaque: true
+    requiereEmpaque: true,
+    // Campos de Oferta
+    onSale: false,
+    salePrice: 0,
+    saleStartDate: '',
+    saleEndDate: ''
   });
   
   // --- New Category State ---
@@ -599,17 +625,23 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     avatar: null as string | null,
     logo: null as string | null,
     banner: null as string | null,
+    bannerEnabled: true,
+    // Franja Hero Sutil
+    heroImageUrl: null as string | null,
+    showHeroBanner: false,
+    // Favicon (Icono de Favoritos)
+    favicon: null as string | null,
     // Propina Voluntaria
     tipEnabled: true,
     tipPercentageDefault: 10,
     tipOnlyOnPremise: true,
-    // Métodos de Pago
+    // Métodos de Pago (Efectivo primero)
     paymentMethods: [
+      { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
       { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
       { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
       { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
-      { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
-      { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+      { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
     ] as PaymentMethodConfig[]
   });
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
@@ -702,6 +734,18 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [isLoadingDeliveryInvoices, setIsLoadingDeliveryInvoices] = useState(false);
   const [deliveryViewMode, setDeliveryViewMode] = useState<'create' | 'list'>('list');
 
+  // --- Delivery Invoice Modal States ---
+  const [showDeliveryInvoiceDetail, setShowDeliveryInvoiceDetail] = useState(false);
+  const [showDeliveryInvoiceEdit, setShowDeliveryInvoiceEdit] = useState(false);
+  const [selectedDeliveryInvoice, setSelectedDeliveryInvoice] = useState<DeliveryInvoice | null>(null);
+  const [editingDeliveryInvoice, setEditingDeliveryInvoice] = useState<DeliveryInvoice | null>(null);
+  const [isSavingDeliveryInvoice, setIsSavingDeliveryInvoice] = useState(false);
+
+  // --- Database Orders States (for Gestión de Pedidos) ---
+  const [dbRestaurantOrders, setDbRestaurantOrders] = useState<Order[]>([]);
+  const [dbDeliveryOrders, setDbDeliveryOrders] = useState<DeliveryOrder[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+
   // --- TPV Restaurante States ---
   const [cart, setCart] = useState<CartItem[]>([]);
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('');
@@ -714,6 +758,18 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [invoices, setInvoices] = useState<RestaurantInvoice[]>([]);
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
   const [invoiceViewMode, setInvoiceViewMode] = useState<'create' | 'list'>('create');
+  const [selectedInvoice, setSelectedInvoice] = useState<RestaurantInvoice | null>(null);
+  const [showInvoiceDetail, setShowInvoiceDetail] = useState(false);
+
+  // --- Invoice Management States (Selection, Pagination, Filters, Bulk Operations) ---
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
+  const [invoicePage, setInvoicePage] = useState(1);
+  const [invoicePageSize, setInvoicePageSize] = useState(20);
+  const [invoiceDateFrom, setInvoiceDateFrom] = useState('');
+  const [invoiceDateTo, setInvoiceDateTo] = useState('');
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isDeletingInvoices, setIsDeletingInvoices] = useState(false);
+  const [invoiceToast, setInvoiceToast] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
 
   // Load profile from API on mount
   useEffect(() => {
@@ -736,17 +792,23 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             avatar: parsed.avatar || null,
             logo: parsed.logo || null,
             banner: parsed.banner || null,
+            bannerEnabled: parsed.bannerEnabled ?? true,
+            // Franja Hero Sutil
+            heroImageUrl: parsed.heroImageUrl || null,
+            showHeroBanner: parsed.showHeroBanner ?? false,
+            // Favicon (Icono de Favoritos)
+            favicon: parsed.favicon || null,
             // Propina Voluntaria
             tipEnabled: parsed.tipEnabled ?? true,
             tipPercentageDefault: parsed.tipPercentageDefault ?? 10,
             tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true,
-            // Métodos de Pago
+            // Métodos de Pago (Efectivo primero)
             paymentMethods: parsed.paymentMethods ?? [
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
               { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
             ]
           });
           // Load empaque value
@@ -772,17 +834,23 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             avatar: data.data.avatar || null,
             logo: data.data.logo || null,
             banner: data.data.banner || null,
+            bannerEnabled: data.data.bannerEnabled ?? true,
+            // Franja Hero Sutil
+            heroImageUrl: data.data.heroImageUrl || null,
+            showHeroBanner: data.data.showHeroBanner ?? false,
+            // Favicon (Icono de Favoritos)
+            favicon: data.data.favicon || null,
             // Propina Voluntaria
             tipEnabled: data.data.tipEnabled ?? true,
             tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
             tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true,
-            // Métodos de Pago
+            // Métodos de Pago (Efectivo primero)
             paymentMethods: data.data.paymentMethods ?? [
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
               { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
             ]
           });
           // Load empaque value from server
@@ -810,17 +878,21 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             avatar: parsed.avatar || null,
             logo: parsed.logo || null,
             banner: parsed.banner || null,
+            bannerEnabled: parsed.bannerEnabled ?? true,
+            // Franja Hero Sutil
+            heroImageUrl: parsed.heroImageUrl || null,
+            showHeroBanner: parsed.showHeroBanner ?? false,
             // Propina Voluntaria
             tipEnabled: parsed.tipEnabled ?? true,
             tipPercentageDefault: parsed.tipPercentageDefault ?? 10,
             tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true,
-            // Métodos de Pago
+            // Métodos de Pago (Efectivo primero)
             paymentMethods: parsed.paymentMethods ?? [
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
               { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
             ]
           });
         } else {
@@ -836,17 +908,23 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             avatar: null,
             logo: null,
             banner: null,
+            bannerEnabled: true,
+            // Franja Hero Sutil
+            heroImageUrl: null,
+            showHeroBanner: false,
+            // Favicon (Icono de Favoritos)
+            favicon: null,
             // Propina Voluntaria
             tipEnabled: true,
             tipPercentageDefault: 10,
             tipOnlyOnPremise: true,
-            // Métodos de Pago
+            // Métodos de Pago (Efectivo primero)
             paymentMethods: [
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
               { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
             ]
           });
         }
@@ -875,6 +953,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     { id: 'empaque', label: 'Empaque', icon: <Package className="w-5 h-5" /> },
     { id: 'backup', label: 'Backup', icon: <HardDrive className="w-5 h-5" /> },
     { id: 'compartir', label: 'Compartir Menú', icon: <Share2 className="w-5 h-5" /> },
+    { id: 'suscripcion', label: 'Suscripción', icon: <CreditCard className="w-5 h-5" /> },
     { id: 'perfil', label: 'Mi Perfil', icon: <Settings className="w-5 h-5" /> }
   ];
 
@@ -1110,6 +1189,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     
     try {
       // Build effective prompt for food product image
+      // IMPORTANTE: Instrucciones explícitas para NO incluir texto en la imagen
       const promptComponents: string[] = [
         `Professional food photography of ${productName}`,
         description || '',
@@ -1119,7 +1199,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         'soft natural lighting',
         'shallow depth of field',
         'high quality',
-        'detailed'
+        'detailed',
+        // Instrucciones críticas para evitar texto en la imagen
+        'NO TEXT',
+        'NO WORDS',
+        'NO LABELS',
+        'NO TITLES',
+        'NO WRITING',
+        'NO WATERMARKS',
+        'pure image without any text overlay',
+        'food only without text'
       ];
       
       const prompt = promptComponents.filter(Boolean).join(', ');
@@ -1297,7 +1386,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         featured: productForm.featured,
         image: productForm.image,
         stock: productForm.stock,
-        requiereEmpaque: productForm.requiereEmpaque
+        requiereEmpaque: productForm.requiereEmpaque,
+        // Campos de Oferta
+        onSale: productForm.onSale,
+        salePrice: productForm.salePrice,
+        saleStartDate: productForm.saleStartDate,
+        saleEndDate: productForm.saleEndDate
       });
     }
     
@@ -1316,7 +1410,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       featured: product.featured,
       image: product.image,
       stock: product.stock ?? 0,
-      requiereEmpaque: product.requiereEmpaque ?? true
+      requiereEmpaque: product.requiereEmpaque ?? true,
+      // Campos de Oferta
+      onSale: product.onSale ?? false,
+      salePrice: product.salePrice ?? 0,
+      saleStartDate: product.saleStartDate ?? '',
+      saleEndDate: product.saleEndDate ?? ''
     });
     setImagePreview(product.image);
     setShowProductModal(true);
@@ -1359,7 +1458,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       featured: false,
       image: null,
       stock: 0,
-      requiereEmpaque: true
+      requiereEmpaque: true,
+      // Campos de Oferta
+      onSale: false,
+      salePrice: 0,
+      saleStartDate: '',
+      saleEndDate: ''
     });
     setImagePreview(null);
     setEditingProduct(null);
@@ -1525,18 +1629,208 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     }
   };
 
-  // Load delivery invoices from localStorage
-  const loadDeliveryInvoices = (): void => {
+  // Load delivery invoices from localStorage AND database (public cart orders)
+  const loadDeliveryInvoices = async (): Promise<void> => {
     setIsLoadingDeliveryInvoices(true);
     try {
+      // 1. Load from localStorage (created from admin panel)
       const savedInvoices = localStorage.getItem('deliveryInvoices');
-      if (savedInvoices) {
-        setDeliveryInvoices(JSON.parse(savedInvoices));
+      const localInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
+      
+      // 2. Load from database (created from public cart "Tu pedido")
+      let dbInvoices: DeliveryInvoice[] = [];
+      try {
+        // Use profileId from state or default to 'business-1'
+        const businessId = profileId ?? 'business-1';
+        const response = await fetch(`/api/orders?businessId=${businessId}&orderType=DELIVERY`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            // Convert database orders to DeliveryInvoice format
+            // Note: Prisma schema uses productName and unitPrice, not name and price
+            dbInvoices = data.data.map((order: {
+              id: string;
+              orderNumber?: string;
+              invoiceNumber?: string;
+              customerName: string;
+              customerPhone?: string;
+              customerAddress?: string;
+              items: Array<{
+                productId: string;
+                productName: string;
+                unitPrice: number;
+                quantity: number;
+              }>;
+              subtotal: number;
+              deliveryFee: number;
+              total: number;
+              paymentMethod?: string;
+              paymentStatus: string;
+              status: string;
+              createdAt: string;
+              estimatedDelivery?: string;
+              neighborhood?: string;
+              notes?: string;
+            }): DeliveryInvoice => ({
+              id: order.id,
+              orderNumber: order.orderNumber, // Número amigable (ORD-0001)
+              invoiceNumber: order.invoiceNumber ?? `PED-${order.id.slice(-6)}`,
+              customerName: order.customerName,
+              customerPhone: order.customerPhone ?? '',
+              customerAddress: order.customerAddress ?? '',
+              customerNeighborhood: order.neighborhood ?? '',
+              items: order.items.map((item) => ({
+                productId: item.productId,
+                name: item.productName, // Prisma usa productName
+                price: item.unitPrice,  // Prisma usa unitPrice
+                quantity: item.quantity,
+                stock: 0,
+                requiereEmpaque: false
+              })),
+              subtotal: order.subtotal,
+              deliveryFee: order.deliveryFee,
+              empaqueTotal: 0,
+              total: order.total,
+              paymentMethod: (order.paymentMethod === 'Efectivo' || order.paymentMethod === 'cash') ? 'cash' : 
+                             (order.paymentMethod === 'Tarjeta' || order.paymentMethod === 'card') ? 'card' : 'transfer',
+              paymentStatus: order.paymentStatus === 'PAID' ? 'paid' : 'pending',
+              notes: order.notes ?? '',
+              status: order.status === 'PENDING' ? 'pending' :
+                     order.status === 'CONFIRMED' ? 'confirmed' :
+                     order.status === 'PREPARING' ? 'preparing' :
+                     order.status === 'ON_THE_WAY' ? 'on_the_way' :
+                     order.status === 'DELIVERED' ? 'delivered' : 'pending',
+              createdAt: order.createdAt,
+              estimatedDelivery: order.estimatedDelivery ?? ''
+            }));
+          }
+        }
+      } catch (dbError) {
+        console.error('[DeliveryInvoices] Error loading from DB:', dbError);
       }
+      
+      // 3. Combine and deduplicate by id
+      const allInvoices = [...localInvoices];
+      for (const dbInvoice of dbInvoices) {
+        if (!allInvoices.some(inv => inv.id === dbInvoice.id)) {
+          allInvoices.push(dbInvoice);
+        }
+      }
+      
+      // 4. Sort by createdAt descending
+      allInvoices.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      setDeliveryInvoices(allInvoices);
+      console.log(`[DeliveryInvoices] Loaded ${localInvoices.length} local + ${dbInvoices.length} from DB = ${allInvoices.length} total`);
     } catch (error) {
       console.error('[DeliveryInvoices] Error loading:', error);
     } finally {
       setIsLoadingDeliveryInvoices(false);
+    }
+  };
+
+  // Load ALL orders from database for "Gestión de Pedidos"
+  const loadAllOrdersFromDatabase = async (): Promise<void> => {
+    setIsLoadingOrders(true);
+    try {
+      const businessId = profileId ?? 'business-1';
+      
+      // Load restaurant orders
+      const restaurantResponse = await fetch(`/api/orders?businessId=${businessId}&orderType=RESTAURANT`);
+      if (restaurantResponse.ok) {
+        const data = await restaurantResponse.json();
+        if (data.success && data.data) {
+          const orders: Order[] = data.data.map((order: {
+            id: string;
+            orderNumber?: string;
+            customerName: string;
+            items: Array<{ quantity: number }>;
+            total: number;
+            status: string;
+            createdAt: string;
+            customerPhone?: string;
+            customerAddress?: string;
+            notes?: string;
+          }) => ({
+            id: order.id,
+            orderNumber: order.orderNumber,
+            customer: order.customerName,
+            items: order.items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0),
+            total: order.total,
+            status: (order.status === 'PENDING' ? 'pending' :
+                     order.status === 'PREPARING' ? 'preparing' :
+                     order.status === 'READY' ? 'ready' :
+                     order.status === 'DELIVERED' ? 'delivered' : 'pending') as Order['status'],
+            time: new Date(order.createdAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+            date: new Date(order.createdAt).toLocaleDateString('es-CO'),
+            phone: order.customerPhone,
+            address: order.customerAddress,
+            notes: order.notes,
+            createdAt: order.createdAt
+          }));
+          setDbRestaurantOrders(orders);
+          console.log(`[Orders] Loaded ${orders.length} restaurant orders from DB`);
+        }
+      }
+      
+      // Load delivery orders
+      const deliveryResponse = await fetch(`/api/orders?businessId=${businessId}&orderType=DELIVERY`);
+      if (deliveryResponse.ok) {
+        const data = await deliveryResponse.json();
+        if (data.success && data.data) {
+          const orders: DeliveryOrder[] = data.data.map((order: {
+            id: string;
+            orderNumber?: string;
+            invoiceNumber?: string;
+            customerName: string;
+            customerPhone?: string;
+            customerAddress?: string;
+            items: Array<{ quantity: number }>;
+            subtotal: number;
+            deliveryFee: number;
+            total: number;
+            status: string;
+            paymentMethod?: string;
+            paymentStatus: string;
+            createdAt: string;
+            estimatedDelivery?: string;
+            neighborhood?: string;
+            notes?: string;
+          }) => ({
+            id: order.id,
+            orderNumber: order.orderNumber,
+            invoiceNumber: order.invoiceNumber ?? `DOM-${order.id.slice(-6)}`,
+            customer: order.customerName,
+            phone: order.customerPhone ?? '',
+            address: order.customerAddress ?? '',
+            neighborhood: order.neighborhood ?? '',
+            items: order.items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0),
+            subtotal: order.subtotal,
+            deliveryFee: order.deliveryFee,
+            total: order.total,
+            status: (order.status === 'PENDING' ? 'pending' :
+                     order.status === 'CONFIRMED' ? 'confirmed' :
+                     order.status === 'PREPARING' ? 'preparing' :
+                     order.status === 'ON_THE_WAY' ? 'on_the_way' :
+                     order.status === 'DELIVERED' ? 'delivered' :
+                     order.status === 'CANCELLED' ? 'cancelled' : 'pending') as DeliveryOrder['status'],
+            paymentMethod: (order.paymentMethod === 'Efectivo' || order.paymentMethod === 'cash') ? 'cash' : 
+                           (order.paymentMethod === 'Tarjeta' || order.paymentMethod === 'card') ? 'card' : 'transfer',
+            paymentStatus: order.paymentStatus === 'PAID' ? 'paid' : 
+                          order.paymentStatus === 'REFUNDED' ? 'refunded' : 'pending',
+            notes: order.notes,
+            createdAt: order.createdAt,
+            date: new Date(order.createdAt).toLocaleDateString('es-CO'),
+            estimatedDelivery: order.estimatedDelivery ?? ''
+          }));
+          setDbDeliveryOrders(orders);
+          console.log(`[Orders] Loaded ${orders.length} delivery orders from DB`);
+        }
+      }
+    } catch (error) {
+      console.error('[Orders] Error loading from database:', error);
+    } finally {
+      setIsLoadingOrders(false);
     }
   };
 
@@ -1661,18 +1955,19 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     }
   };
 
-  // Load invoices
+  // Load invoices (includes TPV invoices + RESTAURANT orders from cart)
   const loadInvoices = useCallback(async (): Promise<void> => {
     setIsLoadingInvoices(true);
     try {
-      const response = await fetch('/api/restaurant-invoice');
+      const businessId = profileId ?? 'business-1';
+      const response = await fetch(`/api/restaurant-invoice?businessId=${businessId}`);
       const data = await response.json();
       if (data.success && data.invoices) {
         setInvoices(data.invoices);
         // Get last invoice number
         if (data.invoices.length > 0) {
           const lastNum = data.invoices.reduce((max: number, inv: RestaurantInvoice) => {
-            const num = parseInt(inv.invoiceNumber.replace('FAC-', ''));
+            const num = parseInt(inv.invoiceNumber.replace('FAC-', '').replace('ORD-', ''));
             return num > max ? num : max;
           }, 0);
           setLastInvoiceNumber(lastNum);
@@ -1683,7 +1978,414 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     } finally {
       setIsLoadingInvoices(false);
     }
-  }, []);
+  }, [profileId]);
+
+  // --- Invoice Detail Functions ---
+  const openInvoiceDetail = (invoice: RestaurantInvoice): void => {
+    setSelectedInvoice(invoice);
+    setShowInvoiceDetail(true);
+  };
+
+  const closeInvoiceDetail = (): void => {
+    setSelectedInvoice(null);
+    setShowInvoiceDetail(false);
+  };
+
+  // --- Invoice Selection Functions ---
+  const toggleInvoiceSelection = (invoiceId: string): void => {
+    setSelectedInvoiceIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(invoiceId)) {
+        newSet.delete(invoiceId);
+      } else {
+        newSet.add(invoiceId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAllInvoices = (): void => {
+    const filteredInvoices = getFilteredInvoices();
+    if (selectedInvoiceIds.size === filteredInvoices.length) {
+      setSelectedInvoiceIds(new Set());
+    } else {
+      setSelectedInvoiceIds(new Set(filteredInvoices.map(inv => inv.id)));
+    }
+  };
+
+  // --- Filter Invoices by Date ---
+  const getFilteredInvoices = (): RestaurantInvoice[] => {
+    let filtered = invoices;
+
+    if (invoiceDateFrom) {
+      const fromDate = new Date(invoiceDateFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter(inv => new Date(inv.createdAt) >= fromDate);
+    }
+
+    if (invoiceDateTo) {
+      const toDate = new Date(invoiceDateTo);
+      toDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(inv => new Date(inv.createdAt) <= toDate);
+    }
+
+    return filtered;
+  };
+
+  // --- Get Paginated Invoices ---
+  const getPaginatedInvoices = (): RestaurantInvoice[] => {
+    const filtered = getFilteredInvoices();
+    const start = (invoicePage - 1) * invoicePageSize;
+    return filtered.slice(start, start + invoicePageSize);
+  };
+
+  // --- Get Total Pages ---
+  const getTotalInvoicePages = (): number => {
+    return Math.ceil(getFilteredInvoices().length / invoicePageSize);
+  };
+
+  // --- Clear Date Filters ---
+  const clearInvoiceFilters = (): void => {
+    setInvoiceDateFrom('');
+    setInvoiceDateTo('');
+    setInvoicePage(1);
+  };
+
+  // --- Show Toast Notification ---
+  const showInvoiceToastMessage = (type: 'success' | 'error' | 'warning', message: string): void => {
+    setInvoiceToast({ type, message });
+    setTimeout(() => setInvoiceToast(null), 4000);
+  };
+
+  // --- Delete Single Invoice ---
+  const deleteSingleInvoice = async (invoiceId: string): Promise<void> => {
+    try {
+      const response = await fetch(`/api/restaurant-invoice?id=${invoiceId}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setInvoices(prev => prev.filter(inv => inv.id !== invoiceId));
+        showInvoiceToastMessage('success', 'Factura eliminada correctamente');
+      } else {
+        showInvoiceToastMessage('error', data.error || 'Error al eliminar factura');
+      }
+    } catch (error) {
+      console.error('[Invoice] Error deleting:', error);
+      showInvoiceToastMessage('error', 'Error al eliminar factura');
+    }
+  };
+
+  // --- Bulk Delete Invoices ---
+  const bulkDeleteInvoices = async (): Promise<void> => {
+    if (selectedInvoiceIds.size === 0) {
+      showInvoiceToastMessage('warning', 'No hay facturas seleccionadas');
+      return;
+    }
+
+    setIsDeletingInvoices(true);
+
+    try {
+      const response = await fetch('/api/restaurant-invoice/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedInvoiceIds) })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setInvoices(prev => prev.filter(inv => !selectedInvoiceIds.has(inv.id)));
+        setSelectedInvoiceIds(new Set());
+        setShowBulkDeleteConfirm(false);
+        showInvoiceToastMessage('success', `${data.deletedCount} factura(s) eliminada(s) correctamente`);
+      } else {
+        showInvoiceToastMessage('error', data.error || 'Error al eliminar facturas');
+      }
+    } catch (error) {
+      console.error('[Invoice] Error bulk deleting:', error);
+      showInvoiceToastMessage('error', 'Error al eliminar facturas');
+    } finally {
+      setIsDeletingInvoices(false);
+    }
+  };
+
+  // --- Export Invoices to CSV ---
+  const exportInvoicesToCSV = (): void => {
+    const filtered = getFilteredInvoices();
+
+    if (filtered.length === 0) {
+      showInvoiceToastMessage('warning', 'No hay facturas para exportar');
+      return;
+    }
+
+    const headers = ['Factura', 'Cliente', 'Teléfono', 'Items', 'Subtotal', 'Impuesto', 'Total', 'Método Pago', 'Estado', 'Fecha'];
+    const rows = filtered.map(inv => [
+      inv.invoiceNumber,
+      inv.customerName,
+      inv.customerPhone || '',
+      inv.items.length.toString(),
+      inv.subtotal.toString(),
+      inv.tax.toString(),
+      inv.total.toString(),
+      inv.paymentMethod === 'cash' ? 'Efectivo' : inv.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia',
+      inv.status === 'paid' ? 'Pagado' : inv.status === 'pending' ? 'Pendiente' : 'Cancelado',
+      new Date(inv.createdAt).toLocaleDateString('es-CO')
+    ]);
+
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `facturas_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    showInvoiceToastMessage('success', `${filtered.length} factura(s) exportada(s) a CSV`);
+  };
+
+  // --- Print Restaurant Invoice Ticket ---
+  const printRestaurantInvoiceTicket = (invoice: RestaurantInvoice): void => {
+    const qrData = `FACTURA: ${invoice.invoiceNumber}\\nCliente: ${invoice.customerName}\\nTotal: $${invoice.total.toLocaleString()}\\nFecha: ${new Date(invoice.createdAt).toLocaleDateString('es-CO')}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrData)}`;
+    const logoUrl = profileForm.logo || profileForm.avatar || '';
+
+    const ticketContent = `
+      <html>
+      <head>
+        <title>Ticket - ${invoice.invoiceNumber}</title>
+        <style>
+          @page { size: 80mm auto; margin: 0; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 5mm; background: white; }
+          .ticket { width: 100%; }
+          .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+          .logo-img { max-width: 50mm; max-height: 20mm; object-fit: contain; margin-bottom: 5px; }
+          .header h1 { font-size: 16px; }
+          .header p { font-size: 11px; color: #666; }
+          .invoice-info { margin-bottom: 10px; }
+          .invoice-info p { font-size: 11px; }
+          .divider { border-top: 1px dashed #000; margin: 10px 0; }
+          .items { margin-bottom: 10px; }
+          .item { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 11px; }
+          .item-name { flex: 1; }
+          .item-qty { width: 30px; text-align: center; }
+          .item-price { width: 70px; text-align: right; }
+          .totals { margin-top: 10px; }
+          .total-line { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; }
+          .total-line.bold { font-weight: bold; font-size: 13px; border-top: 1px solid #000; padding-top: 5px; margin-top: 5px; }
+          .payment-status { text-align: center; margin: 10px 0; padding: 5px; background: ${invoice.status === 'paid' ? '#d4edda' : '#fff3cd'}; }
+          .qr-section { text-align: center; margin: 15px 0; }
+          .qr-code { width: 80px; height: 80px; }
+          .footer { text-align: center; font-size: 10px; color: #666; margin-top: 15px; border-top: 1px dashed #000; padding-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="ticket">
+          <div class="header">
+            ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo-img">` : ''}
+            <h1>${profileForm.businessName || 'MINIMENU'}</h1>
+            <p>${profileForm.address || ''}</p>
+            <p>${profileForm.phone || ''}</p>
+          </div>
+          
+          <div class="invoice-info">
+            <p><strong>Factura:</strong> ${invoice.invoiceNumber}</p>
+            <p><strong>Cliente:</strong> ${invoice.customerName}</p>
+            ${invoice.customerPhone ? `<p><strong>Tel:</strong> ${invoice.customerPhone}</p>` : ''}
+            <p><strong>Fecha:</strong> ${new Date(invoice.createdAt).toLocaleString('es-CO')}</p>
+          </div>
+          
+          <div class="divider"></div>
+          
+          <div class="items">
+            ${invoice.items.map(item => `
+              <div class="item">
+                <span class="item-name">${item.name}</span>
+                <span class="item-qty">x${item.quantity}</span>
+                <span class="item-price">$${(item.price * item.quantity).toLocaleString()}</span>
+              </div>
+            `).join('')}
+          </div>
+          
+          <div class="divider"></div>
+          
+          <div class="totals">
+            <div class="total-line">
+              <span>Subtotal:</span>
+              <span>$${invoice.subtotal.toLocaleString()}</span>
+            </div>
+            <div class="total-line">
+              <span>Impuesto:</span>
+              <span>$${invoice.tax.toLocaleString()}</span>
+            </div>
+            <div class="total-line bold">
+              <span>TOTAL:</span>
+              <span>$${invoice.total.toLocaleString()}</span>
+            </div>
+          </div>
+          
+          <div class="payment-status">
+            <strong>${invoice.status === 'paid' ? '✓ PAGADO' : 'PENDIENTE'}</strong>
+            <br>
+            <span>${invoice.paymentMethod === 'cash' ? 'Efectivo' : invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}</span>
+          </div>
+          
+          <div class="qr-section">
+            <img src="${qrCodeUrl}" alt="QR" class="qr-code">
+            <p style="font-size: 10px;">Escanea para verificar</p>
+          </div>
+          
+          <div class="footer">
+            <p>¡Gracias por su visita!</p>
+            <p>Powered by MINIMENU</p>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            window.print();
+            window.onafterprint = function() { window.close(); };
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=320,height=500');
+    if (printWindow) {
+      printWindow.document.write(ticketContent);
+      printWindow.document.close();
+    }
+  };
+
+  // --- Download Restaurant Invoice PDF ---
+  const downloadRestaurantInvoicePDF = (invoice: RestaurantInvoice): void => {
+    const qrData = `FACTURA: ${invoice.invoiceNumber}\\nCliente: ${invoice.customerName}\\nTotal: $${invoice.total.toLocaleString()}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+    const logoUrl = profileForm.logo || profileForm.avatar || '';
+
+    const pdfContent = `
+      <html>
+      <head>
+        <title>Factura - ${invoice.invoiceNumber}</title>
+        <meta charset="UTF-8">
+        <style>
+          @page { size: A4; margin: 15mm; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; line-height: 1.6; color: #333; background: #fff; }
+          .invoice { max-width: 100%; margin: 0 auto; }
+          .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 3px solid #8b5cf6; }
+          .logo-section { display: flex; align-items: center; gap: 15px; }
+          .logo-img { max-width: 80px; max-height: 60px; object-fit: contain; }
+          .business-info h1 { font-size: 24px; color: #8b5cf6; }
+          .business-info p { font-size: 12px; color: #666; }
+          .invoice-info { text-align: right; }
+          .invoice-info h2 { font-size: 18px; color: #333; }
+          .invoice-info p { font-size: 12px; color: #666; }
+          .customer-section { margin-bottom: 25px; padding: 15px; background: #f8f9fa; border-radius: 8px; }
+          .customer-section h3 { font-size: 14px; margin-bottom: 10px; color: #8b5cf6; }
+          .customer-section p { font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+          th { background: #8b5cf6; color: white; padding: 12px 8px; text-align: left; font-size: 11px; }
+          td { padding: 12px 8px; border-bottom: 1px solid #eee; font-size: 11px; }
+          .totals-section { margin-left: auto; width: 300px; }
+          .total-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 12px; }
+          .total-row.grand-total { font-size: 16px; font-weight: bold; border-top: 2px solid #8b5cf6; padding-top: 12px; margin-top: 8px; }
+          .status-section { margin: 20px 0; padding: 15px; background: ${invoice.status === 'paid' ? '#d4edda' : '#fff3cd'}; border-radius: 8px; text-align: center; }
+          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; }
+          .footer p { font-size: 11px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="invoice">
+          <div class="header">
+            <div class="logo-section">
+              ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo-img">` : ''}
+              <div class="business-info">
+                <h1>${profileForm.businessName || 'MINIMENU'}</h1>
+                <p>${profileForm.address || ''}</p>
+                <p>${profileForm.phone || ''}</p>
+              </div>
+            </div>
+            <div class="invoice-info">
+              <h2>FACTURA</h2>
+              <p><strong>No:</strong> ${invoice.invoiceNumber}</p>
+              <p><strong>Fecha:</strong> ${new Date(invoice.createdAt).toLocaleString('es-CO')}</p>
+            </div>
+          </div>
+          
+          <div class="customer-section">
+            <h3>Información del Cliente</h3>
+            <p><strong>Nombre:</strong> ${invoice.customerName}</p>
+            ${invoice.customerPhone ? `<p><strong>Teléfono:</strong> ${invoice.customerPhone}</p>` : ''}
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Descripción</th>
+                <th>Cantidad</th>
+                <th>Precio Unit.</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.items.map(item => `
+                <tr>
+                  <td>${item.name}</td>
+                  <td>${item.quantity}</td>
+                  <td>$${item.price.toLocaleString()}</td>
+                  <td>$${(item.price * item.quantity).toLocaleString()}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div class="totals-section">
+            <div class="total-row">
+              <span>Subtotal:</span>
+              <span>$${invoice.subtotal.toLocaleString()}</span>
+            </div>
+            <div class="total-row">
+              <span>Impuesto:</span>
+              <span>$${invoice.tax.toLocaleString()}</span>
+            </div>
+            <div class="total-row grand-total">
+              <span>TOTAL:</span>
+              <span>$${invoice.total.toLocaleString()}</span>
+            </div>
+          </div>
+          
+          <div class="status-section">
+            <strong>${invoice.status === 'paid' ? '✓ FACTURA PAGADA' : '⏳ PENDIENTE DE PAGO'}</strong>
+            <br>
+            <span>Método: ${invoice.paymentMethod === 'cash' ? 'Efectivo' : invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}</span>
+          </div>
+          
+          <div class="footer">
+            <p>¡Gracias por su preferencia!</p>
+            <p>${profileForm.businessName || 'MINIMENU'} - Sistema de Gestión</p>
+            <p>Documento generado el ${new Date().toLocaleString('es-CO')}</p>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(pdfContent);
+      printWindow.document.close();
+    }
+  };
 
   // Get filtered products for invoice
   const getFilteredProductsForInvoice = (): Product[] => {
@@ -1705,10 +2407,21 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     loadInvoices();
   }, [loadInvoices]);
 
-  // Load delivery invoices on mount
+  // Load delivery invoices on mount and when tab changes to domicilios
   useEffect(() => {
     loadDeliveryInvoices();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload delivery invoices when navigating to domicilios tab
+  useEffect(() => {
+    if (activeTab === 'domicilios') {
+      loadDeliveryInvoices();
+    }
+    // Load all orders when navigating to pedidos tab
+    if (activeTab === 'pedidos') {
+      loadAllOrdersFromDatabase();
+    }
+  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closeAIModals = (): void => {
     // Stop any ongoing speech recognition
@@ -1734,14 +2447,26 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- Función para abrir el modal correcto según tipo de pedido ---
   const handleViewUnifiedOrder = (unifiedOrder: UnifiedOrder): void => {
     if (unifiedOrder.type === 'domicilio') {
-      // Buscar el pedido de domicilio original en mockDeliveryOrders
-      const deliveryOrder = mockDeliveryOrders.find(d => d.id === unifiedOrder.id);
+      // Buscar primero en dbDeliveryOrders (pedidos de la base de datos)
+      let deliveryOrder = dbDeliveryOrders.find(d => d.id === unifiedOrder.id);
+      if (deliveryOrder) {
+        openDeliveryDetail(deliveryOrder);
+        return;
+      }
+      // Si no se encuentra, buscar en mockDeliveryOrders
+      deliveryOrder = mockDeliveryOrders.find(d => d.id === unifiedOrder.id);
       if (deliveryOrder) {
         openDeliveryDetail(deliveryOrder);
       }
     } else {
-      // Buscar el pedido de restaurante original en mockOrders
-      const restaurantOrder = mockOrders.find(o => o.id === unifiedOrder.id);
+      // Buscar primero en dbRestaurantOrders (pedidos de la base de datos)
+      let restaurantOrder = dbRestaurantOrders.find(o => o.id === unifiedOrder.id);
+      if (restaurantOrder) {
+        openOrderDetail(restaurantOrder);
+        return;
+      }
+      // Si no se encuentra, buscar en mockOrders
+      restaurantOrder = mockOrders.find(o => o.id === unifiedOrder.id);
       if (restaurantOrder) {
         openOrderDetail(restaurantOrder);
       }
@@ -1768,7 +2493,23 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     
     setIsSavingOrderChanges(true);
     try {
-      // Guardar en la base de datos via API
+      // Verificar si es un pedido de demostración (mock)
+      const isMockOrder = selectedOrder.id.startsWith('ORD-');
+      
+      if (isMockOrder) {
+        // Para pedidos de demostración, solo actualizar localmente
+        // Buscar y actualizar en mockOrders
+        const orderIndex = mockOrders.findIndex(o => o.id === selectedOrder.id);
+        if (orderIndex !== -1) {
+          mockOrders[orderIndex] = { ...selectedOrder };
+        }
+        
+        setToastMessage({ type: 'success', message: `Pedido de demostración ${selectedOrder.id} actualizado (solo local)` });
+        closeOrderDetail();
+        return;
+      }
+      
+      // Guardar en la base de datos via API para pedidos reales
       const response = await fetch('/api/orders', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1827,7 +2568,22 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     
     setIsSavingDeliveryChanges(true);
     try {
-      // Guardar en la base de datos via API
+      // Verificar si es un pedido de demostración (mock)
+      const isMockDelivery = selectedDelivery.id.startsWith('DOM-');
+      
+      if (isMockDelivery) {
+        // Para pedidos de demostración, solo actualizar localmente
+        const deliveryIndex = mockDeliveryOrders.findIndex(d => d.id === selectedDelivery.id);
+        if (deliveryIndex !== -1) {
+          mockDeliveryOrders[deliveryIndex] = { ...selectedDelivery };
+        }
+        
+        setToastMessage({ type: 'success', message: `Pedido de demostración ${selectedDelivery.invoiceNumber} actualizado (solo local)` });
+        closeDeliveryDetail();
+        return;
+      }
+      
+      // Guardar en la base de datos via API para pedidos reales
       const response = await fetch('/api/orders', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -2338,10 +3094,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     return '';
   };
 
-  // Get all unified orders (restaurant + delivery)
+  // Get all unified orders (restaurant + delivery) - combines DB orders with mock data
   const getAllUnifiedOrders = (): UnifiedOrder[] => {
-    const restaurantOrders: UnifiedOrder[] = mockOrders.map(order => ({
+    // Use database orders if available, otherwise fall back to mock data
+    const restaurantOrders: UnifiedOrder[] = (dbRestaurantOrders.length > 0 ? dbRestaurantOrders : mockOrders).map(order => ({
       id: order.id,
+      orderNumber: order.orderNumber, // Número amigable del pedido (ORD-0001)
       customer: order.customer,
       items: order.items,
       total: order.total,
@@ -2352,11 +3110,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       phone: order.phone,
       address: order.address,
       notes: order.notes,
-      createdAt: new Date().toISOString() // Mock createdAt
+      createdAt: order.createdAt ?? new Date().toISOString()
     }));
     
-    const deliveryOrders: UnifiedOrder[] = mockDeliveryOrders.map(order => ({
+    const deliveryOrders: UnifiedOrder[] = (dbDeliveryOrders.length > 0 ? dbDeliveryOrders : mockDeliveryOrders).map(order => ({
       id: order.id,
+      orderNumber: order.orderNumber, // Número amigable del pedido (ORD-0001)
       customer: order.customer,
       items: order.items,
       total: order.total,
@@ -2367,7 +3126,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       phone: order.phone,
       address: order.address,
       notes: order.notes,
-      createdAt: new Date().toISOString() // Mock createdAt
+      createdAt: order.createdAt ?? new Date().toISOString()
     }));
     
     return [...restaurantOrders, ...deliveryOrders];
@@ -2436,12 +3195,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     return filtered;
   };
 
-  // Check if order should show timer
+  // Check if order should show timer - INCLUYE TODOS LOS ESTADOS ACTIVOS (RESTAURANTE Y DOMICILIO)
   const shouldShowTimer = (status: UnifiedOrder['status']): boolean => {
-    return ['pending', 'preparing', 'confirmed'].includes(status);
+    return ['pending', 'preparing', 'confirmed', 'on_the_way'].includes(status);
   };
 
-  // Update timers every minute
+  // Update timers every 10 seconds - SE EXTIENDE A TODOS LOS PEDIDOS (RESTAURANTE Y DOMICILIO)
   useEffect(() => {
     const updateTimers = (): void => {
       const allOrders = getAllUnifiedOrders();
@@ -2449,18 +3208,25 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       
       allOrders.forEach(order => {
         if (shouldShowTimer(order.status)) {
-          newTimers.set(order.id, getElapsedMinutes(order.createdAt));
+          const minutes = getElapsedMinutes(order.createdAt);
+          // Solo mostrar timer si es >= 0 (pedido válido)
+          if (minutes >= 0) {
+            newTimers.set(order.id, minutes);
+          }
         }
       });
       
       setOrderTimers(newTimers);
     };
     
+    // Actualizar inmediatamente
     updateTimers();
-    const interval = setInterval(updateTimers, 60000);
+    // Actualizar cada 10 segundos para mayor precisión
+    const interval = setInterval(updateTimers, 10000);
     
     return () => clearInterval(interval);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbRestaurantOrders, dbDeliveryOrders]);
 
   // Check for new orders and notify
   useEffect(() => {
@@ -2476,6 +3242,13 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   // --- Ticket and PDF Functions ---
   const printThermalTicket = (delivery: DeliveryOrder): void => {
+    // Generate QR Code URL for thermal ticket
+    const qrData = `FACTURA: ${delivery.invoiceNumber}\\nPedido: ${delivery.id}\\nTotal: $${delivery.total.toLocaleString()}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrData)}`;
+    
+    // Logo URL (use business logo)
+    const logoUrl = profileForm.logo || profileForm.avatar || '';
+
     // Create thermal ticket content (80mm width = ~302px at 96 DPI)
     const ticketContent = `
       <html>
@@ -2506,6 +3279,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             border-bottom: 1px dashed #000;
             padding-bottom: 10px;
             margin-bottom: 10px;
+          }
+          .logo-img {
+            max-width: 50mm;
+            max-height: 20mm;
+            object-fit: contain;
+            margin-bottom: 5px;
           }
           .header h1 {
             font-size: 16px;
@@ -2564,6 +3343,22 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             font-size: 10px;
             font-weight: bold;
           }
+          .qr-section {
+            text-align: center;
+            margin: 15px 0;
+            padding: 10px 0;
+            border-top: 1px dashed #000;
+            border-bottom: 1px dashed #000;
+          }
+          .qr-code {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 5px;
+          }
+          .qr-label {
+            font-size: 9px;
+            color: #333;
+          }
           .footer {
             text-align: center;
             margin-top: 15px;
@@ -2573,12 +3368,6 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           .footer p {
             font-size: 10px;
             margin-bottom: 3px;
-          }
-          .barcode {
-            text-align: center;
-            margin: 10px 0;
-            font-family: 'Libre Barcode 39', cursive;
-            font-size: 40px;
           }
           .notes {
             background: #f5f5f5;
@@ -2597,8 +3386,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       <body>
         <div class="ticket">
           <div class="header">
-            <h1>🍜 MINIMENU</h1>
-            <p>Sistema de Gestión de Menús</p>
+            ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo-img" onerror="this.style.display='none'">` : ''}
+            <h1>${profileForm.businessName || 'MINIMENU'}</h1>
+            <p>${profileForm.address || 'Sistema de Gestión de Menús'}</p>
             <p>Factura: ${delivery.invoiceNumber}</p>
             <p>${new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
           </div>
@@ -2671,6 +3461,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
           ${delivery.notes ? `<div class="notes"><strong>📝 Notas:</strong> ${delivery.notes}</div>` : ''}
 
+          <div class="qr-section">
+            <img src="${qrCodeUrl}" alt="QR Code" class="qr-code">
+            <div class="qr-label">Escanea para verificar factura</div>
+          </div>
+
           <div class="footer">
             <p>═══════════════════════════</p>
             <p>¡Gracias por su pedido!</p>
@@ -2698,15 +3493,23 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   };
 
   const downloadDeliveryPDF = (delivery: DeliveryOrder): void => {
-    // Create PDF content as printable HTML
+    // Generate QR Code URL for the invoice
+    const qrData = `FACTURA: ${delivery.invoiceNumber}\\nPedido: ${delivery.id}\\nCliente: ${delivery.customer}\\nTotal: $${delivery.total.toLocaleString()}\\nFecha: ${new Date().toLocaleDateString('es-CO')}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+    
+    // Logo URL (use business logo)
+    const logoUrl = profileForm.logo || profileForm.avatar || '';
+
+    // Create professional PDF content as printable HTML
     const pdfContent = `
       <html>
       <head>
         <title>Factura de Domicilio - ${delivery.invoiceNumber}</title>
+        <meta charset="UTF-8">
         <style>
           @page {
             size: A4;
-            margin: 20mm;
+            margin: 15mm;
           }
           * {
             margin: 0;
@@ -2714,75 +3517,115 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             box-sizing: border-box;
           }
           body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
             font-size: 12px;
-            line-height: 1.5;
+            line-height: 1.6;
             color: #333;
+            background: #fff;
           }
           .invoice {
-            max-width: 800px;
+            max-width: 100%;
             margin: 0 auto;
           }
           .header {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 30px;
+            align-items: center;
+            margin-bottom: 25px;
             padding-bottom: 20px;
-            border-bottom: 2px solid #8b5cf6;
+            border-bottom: 3px solid #8b5cf6;
           }
-          .logo {
-            font-size: 28px;
+          .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+          }
+          .logo-img {
+            max-width: 80px;
+            max-height: 80px;
+            object-fit: contain;
+            border-radius: 8px;
+          }
+          .business-info h1 {
+            font-size: 26px;
             font-weight: bold;
             color: #8b5cf6;
+            margin-bottom: 5px;
           }
-          .logo span {
-            color: #333;
-          }
-          .invoice-info {
-            text-align: right;
-          }
-          .invoice-info h2 {
-            font-size: 24px;
-            color: #8b5cf6;
-            margin-bottom: 10px;
-          }
-          .invoice-info p {
-            font-size: 12px;
+          .business-info p {
+            font-size: 11px;
             color: #666;
           }
-          .section {
-            margin-bottom: 25px;
+          .invoice-badge {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(139, 92, 246, 0.3);
           }
-          .section-title {
-            font-size: 14px;
+          .invoice-badge h2 {
+            font-size: 12px;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+          }
+          .invoice-badge p {
+            font-size: 18px;
             font-weight: bold;
-            color: #8b5cf6;
-            margin-bottom: 10px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #e5e5e5;
           }
-          .info-grid {
+          .invoice-badge .date {
+            font-size: 10px;
+            margin-top: 5px;
+            opacity: 0.9;
+          }
+          .content-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            gap: 20px;
+            margin-bottom: 25px;
           }
-          .info-item {
-            margin-bottom: 8px;
+          .section {
+            background: #f9fafb;
+            border-radius: 10px;
+            padding: 18px;
+            border: 1px solid #e5e7eb;
           }
-          .info-item label {
-            font-size: 10px;
-            color: #888;
-            text-transform: uppercase;
-            display: block;
-          }
-          .info-item span {
+          .section-title {
             font-size: 13px;
+            font-weight: bold;
+            color: #8b5cf6;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px dotted #e5e7eb;
+          }
+          .info-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+          }
+          .info-label {
+            font-weight: 600;
+            color: #6b7280;
+            font-size: 11px;
+          }
+          .info-value {
             font-weight: 500;
+            color: #111827;
           }
           .status-badge {
             display: inline-block;
-            padding: 4px 12px;
+            padding: 5px 14px;
             border-radius: 20px;
             font-size: 11px;
             font-weight: bold;
@@ -2797,182 +3640,298 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           .payment-paid { background: #dcfce7; color: #166534; }
           .payment-refunded { background: #f3f4f6; color: #374151; }
           .address-box {
-            background: #f9fafb;
-            padding: 15px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            padding: 12px;
             border-radius: 8px;
-            margin-top: 10px;
+            margin-top: 12px;
           }
-          .address-box p {
-            font-size: 13px;
+          .address-box .address-label {
+            font-size: 11px;
+            color: #8b5cf6;
+            font-weight: 600;
+            margin-bottom: 5px;
+          }
+          .address-box .address-text {
+            font-size: 12px;
+            color: #333;
+          }
+          .table-section {
+            margin: 25px 0;
           }
           .table {
             width: 100%;
             border-collapse: collapse;
             margin: 15px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
           }
           .table th {
-            background: #f3f4f6;
-            padding: 10px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            padding: 12px 15px;
             text-align: left;
             font-size: 11px;
             text-transform: uppercase;
-            color: #666;
+            letter-spacing: 0.5px;
           }
           .table td {
-            padding: 12px 10px;
-            border-bottom: 1px solid #e5e5e5;
+            padding: 14px 15px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #fff;
+          }
+          .table tr:last-child td {
+            border-bottom: none;
           }
           .table .text-right {
             text-align: right;
           }
-          .totals {
-            margin-left: auto;
-            width: 300px;
+          .totals-section {
+            display: flex;
+            justify-content: flex-end;
             margin-top: 20px;
+          }
+          .totals {
+            width: 320px;
+            background: #f9fafb;
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid #e5e7eb;
           }
           .totals .row {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #e5e5e5;
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .totals .row:last-child {
+            border-bottom: none;
           }
           .totals .total-row {
-            font-size: 18px;
+            font-size: 20px;
             font-weight: bold;
             color: #8b5cf6;
-            border-bottom: none;
             padding-top: 15px;
+            margin-top: 5px;
+            border-top: 2px solid #8b5cf6;
+          }
+          .payment-section {
+            margin: 25px 0;
+            padding: 18px;
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            border-radius: 10px;
+            border: 1px solid #86efac;
+          }
+          .payment-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
           }
           .notes-box {
-            background: #fffbeb;
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
             border-left: 4px solid #f59e0b;
-            padding: 15px;
-            margin-top: 20px;
+            padding: 15px 18px;
+            margin: 20px 0;
+            border-radius: 0 10px 10px 0;
           }
           .notes-box h4 {
+            font-size: 12px;
             color: #92400e;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
+          .notes-box p {
+            color: #78350f;
+            font-size: 12px;
+          }
+          .qr-section {
+            text-align: center;
+            margin: 30px 0;
+            padding: 25px;
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            border-radius: 12px;
+            border: 2px dashed #8b5cf6;
+          }
+          .qr-code {
+            width: 130px;
+            height: 130px;
+            margin: 0 auto 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .qr-label {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+          }
+          .qr-info {
+            font-size: 10px;
+            color: #9ca3af;
+            margin-top: 5px;
           }
           .footer {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e5e5;
             text-align: center;
-            color: #888;
-            font-size: 11px;
+            margin-top: 35px;
+            padding-top: 25px;
+            border-top: 2px solid #e5e7eb;
           }
           .footer p {
-            margin-bottom: 5px;
+            font-size: 11px;
+            color: #9ca3af;
+            margin-bottom: 6px;
+          }
+          .footer .brand {
+            font-size: 14px;
+            color: #8b5cf6;
+            font-weight: bold;
+            margin-bottom: 10px;
+          }
+          .footer .thank-you {
+            font-size: 16px;
+            color: #8b5cf6;
+            font-weight: 600;
+            margin-bottom: 15px;
           }
           @media print {
             body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            .invoice { page-break-inside: avoid; }
+            .qr-section { page-break-inside: avoid; }
           }
         </style>
       </head>
       <body>
         <div class="invoice">
           <div class="header">
-            <div>
-              <div class="logo">MINI<span>MENU</span></div>
-              <p style="color: #888; margin-top: 5px;">Sistema de Gestión de Menús Digitales</p>
+            <div class="logo-section">
+              ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo-img" onerror="this.style.display='none'">` : ''}
+              <div class="business-info">
+                <h1>${profileForm.businessName || 'MINIMENU'}</h1>
+                ${profileForm.address ? `<p>${profileForm.address}</p>` : ''}
+                ${profileForm.phone ? `<p>Tel: ${profileForm.phone}</p>` : ''}
+              </div>
             </div>
-            <div class="invoice-info">
-              <h2>FACTURA DE DOMICILIO</h2>
-              <p><strong>${delivery.invoiceNumber}</strong></p>
-              <p>${new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <div class="invoice-badge">
+              <h2>Factura de Domicilio</h2>
+              <p>${delivery.invoiceNumber}</p>
+              <div class="date">${new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
             </div>
           </div>
 
-          <div class="info-grid">
+          <div class="content-grid">
             <div class="section">
-              <div class="section-title">Información del Pedido</div>
-              <div class="info-item">
-                <label>ID del Pedido</label>
-                <span>${delivery.id}</span>
+              <div class="section-title">📋 Información del Pedido</div>
+              <div class="info-row">
+                <span class="info-label">ID del Pedido:</span>
+                <span class="info-value">${delivery.id}</span>
               </div>
-              <div class="info-item">
-                <label>Hora de Creación</label>
-                <span>${delivery.createdAt}</span>
+              <div class="info-row">
+                <span class="info-label">Hora de Creación:</span>
+                <span class="info-value">${delivery.createdAt}</span>
               </div>
-              <div class="info-item">
-                <label>Entrega Estimada</label>
-                <span>${delivery.estimatedDelivery}</span>
+              <div class="info-row">
+                <span class="info-label">Entrega Estimada:</span>
+                <span class="info-value">${delivery.estimatedDelivery}</span>
               </div>
-              <div class="info-item">
-                <label>Estado</label>
-                <span class="status-badge status-${delivery.status}">${getDeliveryStatusText(delivery.status)}</span>
+              <div class="info-row">
+                <span class="info-label">Estado:</span>
+                <span class="info-value">
+                  <span class="status-badge status-${delivery.status}">${getDeliveryStatusText(delivery.status)}</span>
+                </span>
               </div>
+              ${delivery.driver ? `
+              <div class="info-row">
+                <span class="info-label">Mensajero:</span>
+                <span class="info-value">${delivery.driver}</span>
+              </div>
+              ` : ''}
             </div>
 
             <div class="section">
-              <div class="section-title">Información del Cliente</div>
-              <div class="info-item">
-                <label>Nombre</label>
-                <span>${delivery.customer}</span>
+              <div class="section-title">👤 Información del Cliente</div>
+              <div class="info-row">
+                <span class="info-label">Nombre:</span>
+                <span class="info-value">${delivery.customer}</span>
               </div>
-              <div class="info-item">
-                <label>Teléfono</label>
-                <span>${delivery.phone}</span>
+              <div class="info-row">
+                <span class="info-label">Teléfono:</span>
+                <span class="info-value">${delivery.phone}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Barrio:</span>
+                <span class="info-value">${delivery.neighborhood}</span>
               </div>
               <div class="address-box">
-                <p><strong>📍 Dirección de Entrega:</strong></p>
-                <p>${delivery.address}</p>
-                <p style="color: #888; margin-top: 5px;">Barrio: ${delivery.neighborhood}</p>
+                <div class="address-label">📍 Dirección de Entrega</div>
+                <div class="address-text">${delivery.address}</div>
               </div>
-              ${delivery.driver ? `<div class="info-item" style="margin-top: 10px;"><label>Mensajero Asignado</label><span>${delivery.driver}</span></div>` : ''}
             </div>
           </div>
 
-          <div class="section" style="margin-top: 30px;">
-            <div class="section-title">Detalle del Pedido</div>
+          <div class="table-section">
+            <div class="section-title">🛒 Detalle del Pedido</div>
             <table class="table">
               <thead>
                 <tr>
                   <th>Descripción</th>
                   <th class="text-right">Cantidad</th>
-                  <th class="text-right">Valor</th>
+                  <th class="text-right">Valor Unitario</th>
+                  <th class="text-right">Total</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   <td>Productos del pedido</td>
                   <td class="text-right">${delivery.items}</td>
+                  <td class="text-right">$${Math.round(delivery.subtotal / Math.max(delivery.items, 1)).toLocaleString()}</td>
                   <td class="text-right">$${delivery.subtotal.toLocaleString()}</td>
                 </tr>
                 <tr>
                   <td>Servicio de Domicilio</td>
                   <td class="text-right">1</td>
                   <td class="text-right">$${delivery.deliveryFee.toLocaleString()}</td>
+                  <td class="text-right">$${delivery.deliveryFee.toLocaleString()}</td>
                 </tr>
               </tbody>
             </table>
 
-            <div class="totals">
-              <div class="row">
-                <span>Subtotal:</span>
-                <span>$${delivery.subtotal.toLocaleString()}</span>
-              </div>
-              <div class="row">
-                <span>Domicilio:</span>
-                <span>$${delivery.deliveryFee.toLocaleString()}</span>
-              </div>
-              <div class="row total-row">
-                <span>TOTAL:</span>
-                <span>$${delivery.total.toLocaleString()}</span>
+            <div class="totals-section">
+              <div class="totals">
+                <div class="row">
+                  <span>Subtotal:</span>
+                  <span>$${delivery.subtotal.toLocaleString()} COP</span>
+                </div>
+                <div class="row">
+                  <span>Domicilio:</span>
+                  <span>$${delivery.deliveryFee.toLocaleString()} COP</span>
+                </div>
+                <div class="row total-row">
+                  <span>TOTAL A PAGAR:</span>
+                  <span>$${delivery.total.toLocaleString()} COP</span>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="info-grid" style="margin-top: 30px;">
-            <div class="section">
-              <div class="section-title">Información de Pago</div>
-              <div class="info-item">
-                <label>Método de Pago</label>
-                <span>${getPaymentMethodText(delivery.paymentMethod)}</span>
+          <div class="payment-section">
+            <div class="content-grid" style="margin-bottom: 0;">
+              <div>
+                <div class="section-title" style="border-bottom: none; margin-bottom: 10px;">💳 Información de Pago</div>
+                <div class="info-row" style="border-bottom: none;">
+                  <span class="info-label">Método de Pago:</span>
+                  <span class="info-value">${getPaymentMethodText(delivery.paymentMethod)}</span>
+                </div>
               </div>
-              <div class="info-item">
-                <label>Estado del Pago</label>
-                <span class="status-badge payment-${delivery.paymentStatus}">${delivery.paymentStatus === 'paid' ? 'Pagado' : delivery.paymentStatus === 'pending' ? 'Pendiente' : 'Reembolsado'}</span>
+              <div>
+                <div class="section-title" style="border-bottom: none; margin-bottom: 10px;">📊 Estado del Pago</div>
+                <div class="info-row" style="border-bottom: none;">
+                  <span class="info-label">Estado:</span>
+                  <span class="info-value">
+                    <span class="status-badge payment-${delivery.paymentStatus}">${delivery.paymentStatus === 'paid' ? '✓ Pagado' : delivery.paymentStatus === 'pending' ? '⏳ Pendiente' : '↩ Reembolsado'}</span>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -2984,12 +3943,26 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           </div>
           ` : ''}
 
+          <div class="qr-section">
+            <img src="${qrCodeUrl}" alt="Código QR de la Factura" class="qr-code">
+            <div class="qr-label">Escanea el código QR para verificar la factura</div>
+            <div class="qr-info">Factura: ${delivery.invoiceNumber} | Total: $${delivery.total.toLocaleString()} COP</div>
+          </div>
+
           <div class="footer">
-            <p><strong>¡Gracias por su pedido!</strong></p>
-            <p>Este documento fue generado automáticamente por MINIMENU</p>
-            <p>Para soporte técnico: soporte@minimenu.com</p>
+            <div class="thank-you">¡Gracias por su pedido!</div>
+            <div class="brand">${profileForm.businessName || 'MINIMENU'} - Sistema de Gestión de Pedidos</div>
+            <p>Documento generado el ${new Date().toLocaleString('es-CO')}</p>
+            <p>Powered by MINIMENU - www.minimenu.com</p>
           </div>
         </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          };
+        </script>
       </body>
       </html>
     `;
@@ -2998,11 +3971,6 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     if (printWindow) {
       printWindow.document.write(pdfContent);
       printWindow.document.close();
-      
-      // Wait for content to load then trigger print dialog
-      printWindow.onload = function(): void {
-        printWindow.print();
-      };
     }
   };
 
@@ -3016,7 +3984,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     };
 
     // Generate QR Code URL using a free QR API
-    const qrData = `PEDIDO: ${order.id}\\nCliente: ${order.customer}\\nTotal: $${order.total.toLocaleString()}\\nFecha: ${order.date} ${order.time}`;
+    const orderDisplayId = order.orderNumber ?? order.id;
+    const qrData = `PEDIDO: ${orderDisplayId}\\nCliente: ${order.customer}\\nTotal: $${order.total.toLocaleString()}\\nFecha: ${order.date} ${order.time}`;
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(qrData)}`;
 
     // Logo URL (use business logo or fallback to a default)
@@ -3025,7 +3994,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     const ticketContent = `
       <html>
       <head>
-        <title>Ticket de Pedido - ${order.id}</title>
+        <title>Ticket de Pedido - ${orderDisplayId}</title>
         <style>
           @page {
             size: 80mm auto;
@@ -3172,7 +4141,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             ${profileForm.phone ? `<div class="business-info">Tel: ${profileForm.phone}</div>` : ''}
           </div>
           
-          <div class="order-title">PEDIDO ${order.id}</div>
+          <div class="order-title">PEDIDO ${order.orderNumber ?? order.id}</div>
           
           <div class="info-section">
             <div class="info-row">
@@ -3271,7 +4240,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     };
 
     // Generate QR Code URL
-    const qrData = `PEDIDO: ${order.id}\\nCliente: ${order.customer}\\nTotal: $${order.total.toLocaleString()}\\nFecha: ${order.date} ${order.time}`;
+    const orderDisplayId = order.orderNumber ?? order.id;
+    const qrData = `PEDIDO: ${orderDisplayId}\\nCliente: ${order.customer}\\nTotal: $${order.total.toLocaleString()}\\nFecha: ${order.date} ${order.time}`;
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
 
     // Logo URL
@@ -3280,7 +4250,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     const pdfContent = `
       <html>
       <head>
-        <title>Pedido ${order.id}</title>
+        <title>Pedido ${orderDisplayId}</title>
         <meta charset="UTF-8">
         <style>
           @page {
@@ -3780,6 +4750,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           avatar: profileForm.avatar,
           logo: profileForm.logo,
           banner: profileForm.banner,
+          bannerEnabled: profileForm.bannerEnabled,
+          // Franja Hero Sutil
+          heroImageUrl: profileForm.heroImageUrl,
+          showHeroBanner: profileForm.showHeroBanner,
+          // Favicon (Icono de Favoritos)
+          favicon: profileForm.favicon,
           // Propina Voluntaria
           tipEnabled: profileForm.tipEnabled,
           tipPercentageDefault: profileForm.tipPercentageDefault,
@@ -3809,6 +4785,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           avatar: data.data.avatar || null,
           logo: data.data.logo || null,
           banner: data.data.banner || null,
+          bannerEnabled: data.data.bannerEnabled ?? true,
+          // Franja Hero Sutil
+          heroImageUrl: data.data.heroImageUrl || null,
+          showHeroBanner: data.data.showHeroBanner ?? false,
+          // Favicon (Icono de Favoritos)
+          favicon: data.data.favicon || null,
           // Propina Voluntaria
           tipEnabled: data.data.tipEnabled ?? true,
           tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
@@ -4070,12 +5052,20 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         {/* User Info */}
         <div className="p-4 border-t border-gray-800">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center">
-              {user.name.charAt(0).toUpperCase()}
-            </div>
+            {profileForm.avatar ? (
+              <img 
+                src={profileForm.avatar} 
+                alt="Avatar" 
+                className="w-10 h-10 rounded-full object-cover border-2 border-purple-500"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center">
+                {(user.name ?? 'U').charAt(0).toUpperCase()}
+              </div>
+            )}
             <div>
-              <p className="font-medium text-sm">{user.name}</p>
-              <p className="text-xs text-gray-400">{user.email}</p>
+              <p className="font-medium text-sm">{user.name ?? 'Usuario'}</p>
+              <p className="text-xs text-gray-400">{user.email ?? ''}</p>
             </div>
           </div>
           <Button
@@ -4189,7 +5179,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         </div>
                         <div>
                           <p className="font-medium">{order.customer}</p>
-                          <p className="text-sm text-gray-500">{order.id} • {order.items} items</p>
+                          <p className="text-sm text-gray-500">{order.orderNumber ?? order.id} • {order.items} items</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -4546,16 +5536,24 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             {/* 3 Column Layout - Desktop/Tablet */}
             <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Columna TODOS - Solo Desktop (lg) */}
-              <div className="hidden lg:flex flex-col bg-gray-50 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4 pb-2 border-b">
-                  <h3 className="font-semibold text-gray-700 flex items-center gap-2">
-                    <span className="w-3 h-3 bg-purple-500 rounded-full"></span>
-                    TODOS
-                  </h3>
-                  <Badge className="bg-purple-100 text-purple-700">
-                    {getOrdersByType('all').length}
-                  </Badge>
+              <div className="hidden lg:flex flex-col bg-gray-50 rounded-lg overflow-hidden">
+                {/* Encabezado TODOS */}
+                <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                        <List className="w-5 h-5 text-white" />
+                      </div>
+                      <h3 className="font-bold text-white text-lg tracking-wide">
+                        TODOS
+                      </h3>
+                    </div>
+                    <Badge className="bg-white/90 text-blue-700 font-bold px-3 py-1 text-sm shadow-sm">
+                      {getOrdersByType('all').length}
+                    </Badge>
+                  </div>
                 </div>
+                <div className="p-4 flex-1 overflow-hidden">
                 <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
                   {getOrdersByType('all').map(order => (
                     <OrderCard 
@@ -4569,19 +5567,28 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <p className="text-center text-gray-500 py-8">No hay pedidos</p>
                   )}
                 </div>
+                </div>
               </div>
 
               {/* Columna RESTAURANTE */}
-              <div className="flex flex-col bg-green-50 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4 pb-2 border-b border-green-200">
-                  <h3 className="font-semibold text-green-700 flex items-center gap-2">
-                    <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-                    🍽️ RESTAURANTE
-                  </h3>
-                  <Badge className="bg-green-100 text-green-700">
-                    {getOrdersByType('restaurante').length}
-                  </Badge>
+              <div className="flex flex-col bg-green-50 rounded-lg overflow-hidden">
+                {/* Encabezado RESTAURANTE */}
+                <div className="bg-gradient-to-r from-green-600 to-green-700 px-4 py-3 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                        <Utensils className="w-5 h-5 text-white" />
+                      </div>
+                      <h3 className="font-bold text-white text-lg tracking-wide">
+                        RESTAURANTE
+                      </h3>
+                    </div>
+                    <Badge className="bg-white/90 text-green-700 font-bold px-3 py-1 text-sm shadow-sm">
+                      {getOrdersByType('restaurante').length}
+                    </Badge>
+                  </div>
                 </div>
+                <div className="p-4 flex-1 overflow-hidden">
                 <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
                   {getOrdersByType('restaurante').map(order => (
                     <OrderCard 
@@ -4595,19 +5602,28 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <p className="text-center text-gray-500 py-8">No hay pedidos de restaurante</p>
                   )}
                 </div>
+                </div>
               </div>
 
               {/* Columna DOMICILIO */}
-              <div className="flex flex-col bg-orange-50 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4 pb-2 border-b border-orange-200">
-                  <h3 className="font-semibold text-orange-700 flex items-center gap-2">
-                    <span className="w-3 h-3 bg-orange-500 rounded-full"></span>
-                    🚚 DOMICILIO
-                  </h3>
-                  <Badge className="bg-orange-100 text-orange-700">
-                    {getOrdersByType('domicilio').length}
-                  </Badge>
+              <div className="flex flex-col bg-orange-50 rounded-lg overflow-hidden">
+                {/* Encabezado DOMICILIO */}
+                <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-3 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                        <Bike className="w-5 h-5 text-white" />
+                      </div>
+                      <h3 className="font-bold text-white text-lg tracking-wide">
+                        DOMICILIO
+                      </h3>
+                    </div>
+                    <Badge className="bg-white/90 text-orange-600 font-bold px-3 py-1 text-sm shadow-sm">
+                      {getOrdersByType('domicilio').length}
+                    </Badge>
+                  </div>
                 </div>
+                <div className="p-4 flex-1 overflow-hidden">
                 <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
                   {getOrdersByType('domicilio').map(order => (
                     <OrderCard 
@@ -4620,6 +5636,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   {getOrdersByType('domicilio').length === 0 && (
                     <p className="text-center text-gray-500 py-8">No hay pedidos a domicilio</p>
                   )}
+                </div>
                 </div>
               </div>
             </div>
@@ -4866,9 +5883,137 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               /* Invoices List */
               <Card>
                 <CardHeader>
-                  <CardTitle>Facturas Creadas</CardTitle>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <CardTitle>Facturas Creadas</CardTitle>
+                    {/* Export Button */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={exportInvoicesToCSV}
+                        className="text-green-600 border-green-300 hover:bg-green-50"
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        Exportar CSV
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
+                  {/* Toast Notification */}
+                  {invoiceToast && (
+                    <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
+                      invoiceToast.type === 'success' ? 'bg-green-100 text-green-800' :
+                      invoiceToast.type === 'error' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {invoiceToast.type === 'success' && <Check className="w-4 h-4" />}
+                      {invoiceToast.type === 'error' && <X className="w-4 h-4" />}
+                      {invoiceToast.type === 'warning' && <AlertTriangle className="w-4 h-4" />}
+                      <span className="text-sm">{invoiceToast.message}</span>
+                    </div>
+                  )}
+
+                  {/* Date Filters */}
+                  <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm text-gray-600">Filtrar por fecha:</span>
+                    </div>
+                    <Input
+                      type="date"
+                      value={invoiceDateFrom}
+                      onChange={(e) => { setInvoiceDateFrom(e.target.value); setInvoicePage(1); }}
+                      className="w-40"
+                      placeholder="Desde"
+                    />
+                    <span className="text-gray-400">—</span>
+                    <Input
+                      type="date"
+                      value={invoiceDateTo}
+                      onChange={(e) => { setInvoiceDateTo(e.target.value); setInvoicePage(1); }}
+                      className="w-40"
+                      placeholder="Hasta"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={clearInvoiceFilters}
+                      className="text-gray-600"
+                    >
+                      Limpiar
+                    </Button>
+                    {(invoiceDateFrom || invoiceDateTo) && (
+                      <span className="text-sm text-purple-600">
+                        {getFilteredInvoices().length} factura(s) encontrada(s)
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Bulk Actions */}
+                  {selectedInvoiceIds.size > 0 && (
+                    <div className="mb-4 p-3 bg-red-50 rounded-lg flex items-center justify-between">
+                      <span className="text-sm text-red-700 font-medium">
+                        {selectedInvoiceIds.size} factura(s) seleccionada(s)
+                      </span>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedInvoiceIds(new Set())}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setShowBulkDeleteConfirm(true)}
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Eliminar Seleccionadas
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bulk Delete Confirmation Modal */}
+                  {showBulkDeleteConfirm && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+                      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Confirmar eliminación</h3>
+                        <p className="text-gray-600 mb-4">
+                          Estás a punto de eliminar <strong>{selectedInvoiceIds.size} factura(s)</strong>. Esta acción no se puede deshacer.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowBulkDeleteConfirm(false)}
+                            disabled={isDeletingInvoices}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={bulkDeleteInvoices}
+                            disabled={isDeletingInvoices}
+                          >
+                            {isDeletingInvoices ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Eliminando...
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Eliminar
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {isLoadingInvoices ? (
                     <div className="flex justify-center py-8">
                       <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
@@ -4880,63 +6025,163 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       <p className="text-sm">Crea tu primera factura para comenzar</p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Factura</th>
-                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Cliente</th>
-                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Items</th>
-                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Total</th>
-                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Pago</th>
-                            <th className="text-left py-3 px-3 text-gray-500 font-medium">Fecha</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {invoices.slice(0, 20).map(invoice => (
-                            <tr key={invoice.id} className="border-b hover:bg-gray-50">
-                              <td className="py-3 px-3">
-                                <span className="font-medium text-purple-600">{invoice.invoiceNumber}</span>
-                              </td>
-                              <td className="py-3 px-3">
-                                <div>
-                                  <p className="font-medium">{invoice.customerName}</p>
-                                  {invoice.customerPhone && (
-                                    <p className="text-xs text-gray-500">{invoice.customerPhone}</p>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className="bg-gray-100 px-2 py-1 rounded text-xs">
-                                  {invoice.items.length} items
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 font-bold text-green-600">
-                                ${invoice.total.toLocaleString()}
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className={`text-xs px-2 py-1 rounded ${
-                                  invoice.paymentMethod === 'cash' ? 'bg-green-100 text-green-700' :
-                                  invoice.paymentMethod === 'card' ? 'bg-blue-100 text-blue-700' :
-                                  'bg-purple-100 text-purple-700'
-                                }`}>
-                                  {invoice.paymentMethod === 'cash' ? 'Efectivo' :
-                                   invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 text-gray-600">
-                                {new Date(invoice.createdAt).toLocaleDateString('es-CO', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </td>
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left py-3 px-3 text-gray-500 font-medium w-10">
+                                <input
+                                  type="checkbox"
+                                  checked={getFilteredInvoices().length > 0 && selectedInvoiceIds.size === getFilteredInvoices().length}
+                                  onChange={toggleAllInvoices}
+                                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                />
+                              </th>
+                              <th className="text-left py-3 px-3 text-gray-500 font-medium">Factura</th>
+                              <th className="text-left py-3 px-3 text-gray-500 font-medium">Cliente</th>
+                              <th className="text-left py-3 px-3 text-gray-500 font-medium">Items</th>
+                              <th className="text-left py-3 px-3 text-gray-500 font-medium">Total</th>
+                              <th className="text-left py-3 px-3 text-gray-500 font-medium">Pago</th>
+                              <th className="text-left py-3 px-3 text-gray-500 font-medium">Fecha</th>
+                              <th className="text-left py-3 px-3 text-gray-500 font-medium">Acciones</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {getPaginatedInvoices().map(invoice => (
+                              <tr key={invoice.id} className={`border-b hover:bg-gray-50 ${selectedInvoiceIds.has(invoice.id) ? 'bg-purple-50' : ''}`}>
+                                <td className="py-3 px-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedInvoiceIds.has(invoice.id)}
+                                    onChange={() => toggleInvoiceSelection(invoice.id)}
+                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                  />
+                                </td>
+                                <td className="py-3 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-purple-600">{invoice.invoiceNumber}</span>
+                                    {invoice.source === 'cart' && (
+                                      <Badge className="bg-blue-100 text-blue-700 text-xs">Carrito</Badge>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <div>
+                                    <p className="font-medium">{invoice.customerName}</p>
+                                    {invoice.customerPhone && (
+                                      <p className="text-xs text-gray-500">{invoice.customerPhone}</p>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className="bg-gray-100 px-2 py-1 rounded text-xs">
+                                    {invoice.items.length} items
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 font-bold text-green-600">
+                                  ${invoice.total.toLocaleString()}
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className={`text-xs px-2 py-1 rounded ${
+                                    invoice.paymentMethod === 'cash' ? 'bg-green-100 text-green-700' :
+                                    invoice.paymentMethod === 'card' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-purple-100 text-purple-700'
+                                  }`}>
+                                    {invoice.paymentMethod === 'cash' ? 'Efectivo' :
+                                     invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-gray-600">
+                                  {new Date(invoice.createdAt).toLocaleDateString('es-CO', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </td>
+                                <td className="py-3 px-3">
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50"
+                                      onClick={() => openInvoiceDetail(invoice)}
+                                      title="Ver detalle"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-green-600 hover:bg-green-50"
+                                      onClick={() => printRestaurantInvoiceTicket(invoice)}
+                                      title="Imprimir ticket"
+                                    >
+                                      <Printer className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-purple-600 hover:bg-purple-50"
+                                      onClick={() => downloadRestaurantInvoicePDF(invoice)}
+                                      title="Descargar PDF"
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
+                                      onClick={() => {
+                                        if (confirm('¿Estás seguro de eliminar esta factura?')) {
+                                          deleteSingleInvoice(invoice.id);
+                                        }
+                                      }}
+                                      title="Eliminar"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination */}
+                      {getTotalInvoicePages() > 1 && (
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                          <span className="text-sm text-gray-600">
+                            Mostrando {((invoicePage - 1) * invoicePageSize) + 1} - {Math.min(invoicePage * invoicePageSize, getFilteredInvoices().length)} de {getFilteredInvoices().length} facturas
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setInvoicePage(p => Math.max(1, p - 1))}
+                              disabled={invoicePage === 1}
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                              Anterior
+                            </Button>
+                            <span className="px-3 py-1 bg-gray-100 rounded text-sm">
+                              Página {invoicePage} de {getTotalInvoicePages()}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setInvoicePage(p => Math.min(getTotalInvoicePages(), p + 1))}
+                              disabled={invoicePage === getTotalInvoicePages()}
+                            >
+                              Siguiente
+                              <ChevronRight className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -5507,37 +6752,221 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600">{invoice.estimatedDelivery}</td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex items-center justify-end gap-1">
+                                {/* Ver detalles */}
                                 <Button
                                   size="sm"
-                                  variant="outline"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-gray-600 hover:text-purple-600 hover:bg-purple-50"
+                                  title="Ver detalles"
                                   onClick={() => {
-                                    // Show invoice detail in a modal or expand
-                                    alert(`Ver detalle de factura ${invoice.invoiceNumber}\n\nCliente: ${invoice.customerName}\nTeléfono: ${invoice.customerPhone}\nDirección: ${invoice.customerAddress}\n\nItems:\n${invoice.items.map(i => `- ${i.name} x${i.quantity} = $${(i.price * i.quantity).toLocaleString()}`).join('\n')}\n\nSubtotal: $${invoice.subtotal.toLocaleString()}\nDomicilio: $${invoice.deliveryFee.toLocaleString()}\nEmpaque: $${invoice.empaqueTotal.toLocaleString()}\nTotal: $${invoice.total.toLocaleString()}`);
+                                    setSelectedDeliveryInvoice(invoice);
+                                    setShowDeliveryInvoiceDetail(true);
                                   }}
                                 >
-                                  Ver
+                                  <Eye className="w-4 h-4" />
                                 </Button>
-                                {invoice.status === 'delivered' && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-blue-600 hover:bg-blue-50"
-                                      title="Imprimir ticket"
-                                    >
-                                      <Printer className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-purple-600 hover:bg-purple-50"
-                                      title="Descargar PDF"
-                                    >
-                                      <FileText className="w-4 h-4" />
-                                    </Button>
-                                  </>
-                                )}
+                                {/* Imprimir directo */}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+                                  title="Imprimir ticket"
+                                  onClick={() => {
+                                    const ticketContent = `
+                                      <html>
+                                      <head>
+                                        <title>Ticket ${invoice.invoiceNumber}</title>
+                                        <meta charset="UTF-8">
+                                        <style>
+                                          * { margin: 0; padding: 0; box-sizing: border-box; }
+                                          body { font-family: 'Courier New', monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 10px; }
+                                          .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+                                          .header h1 { font-size: 16px; font-weight: bold; }
+                                          .header p { font-size: 10px; }
+                                          .info { margin-bottom: 10px; }
+                                          .info-row { display: flex; justify-content: space-between; font-size: 11px; margin: 3px 0; }
+                                          .items { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 8px 0; margin: 10px 0; }
+                                          .item { display: flex; justify-content: space-between; font-size: 11px; margin: 4px 0; }
+                                          .total { font-weight: bold; font-size: 14px; text-align: right; margin-top: 10px; }
+                                          .footer { text-align: center; font-size: 10px; margin-top: 15px; border-top: 1px dashed #000; padding-top: 10px; }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <div class="header">
+                                          <h1>${profileForm.businessName || 'MINIMENU'}</h1>
+                                          <p>${profileForm.address || ''}</p>
+                                          <p>${profileForm.phone || ''}</p>
+                                        </div>
+                                        <div class="info">
+                                          <div class="info-row"><span>Factura:</span><span>${invoice.invoiceNumber}</span></div>
+                                          <div class="info-row"><span>Fecha:</span><span>${new Date(invoice.createdAt).toLocaleDateString('es-CO')}</span></div>
+                                          <div class="info-row"><span>Cliente:</span><span>${invoice.customerName}</span></div>
+                                          <div class="info-row"><span>Tel:</span><span>${invoice.customerPhone}</span></div>
+                                          <div class="info-row"><span>Dir:</span><span>${invoice.customerAddress}</span></div>
+                                        </div>
+                                        <div class="items">
+                                          ${invoice.items.map(i => `<div class="item"><span>${i.name} x${i.quantity}</span><span>$${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
+                                        </div>
+                                        <div class="info-row"><span>Subtotal:</span><span>$${invoice.subtotal.toLocaleString()}</span></div>
+                                        <div class="info-row"><span>Domicilio:</span><span>$${invoice.deliveryFee.toLocaleString()}</span></div>
+                                        <div class="info-row"><span>Empaque:</span><span>$${invoice.empaqueTotal.toLocaleString()}</span></div>
+                                        <div class="total">TOTAL: $${invoice.total.toLocaleString()}</div>
+                                        <div class="footer">
+                                          <p>¡Gracias por su compra!</p>
+                                          <p>${profileForm.businessName || 'MINIMENU'}</p>
+                                        </div>
+                                        <script>window.onload = () => { setTimeout(() => window.print(), 300); };</script>
+                                      </body>
+                                      </html>
+                                    `;
+                                    const printWindow = window.open('', '_blank', 'width=320,height=500');
+                                    if (printWindow) {
+                                      printWindow.document.write(ticketContent);
+                                      printWindow.document.close();
+                                    }
+                                  }}
+                                >
+                                  <Printer className="w-4 h-4" />
+                                </Button>
+                                {/* Editar */}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-gray-600 hover:text-green-600 hover:bg-green-50"
+                                  title="Editar factura"
+                                  onClick={() => {
+                                    setEditingDeliveryInvoice({ ...invoice });
+                                    setShowDeliveryInvoiceEdit(true);
+                                  }}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                {/* Descargar PDF */}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-gray-600 hover:text-purple-600 hover:bg-purple-50"
+                                  title="Descargar PDF"
+                                  onClick={() => {
+                                    const pdfContent = `
+                                      <html>
+                                      <head>
+                                        <title>Factura ${invoice.invoiceNumber}</title>
+                                        <meta charset="UTF-8">
+                                        <style>
+                                          @page { size: A4; margin: 15mm; }
+                                          * { margin: 0; padding: 0; box-sizing: border-box; }
+                                          body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #333; }
+                                          .invoice { max-width: 100%; margin: 0 auto; }
+                                          .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #8b5cf6; }
+                                          .business-info h1 { font-size: 24px; font-weight: bold; color: #8b5cf6; }
+                                          .business-info p { font-size: 11px; color: #666; }
+                                          .invoice-badge { background: #8b5cf6; color: white; padding: 10px 20px; border-radius: 8px; text-align: center; }
+                                          .invoice-badge h2 { font-size: 14px; }
+                                          .invoice-badge p { font-size: 20px; font-weight: bold; }
+                                          .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+                                          .section { background: #f9fafb; border-radius: 8px; padding: 15px; border: 1px solid #e5e7eb; }
+                                          .section-title { font-size: 13px; font-weight: bold; color: #8b5cf6; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; }
+                                          .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 11px; }
+                                          .info-label { font-weight: 600; color: #6b7280; }
+                                          .info-value { font-weight: 500; color: #111827; }
+                                          .items-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                                          .items-table th, .items-table td { padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+                                          .items-table th { background: #f9fafb; font-weight: 600; color: #6b7280; }
+                                          .total-section { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 20px; border-radius: 12px; margin: 20px 0; }
+                                          .total-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+                                          .total-row.grand { font-size: 24px; font-weight: bold; }
+                                          .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 2px solid #e5e7eb; color: #9ca3af; font-size: 11px; }
+                                          @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <div class="invoice">
+                                          <div class="header">
+                                            <div class="business-info">
+                                              <h1>${profileForm.businessName || 'MINIMENU'}</h1>
+                                              <p>${profileForm.address || ''}</p>
+                                              <p>${profileForm.phone || ''}</p>
+                                            </div>
+                                            <div class="invoice-badge">
+                                              <h2>FACTURA DOMICILIO</h2>
+                                              <p>${invoice.invoiceNumber}</p>
+                                            </div>
+                                          </div>
+                                          <div class="content-grid">
+                                            <div class="section">
+                                              <div class="section-title">👤 Cliente</div>
+                                              <div class="info-row"><span class="info-label">Nombre:</span><span class="info-value">${invoice.customerName}</span></div>
+                                              <div class="info-row"><span class="info-label">Teléfono:</span><span class="info-value">${invoice.customerPhone}</span></div>
+                                              <div class="info-row"><span class="info-label">Dirección:</span><span class="info-value">${invoice.customerAddress}</span></div>
+                                              <div class="info-row"><span class="info-label">Barrio:</span><span class="info-value">${invoice.customerNeighborhood}</span></div>
+                                            </div>
+                                            <div class="section">
+                                              <div class="section-title">📦 Pedido</div>
+                                              <div class="info-row"><span class="info-label">Fecha:</span><span class="info-value">${new Date(invoice.createdAt).toLocaleDateString('es-CO')}</span></div>
+                                              <div class="info-row"><span class="info-label">Entrega Est.:</span><span class="info-value">${invoice.estimatedDelivery}</span></div>
+                                              <div class="info-row"><span class="info-label">Método Pago:</span><span class="info-value">${invoice.paymentMethod === 'cash' ? 'Efectivo' : invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}</span></div>
+                                              <div class="info-row"><span class="info-label">Estado:</span><span class="info-value">${invoice.status}</span></div>
+                                            </div>
+                                          </div>
+                                          <table class="items-table">
+                                            <thead><tr><th>Producto</th><th>Cant.</th><th>P. Unit.</th><th>Subtotal</th></tr></thead>
+                                            <tbody>
+                                              ${invoice.items.map(i => `<tr><td>${i.name}</td><td>${i.quantity}</td><td>$${i.price.toLocaleString()}</td><td>$${(i.price * i.quantity).toLocaleString()}</td></tr>`).join('')}
+                                            </tbody>
+                                          </table>
+                                          <div class="total-section">
+                                            <div class="total-row"><span>Subtotal:</span><span>$${invoice.subtotal.toLocaleString()}</span></div>
+                                            <div class="total-row"><span>Domicilio:</span><span>$${invoice.deliveryFee.toLocaleString()}</span></div>
+                                            <div class="total-row"><span>Empaque:</span><span>$${invoice.empaqueTotal.toLocaleString()}</span></div>
+                                            <div class="total-row grand"><span>TOTAL:</span><span>$${invoice.total.toLocaleString()}</span></div>
+                                          </div>
+                                          ${invoice.notes ? `<div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; margin: 15px 0; border-radius: 0 8px 8px 0;"><strong>📝 Notas:</strong> ${invoice.notes}</div>` : ''}
+                                          <div class="footer">
+                                            <p>¡Gracias por su preferencia!</p>
+                                            <p>Generado por MINIMENU - ${new Date().toLocaleString('es-CO')}</p>
+                                          </div>
+                                        </div>
+                                      </body>
+                                      </html>
+                                    `;
+                                    // Crear blob y descargar como archivo
+                                    const blob = new Blob([pdfContent], { type: 'text/html;charset=utf-8' });
+                                    const url = URL.createObjectURL(blob);
+                                    const link = document.createElement('a');
+                                    link.href = url;
+                                    link.download = `Factura_${invoice.invoiceNumber}.html`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    URL.revokeObjectURL(url);
+                                    setToastMessage({ type: 'success', message: `✅ PDF descargado: Factura_${invoice.invoiceNumber}.html` });
+                                    setTimeout(() => setToastMessage(null), 3000);
+                                  }}
+                                >
+                                  <FileText className="w-4 h-4" />
+                                </Button>
+                                {/* Eliminar */}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-gray-600 hover:text-red-600 hover:bg-red-50"
+                                  title="Eliminar factura"
+                                  onClick={() => {
+                                    if (confirm(`¿Está seguro de eliminar la factura ${invoice.invoiceNumber}?\n\nEsta acción no se puede deshacer.`)) {
+                                      const savedInvoices = localStorage.getItem('deliveryInvoices');
+                                      let existingInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
+                                      existingInvoices = existingInvoices.filter(inv => inv.id !== invoice.id);
+                                      localStorage.setItem('deliveryInvoices', JSON.stringify(existingInvoices));
+                                      setDeliveryInvoices(existingInvoices);
+                                      setToastMessage({ type: 'success', message: `✅ Factura ${invoice.invoiceNumber} eliminada correctamente` });
+                                      setTimeout(() => setToastMessage(null), 3000);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
                               </div>
                             </td>
                           </tr>
@@ -5557,6 +6986,259 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               </>
             )}
           </div>
+        )}
+
+        {/* Modal Ver Detalles Factura Domicilio */}
+        {showDeliveryInvoiceDetail && selectedDeliveryInvoice && (
+          <Dialog open={showDeliveryInvoiceDetail} onOpenChange={setShowDeliveryInvoiceDetail}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-purple-600" />
+                  Detalle de Factura {selectedDeliveryInvoice.invoiceNumber}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {/* Información del Cliente */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <span className="text-lg">👤</span> Información del Cliente
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div><span className="text-gray-500">Nombre:</span> <span className="font-medium">{selectedDeliveryInvoice.customerName}</span></div>
+                    <div><span className="text-gray-500">Teléfono:</span> <span className="font-medium">{selectedDeliveryInvoice.customerPhone}</span></div>
+                    <div className="col-span-2"><span className="text-gray-500">Dirección:</span> <span className="font-medium">{selectedDeliveryInvoice.customerAddress}</span></div>
+                    <div><span className="text-gray-500">Barrio:</span> <span className="font-medium">{selectedDeliveryInvoice.customerNeighborhood || '-'}</span></div>
+                  </div>
+                </div>
+                {/* Items del Pedido */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <span className="text-lg">📦</span> Productos
+                  </h4>
+                  <div className="space-y-2">
+                    {selectedDeliveryInvoice.items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
+                        <div>
+                          <span className="font-medium">{item.name}</span>
+                          <span className="text-gray-500 text-sm ml-2">x{item.quantity}</span>
+                        </div>
+                        <span className="font-medium">${(item.price * item.quantity).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Totales */}
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <span className="text-lg">💰</span> Resumen de Pago
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-gray-500">Subtotal:</span><span>${selectedDeliveryInvoice.subtotal.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">Domicilio:</span><span>${selectedDeliveryInvoice.deliveryFee.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">Empaque:</span><span>${selectedDeliveryInvoice.empaqueTotal.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-lg font-bold pt-2 border-t border-purple-200">
+                      <span>TOTAL:</span>
+                      <span className="text-purple-600">${selectedDeliveryInvoice.total.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Estado y Pago */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-700 mb-2 text-sm">Estado del Pedido</h4>
+                    <Badge className={getDeliveryInvoiceStatusColor(selectedDeliveryInvoice.status)}>
+                      {getDeliveryInvoiceStatusText(selectedDeliveryInvoice.status)}
+                    </Badge>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-700 mb-2 text-sm">Estado del Pago</h4>
+                    <Badge className={getDeliveryInvoicePaymentStatusColor(selectedDeliveryInvoice.paymentStatus)}>
+                      {selectedDeliveryInvoice.paymentStatus === 'pending' ? 'Pendiente' : 'Pagado'}
+                    </Badge>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {getDeliveryInvoicePaymentMethodText(selectedDeliveryInvoice.paymentMethod)}
+                    </p>
+                  </div>
+                </div>
+                {/* Notas */}
+                {selectedDeliveryInvoice.notes && (
+                  <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg">
+                    <h4 className="font-semibold text-yellow-700 mb-1 text-sm">📝 Notas</h4>
+                    <p className="text-sm text-yellow-800">{selectedDeliveryInvoice.notes}</p>
+                  </div>
+                )}
+                {/* Fechas */}
+                <div className="text-xs text-gray-500 flex justify-between">
+                  <span>Creado: {new Date(selectedDeliveryInvoice.createdAt).toLocaleString('es-CO')}</span>
+                  <span>Entrega Est.: {selectedDeliveryInvoice.estimatedDelivery}</span>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowDeliveryInvoiceDetail(false)}>Cerrar</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Modal Editar Factura Domicilio */}
+        {showDeliveryInvoiceEdit && editingDeliveryInvoice && (
+          <Dialog open={showDeliveryInvoiceEdit} onOpenChange={setShowDeliveryInvoiceEdit}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Edit className="w-5 h-5 text-green-600" />
+                  Editar Factura {editingDeliveryInvoice.invoiceNumber}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {/* Datos del Cliente */}
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-gray-700">Datos del Cliente</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-gray-500">Nombre</Label>
+                      <Input
+                        value={editingDeliveryInvoice.customerName}
+                        onChange={(e) => setEditingDeliveryInvoice({ ...editingDeliveryInvoice, customerName: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Teléfono</Label>
+                      <Input
+                        value={editingDeliveryInvoice.customerPhone}
+                        onChange={(e) => setEditingDeliveryInvoice({ ...editingDeliveryInvoice, customerPhone: e.target.value })}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs text-gray-500">Dirección</Label>
+                      <Input
+                        value={editingDeliveryInvoice.customerAddress}
+                        onChange={(e) => setEditingDeliveryInvoice({ ...editingDeliveryInvoice, customerAddress: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-gray-500">Barrio</Label>
+                      <Input
+                        value={editingDeliveryInvoice.customerNeighborhood}
+                        onChange={(e) => setEditingDeliveryInvoice({ ...editingDeliveryInvoice, customerNeighborhood: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+                {/* Estado del Pedido */}
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-gray-700">Estado del Pedido</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: 'pending', label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800' },
+                      { value: 'confirmed', label: 'Confirmado', color: 'bg-blue-100 text-blue-800' },
+                      { value: 'preparing', label: 'Preparando', color: 'bg-orange-100 text-orange-800' },
+                      { value: 'on_the_way', label: 'En Camino', color: 'bg-purple-100 text-purple-800' },
+                      { value: 'delivered', label: 'Entregado', color: 'bg-green-100 text-green-800' }
+                    ].map(status => (
+                      <Button
+                        key={status.value}
+                        size="sm"
+                        variant={editingDeliveryInvoice.status === status.value ? 'default' : 'outline'}
+                        onClick={() => setEditingDeliveryInvoice({ ...editingDeliveryInvoice, status: status.value as DeliveryInvoice['status'] })}
+                        className={editingDeliveryInvoice.status === status.value ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                      >
+                        {status.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                {/* Estado del Pago */}
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-gray-700">Estado del Pago</h4>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant={editingDeliveryInvoice.paymentStatus === 'pending' ? 'default' : 'outline'}
+                      onClick={() => setEditingDeliveryInvoice({ ...editingDeliveryInvoice, paymentStatus: 'pending' })}
+                      className={editingDeliveryInvoice.paymentStatus === 'pending' ? 'bg-yellow-500 hover:bg-yellow-600' : ''}
+                    >
+                      Pendiente
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={editingDeliveryInvoice.paymentStatus === 'paid' ? 'default' : 'outline'}
+                      onClick={() => setEditingDeliveryInvoice({ ...editingDeliveryInvoice, paymentStatus: 'paid' })}
+                      className={editingDeliveryInvoice.paymentStatus === 'paid' ? 'bg-green-500 hover:bg-green-600' : ''}
+                    >
+                      Pagado
+                    </Button>
+                  </div>
+                </div>
+                {/* Método de Pago */}
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-gray-700">Método de Pago</h4>
+                  <div className="flex gap-2">
+                    {[
+                      { value: 'cash', label: '💵 Efectivo' },
+                      { value: 'card', label: '💳 Tarjeta' },
+                      { value: 'transfer', label: '🏦 Transferencia' }
+                    ].map(method => (
+                      <Button
+                        key={method.value}
+                        size="sm"
+                        variant={editingDeliveryInvoice.paymentMethod === method.value ? 'default' : 'outline'}
+                        onClick={() => setEditingDeliveryInvoice({ ...editingDeliveryInvoice, paymentMethod: method.value as DeliveryInvoice['paymentMethod'] })}
+                        className={editingDeliveryInvoice.paymentMethod === method.value ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                      >
+                        {method.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                {/* Notas */}
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-gray-700">Notas Adicionales</h4>
+                  <textarea
+                    className="w-full h-20 px-3 py-2 text-sm border border-gray-300 rounded-md resize-none"
+                    value={editingDeliveryInvoice.notes}
+                    onChange={(e) => setEditingDeliveryInvoice({ ...editingDeliveryInvoice, notes: e.target.value })}
+                    placeholder="Notas del pedido..."
+                  />
+                </div>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setShowDeliveryInvoiceEdit(false)}>Cancelar</Button>
+                <Button
+                  className="bg-green-600 hover:bg-green-700"
+                  disabled={isSavingDeliveryInvoice}
+                  onClick={() => {
+                    setIsSavingDeliveryInvoice(true);
+                    // Guardar cambios en localStorage
+                    const savedInvoices = localStorage.getItem('deliveryInvoices');
+                    let existingInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
+                    existingInvoices = existingInvoices.map(inv =>
+                      inv.id === editingDeliveryInvoice.id ? editingDeliveryInvoice : inv
+                    );
+                    localStorage.setItem('deliveryInvoices', JSON.stringify(existingInvoices));
+                    setDeliveryInvoices(existingInvoices);
+                    setIsSavingDeliveryInvoice(false);
+                    setShowDeliveryInvoiceEdit(false);
+                    setToastMessage({ type: 'success', message: `✅ Factura ${editingDeliveryInvoice.invoiceNumber} actualizada correctamente` });
+                    setTimeout(() => setToastMessage(null), 3000);
+                  }}
+                >
+                  {isSavingDeliveryInvoice ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Guardar Cambios
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
 
         {/* Impresoras Tab */}
@@ -6251,6 +7933,131 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <div className="space-y-4 pt-4 border-t border-gray-200">
                       <h3 className="font-medium text-gray-900">Imágenes del Negocio</h3>
                       
+                      {/* Franja Hero Sutil */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-sm font-medium">Franja Hero Sutil</Label>
+                            <p className="text-xs text-gray-500">Banner promocional destacado en el menú público</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={profileForm.showHeroBanner}
+                              disabled={!profileForm.heroImageUrl}
+                              onCheckedChange={async (checked) => {
+                                setProfileForm(prev => ({ ...prev, showHeroBanner: checked }));
+                                // Auto-save the switch state
+                                try {
+                                  const response = await fetch('/api/settings/profile', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ showHeroBanner: checked })
+                                  });
+                                  if (response.ok) {
+                                    console.log('[Hero Banner] Switch auto-saved:', checked);
+                                    setToastMessage({ type: 'success', message: checked ? 'Franja hero activada' : 'Franja hero desactivada' });
+                                    setTimeout(() => setToastMessage(null), 3000);
+                                  }
+                                } catch (error) {
+                                  console.error('[Hero Banner] Switch auto-save error:', error);
+                                }
+                              }}
+                            />
+                            <span className={`text-xs font-medium ${profileForm.showHeroBanner ? 'text-green-600' : 'text-gray-400'}`}>
+                              {profileForm.showHeroBanner ? 'Visible en menú' : 'Oculta'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Preview de la Franja Hero */}
+                        <div 
+                          className="relative w-full h-40 rounded-lg overflow-hidden border border-gray-200 group"
+                          style={{ backgroundColor: profileForm.heroImageUrl ? 'transparent' : '#1a1a1a' }}
+                        >
+                          {profileForm.heroImageUrl ? (
+                            <>
+                              {/* Imagen de fondo */}
+                              <img 
+                                src={profileForm.heroImageUrl} 
+                                alt="Hero Banner" 
+                                className="absolute inset-0 w-full h-full object-cover"
+                              />
+                              {/* Overlay negro al 45% */}
+                              <div className="absolute inset-0 bg-black/45" />
+                              {/* Degradado lateral */}
+                              <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
+                              
+                              {/* Contenido sobre la imagen */}
+                              <div className="relative h-full flex flex-col justify-center p-6">
+                                <h4 className="text-2xl font-bold text-white mb-1">{profileForm.businessName || 'Mi Negocio'}</h4>
+                                <p className="text-white/75 text-sm">Tu descripción o slogan aquí</p>
+                                {/* Badge condicional de oferta */}
+                                <div className="mt-3 inline-flex">
+                                  <span className="px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full">
+                                    🔥 Oferta del día
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              {/* Botón de edición */}
+                              <button
+                                type="button"
+                                onClick={() => setProfileForm(prev => ({ ...prev, heroImageUrl: null, showHeroBanner: false }))}
+                                className="absolute top-2 right-2 w-8 h-8 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Pencil className="w-4 h-4 text-gray-700" />
+                              </button>
+                            </>
+                          ) : (
+                            /* Placeholder sin imagen */
+                            <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer hover:bg-[#252525] transition-colors">
+                              <ImageIcon className="w-10 h-10 text-gray-500 mb-2" />
+                              <span className="text-gray-400 text-sm font-medium">Click para subir imagen hero</span>
+                              <span className="text-gray-500 text-xs mt-1">Recomendado: 1200x300px</span>
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = async (event) => {
+                                      const heroImageUrl = event.target?.result as string;
+                                      // Update state
+                                      setProfileForm(prev => ({ 
+                                        ...prev, 
+                                        heroImageUrl,
+                                        showHeroBanner: true
+                                      }));
+                                      // Auto-save to ensure the hero banner shows in public menu
+                                      try {
+                                        const response = await fetch('/api/settings/profile', {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({
+                                            heroImageUrl,
+                                            showHeroBanner: true
+                                          })
+                                        });
+                                        if (response.ok) {
+                                          console.log('[Hero Banner] Auto-saved successfully');
+                                          setToastMessage({ type: 'success', message: 'Imagen hero guardada y activada' });
+                                          setTimeout(() => setToastMessage(null), 3000);
+                                        }
+                                      } catch (error) {
+                                        console.error('[Hero Banner] Auto-save error:', error);
+                                      }
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                      
                       {/* Avatar */}
                       <div>
                         <Label className="text-sm font-medium">Avatar</Label>
@@ -6339,10 +8146,65 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         </div>
                       </div>
 
+                      {/* Favicon */}
+                      <div>
+                        <Label className="text-sm font-medium">Favicon (Icono de Favoritos)</Label>
+                        <p className="text-xs text-gray-500 mb-2">Icono pequeño para la pestaña del navegador (16x16 o 32x32px)</p>
+                        <div className="flex items-center gap-4">
+                          {profileForm.favicon ? (
+                            <div className="relative">
+                              <img 
+                                src={profileForm.favicon} 
+                                alt="Favicon" 
+                                className="w-10 h-10 object-contain border border-gray-200 rounded-lg bg-white p-1"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setProfileForm(prev => ({ ...prev, favicon: null }))}
+                                className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="flex flex-col items-center justify-center w-10 h-10 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                              <ImageIcon className="w-4 h-4 text-gray-400" />
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (event) => {
+                                      setProfileForm(prev => ({ ...prev, favicon: event.target?.result as string }));
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+                          )}
+                          <span className="text-xs text-gray-500">PNG, ICO (16x16 o 32x32px)</span>
+                        </div>
+                      </div>
+
                       {/* Banner */}
                       <div>
-                        <Label className="text-sm font-medium">Banner de Cabecera</Label>
-                        <p className="text-xs text-gray-500 mb-2">Imagen para la cabecera del menú (recomendado: 1200x400px)</p>
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <Label className="text-sm font-medium">Banner de Cabecera</Label>
+                            <p className="text-xs text-gray-500">Imagen para la cabecera del menú (recomendado: 1200x400px)</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={profileForm.bannerEnabled}
+                              onCheckedChange={(checked) => setProfileForm(prev => ({ ...prev, bannerEnabled: checked }))}
+                            />
+                            <span className="text-xs text-gray-500">{profileForm.bannerEnabled ? 'Activo' : 'Inactivo'}</span>
+                          </div>
+                        </div>
                         <div className="flex flex-col gap-2">
                           {profileForm.banner ? (
                             <div className="relative inline-block">
@@ -6382,6 +8244,50 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                           )}
                           <span className="text-xs text-gray-500">PNG, JPG (máx. 5MB)</span>
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Favicon (Icono de Favoritos) */}
+                    <div>
+                      <Label className="text-sm font-medium">Favicon (Icono de Favoritos)</Label>
+                      <p className="text-xs text-gray-500 mb-2">Imagen cuadrada pequeña para la pestaña del navegador (32x32px recomendado)</p>
+                      <div className="flex items-center gap-4">
+                        {profileForm.favicon ? (
+                          <div className="relative">
+                            <img 
+                              src={profileForm.favicon} 
+                              alt="Favicon" 
+                              className="w-16 h-16 rounded-lg object-cover border-2 border-gray-200"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setProfileForm(prev => ({ ...prev, favicon: null }))}
+                              className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="flex flex-col items-center justify-center w-16 h-16 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                            <ImageIcon className="w-6 h-6 text-gray-400" />
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onload = (event) => {
+                                    setProfileForm(prev => ({ ...prev, favicon: event.target?.result as string }));
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                            />
+                          </label>
+                        )}
+                        <span className="text-xs text-gray-500">PNG, ICO (máx. 500KB)</span>
                       </div>
                     </div>
 
@@ -6765,6 +8671,358 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             onToast={(message) => setToastMessage(message)}
           />
         )}
+
+        {/* Suscripción Tab */}
+        {activeTab === 'suscripcion' && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Suscripción</h2>
+                <p className="text-gray-600 mt-1">Gestiona tu plan y facturación</p>
+              </div>
+            </div>
+
+            {/* Banner de Prueba Gratis (simulado) */}
+            <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0">
+              <CardContent className="p-6">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                      <Clock className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg">🎉 Período de Prueba</h3>
+                      <p className="text-purple-100">Te quedan <strong>7 días</strong> de prueba gratuita</p>
+                    </div>
+                  </div>
+                  <Button className="bg-white text-purple-600 hover:bg-purple-50 font-semibold">
+                    Activar Plan Ahora
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Plan Actual */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-purple-600" />
+                    Plan Actual
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-bold text-purple-800 text-lg">Plan Profesional</h4>
+                      <Badge className="bg-green-100 text-green-700">Activo</Badge>
+                    </div>
+                    <p className="text-purple-600 text-sm mb-4">Ideal para negocios en crecimiento</p>
+                    
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-gray-500">Fecha Inicio:</span>
+                        <p className="font-medium">01/02/2025</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Vencimiento:</span>
+                        <p className="font-medium">01/03/2025</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Días Restantes:</span>
+                        <p className="font-medium text-orange-600">23 días</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Precio:</span>
+                        <p className="font-medium">$99.000 COP/mes</p>
+                      </div>
+                    </div>
+
+                    {/* Barra de progreso */}
+                    <div className="mt-4">
+                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                        <span>Progreso del período</span>
+                        <span>23%</span>
+                      </div>
+                      <div className="w-full bg-purple-200 rounded-full h-2">
+                        <div className="bg-purple-600 h-2 rounded-full" style={{ width: '23%' }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1">
+                      Cambiar Plan
+                    </Button>
+                    <Button variant="outline" className="text-red-600 hover:bg-red-50 border-red-200">
+                      Cancelar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Uso Actual */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-purple-600" />
+                    Uso Actual
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Pedidos */}
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600">Pedidos este mes</span>
+                      <span className="font-medium">127 / 500</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-green-500 h-2 rounded-full" style={{ width: '25%' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Productos */}
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600">Productos en catálogo</span>
+                      <span className="font-medium">24 / 200</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-green-500 h-2 rounded-full" style={{ width: '12%' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Empleados */}
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600">Empleados registrados</span>
+                      <span className="font-medium">2 / 3</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '67%' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Mesas */}
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600">Mesas configuradas</span>
+                      <span className="font-medium">10 / 15</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-green-500 h-2 rounded-full" style={{ width: '67%' }}></div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t">
+                    <p className="text-xs text-gray-500">
+                      ✅ Verde: &lt;70% | 🟡 Amarillo: 70-90% | 🔴 Rojo: &gt;90%
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Planes Disponibles */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-purple-600" />
+                    Planes Disponibles
+                  </CardTitle>
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button className="px-3 py-1 text-sm font-medium rounded-md bg-white shadow-sm">
+                      Mensual
+                    </button>
+                    <button className="px-3 py-1 text-sm font-medium rounded-md text-gray-600">
+                      Anual
+                    </button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Plan Básico */}
+                  <div className="border rounded-xl p-5 hover:border-purple-300 transition-colors">
+                    <div className="text-center mb-4">
+                      <div className="w-12 h-12 bg-gray-100 rounded-full mx-auto mb-3 flex items-center justify-center">
+                        <Package className="w-6 h-6 text-gray-600" />
+                      </div>
+                      <h4 className="font-bold text-lg">Básico</h4>
+                      <p className="text-gray-500 text-sm">Para empezar</p>
+                    </div>
+                    <div className="text-center mb-4">
+                      <span className="text-3xl font-bold">$49.900</span>
+                      <span className="text-gray-500">/mes</span>
+                    </div>
+                    <ul className="space-y-2 text-sm mb-4">
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        50 productos
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        1 usuario
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        Soporte por email
+                      </li>
+                    </ul>
+                    <Button variant="outline" className="w-full">Seleccionar</Button>
+                  </div>
+
+                  {/* Plan Profesional */}
+                  <div className="border-2 border-purple-500 rounded-xl p-5 relative bg-purple-50">
+                    <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-purple-600">
+                      Más Popular
+                    </Badge>
+                    <Badge className="absolute -top-2 right-2 bg-green-500">
+                      Tu plan
+                    </Badge>
+                    <div className="text-center mb-4">
+                      <div className="w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3 flex items-center justify-center">
+                        <Star className="w-6 h-6 text-purple-600" />
+                      </div>
+                      <h4 className="font-bold text-lg">Profesional</h4>
+                      <p className="text-gray-500 text-sm">Para crecer</p>
+                    </div>
+                    <div className="text-center mb-4">
+                      <span className="text-3xl font-bold text-purple-600">$99.900</span>
+                      <span className="text-gray-500">/mes</span>
+                    </div>
+                    <ul className="space-y-2 text-sm mb-4">
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        200 productos
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        3 usuarios
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        Pedidos online
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        Soporte prioritario
+                      </li>
+                    </ul>
+                    <Button className="w-full bg-purple-600 hover:bg-purple-700">
+                      Plan Actual
+                    </Button>
+                  </div>
+
+                  {/* Plan Empresarial */}
+                  <div className="border rounded-xl p-5 hover:border-purple-300 transition-colors">
+                    <div className="text-center mb-4">
+                      <div className="w-12 h-12 bg-orange-100 rounded-full mx-auto mb-3 flex items-center justify-center">
+                        <Building2 className="w-6 h-6 text-orange-600" />
+                      </div>
+                      <h4 className="font-bold text-lg">Empresarial</h4>
+                      <p className="text-gray-500 text-sm">Para grandes</p>
+                    </div>
+                    <div className="text-center mb-4">
+                      <span className="text-3xl font-bold">$199.900</span>
+                      <span className="text-gray-500">/mes</span>
+                    </div>
+                    <ul className="space-y-2 text-sm mb-4">
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        Productos ilimitados
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        10 usuarios
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        Multi-sucursal
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-green-500" />
+                        Soporte 24/7
+                      </li>
+                    </ul>
+                    <Button variant="outline" className="w-full">Actualizar</Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Historial de Pagos */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-purple-600" />
+                  Historial de Pagos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-2 font-medium text-gray-500">Fecha</th>
+                        <th className="text-left py-3 px-2 font-medium text-gray-500">Plan</th>
+                        <th className="text-left py-3 px-2 font-medium text-gray-500">Monto</th>
+                        <th className="text-left py-3 px-2 font-medium text-gray-500">Estado</th>
+                        <th className="text-left py-3 px-2 font-medium text-gray-500">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b hover:bg-gray-50">
+                        <td className="py-3 px-2">01/02/2025</td>
+                        <td className="py-3 px-2">Profesional</td>
+                        <td className="py-3 px-2">$99.900 COP</td>
+                        <td className="py-3 px-2">
+                          <Badge className="bg-green-100 text-green-700">Pagado</Badge>
+                        </td>
+                        <td className="py-3 px-2">
+                          <Button variant="ghost" size="sm" className="h-8 px-2">
+                            <Download className="w-4 h-4 mr-1" />
+                            PDF
+                          </Button>
+                        </td>
+                      </tr>
+                      <tr className="border-b hover:bg-gray-50">
+                        <td className="py-3 px-2">01/01/2025</td>
+                        <td className="py-3 px-2">Profesional</td>
+                        <td className="py-3 px-2">$99.900 COP</td>
+                        <td className="py-3 px-2">
+                          <Badge className="bg-green-100 text-green-700">Pagado</Badge>
+                        </td>
+                        <td className="py-3 px-2">
+                          <Button variant="ghost" size="sm" className="h-8 px-2">
+                            <Download className="w-4 h-4 mr-1" />
+                            PDF
+                          </Button>
+                        </td>
+                      </tr>
+                      <tr className="hover:bg-gray-50">
+                        <td className="py-3 px-2">01/12/2024</td>
+                        <td className="py-3 px-2">Básico</td>
+                        <td className="py-3 px-2">$49.900 COP</td>
+                        <td className="py-3 px-2">
+                          <Badge className="bg-green-100 text-green-700">Pagado</Badge>
+                        </td>
+                        <td className="py-3 px-2">
+                          <Button variant="ghost" size="sm" className="h-8 px-2">
+                            <Download className="w-4 h-4 mr-1" />
+                            PDF
+                          </Button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </main>
 
       {/* Product Modal */}
@@ -6772,11 +9030,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         setShowProductModal(open);
         if (!open) resetProductForm();
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingProduct ? 'Editar Producto' : 'Nuevo Producto'}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-2">
             {/* Estado del Plato - Switch Prominente */}
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
               <div className="flex items-center gap-3">
@@ -6990,6 +9248,102 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                 onCheckedChange={(checked) => setProductForm(prev => ({ ...prev, requiereEmpaque: checked }))}
                 className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300" 
               />
+            </div>
+
+            {/* Sección de Ofertas */}
+            <div className="border border-orange-200 rounded-lg overflow-hidden">
+              {/* Header con Switch */}
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-orange-50 to-amber-50">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${productForm.onSale ? 'bg-orange-100' : 'bg-gray-100'}`}>
+                    <span className="text-lg">{productForm.onSale ? '🏷️' : '📍'}</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {productForm.onSale ? 'Producto en Oferta' : 'Sin Oferta'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {productForm.onSale 
+                        ? 'Se mostrará con precio especial en el menú' 
+                        : 'Activa para aplicar un descuento'}
+                    </p>
+                  </div>
+                </div>
+                <Switch 
+                  checked={productForm.onSale ?? false}
+                  onCheckedChange={(checked) => setProductForm(prev => ({ 
+                    ...prev, 
+                    onSale: checked,
+                    salePrice: checked ? prev.salePrice : 0
+                  }))}
+                  className="data-[state=checked]:bg-orange-500 data-[state=unchecked]:bg-gray-300" 
+                />
+              </div>
+
+              {/* Campos de Oferta (condicionales) */}
+              {productForm.onSale && (
+                <div className="p-4 space-y-4 bg-white">
+                  {/* Precio de Oferta */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Precio Original</Label>
+                      <div className="mt-1 p-2 bg-gray-100 rounded-md text-gray-500 line-through">
+                        {formatPrice(productForm.price)}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-orange-600">Precio de Oferta *</Label>
+                      <Input 
+                        type="number" 
+                        placeholder="0" 
+                        value={productForm.salePrice || ''}
+                        onChange={(e) => setProductForm(prev => ({ 
+                          ...prev, 
+                          salePrice: parseFloat(e.target.value) || 0 
+                        }))}
+                        className="mt-1 border-orange-300 focus:ring-orange-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Descuento calculado */}
+                  {productForm.salePrice > 0 && productForm.salePrice < productForm.price && (
+                    <div className="flex items-center justify-center p-2 bg-green-50 rounded-lg border border-green-200">
+                      <span className="text-green-700 font-medium">
+                        🎉 Ahorro: {formatPrice(productForm.price - productForm.salePrice)} ({Math.round((1 - productForm.salePrice / productForm.price) * 100)}% OFF)
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Fechas de vigencia */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Fecha Inicio</Label>
+                      <Input 
+                        type="date" 
+                        value={productForm.saleStartDate ?? ''}
+                        onChange={(e) => setProductForm(prev => ({ ...prev, saleStartDate: e.target.value }))}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Fecha Fin</Label>
+                      <Input 
+                        type="date" 
+                        value={productForm.saleEndDate ?? ''}
+                        onChange={(e) => setProductForm(prev => ({ ...prev, saleEndDate: e.target.value }))}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Nota informativa */}
+                  <p className="text-xs text-gray-500 flex items-start gap-1">
+                    <span>💡</span>
+                    <span>Las fechas son opcionales. Si no se especifican, la oferta estará activa indefinidamente.</span>
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -7716,6 +10070,41 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   <MapPin className="w-4 h-4 mr-2" />
                   Ver Mapa
                 </Button>
+              </div>
+
+              {/* Print Actions */}
+              <div className="space-y-2">
+                <h4 className="font-semibold text-gray-900">Opciones de Impresión</h4>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-blue-600 hover:bg-blue-50 border-blue-200"
+                    onClick={() => {
+                      if (selectedDelivery) {
+                        printThermalTicket(selectedDelivery);
+                      }
+                    }}
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Imprimir
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-green-600 hover:bg-green-50 border-green-200"
+                    onClick={() => printThermalTicket(selectedDelivery)}
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Imprimir Directo
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-purple-600 hover:bg-purple-50 border-purple-200"
+                    onClick={() => downloadDeliveryPDF(selectedDelivery)}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Imprimir PDF
+                  </Button>
+                </div>
               </div>
 
               {/* Print and PDF Buttons - Only for delivered orders */}

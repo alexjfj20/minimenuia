@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { OrderStatus, PaymentStatus, OrderType, Currency } from '@prisma/client';
+import { generateNextOrderNumber } from '@/lib/order-utils';
 
 // =============================================
 // Interfaces
@@ -140,10 +141,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Generate order number automatically
+    const orderNumber = await generateNextOrderNumber();
+
     // Create order with items
     const order = await db.order.create({
       data: {
         businessId: body.businessId,
+        orderNumber,
         customerName: body.customerName,
         customerPhone: body.customerPhone || null,
         customerEmail: body.customerEmail || null,
@@ -178,7 +183,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     });
 
-    console.log(`[Orders API] Created order ${order.id} for business ${body.businessId}`);
+    console.log(`[Orders API] Created order ${order.id} (${orderNumber}) for business ${body.businessId}`);
 
     return NextResponse.json({
       success: true,

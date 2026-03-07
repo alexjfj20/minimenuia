@@ -30,6 +30,11 @@ interface Product {
   stock: number;
   createdAt: string;
   updatedAt: string;
+  // Campos de Oferta
+  onSale?: boolean;
+  salePrice?: number;
+  saleStartDate?: string;
+  saleEndDate?: string;
 }
 
 interface Category {

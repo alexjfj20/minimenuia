@@ -97,11 +97,52 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             </div>
             <span className="text-xl font-bold text-gray-900">MINIMENU</span>
           </div>
-          <div className="flex items-center gap-4">
+          <nav className="hidden md:flex items-center gap-6">
+            <button
+              onClick={() => {
+                const element = document.getElementById('hero-section');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              className="text-gray-600 hover:text-purple-600 transition-colors font-medium"
+            >
+              Inicio
+            </button>
+            <button
+              onClick={() => window.open('/?view=features', '_blank')}
+              className="text-gray-600 hover:text-purple-600 transition-colors font-medium"
+            >
+              Características
+            </button>
+            <button
+              onClick={() => {
+                const element = document.getElementById('pricing-section');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              className="text-gray-600 hover:text-purple-600 transition-colors font-medium"
+            >
+              Precios
+            </button>
+            <button
+              onClick={() => {
+                const element = document.getElementById('footer-section');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              className="text-gray-600 hover:text-purple-600 transition-colors font-medium"
+            >
+              Contacto
+            </button>
+          </nav>
+          <div className="flex items-center gap-3">
             <Button variant="ghost" onClick={onLogin}>
               Iniciar Sesión
             </Button>
-            <Button 
+            <Button
               onClick={onRegister}
               className="bg-purple-600 hover:bg-purple-700"
             >
@@ -112,7 +153,7 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       </header>
 
       {/* Hero Section */}
-      <section className="py-20 px-4 bg-gradient-to-br from-purple-50 to-white">
+      <section id="hero-section" className="py-20 px-4 bg-gradient-to-br from-purple-50 to-white">
         <div className="container mx-auto text-center max-w-4xl">
           <Badge className="mb-4 bg-purple-100 text-purple-700 border-purple-200">
             ✨ Plataforma #1 en Colombia
@@ -182,7 +223,7 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       </section>
 
       {/* Pricing Section */}
-      <section className="py-20 px-4 bg-gray-50">
+      <section id="pricing-section" className="py-20 px-4 bg-gray-50">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
@@ -264,7 +305,7 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-12 px-4 mt-auto">
+      <footer id="footer-section" className="bg-gray-900 text-gray-400 py-12 px-4 mt-auto">
         <div className="container mx-auto max-w-6xl">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
@@ -281,7 +322,7 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             <div>
               <h4 className="text-white font-medium mb-4">Producto</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white transition-colors">Características</a></li>
+                <li><button onClick={() => window.open('/?view=features', '_blank')} className="hover:text-white transition-colors">Características</button></li>
                 <li><a href="#" className="hover:text-white transition-colors">Precios</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Integraciones</a></li>
               </ul>

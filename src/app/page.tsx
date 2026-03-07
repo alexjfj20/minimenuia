@@ -1,23 +1,57 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore, useMemo } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import {
   LandingPage,
   LoginView,
   RegisterView,
   SuperAdminPanel,
-  BusinessAdminPanel
+  BusinessAdminPanel,
+  ForgotPasswordView,
+  FeaturesPage
 } from '@/components/minimenu';
 import type { RegisterData, Business, User } from '@/types';
 
-type View = 'landing' | 'login' | 'register';
+type View = 'landing' | 'login' | 'register' | 'forgot-password' | 'features';
+
+// Helper to get URL search params safely
+function getUrlViewParam(): string | null {
+  if (typeof window === 'undefined') return null;
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get('view');
+}
+
+// Subscribe function for URL changes
+function subscribeToUrl(callback: () => void): () => void {
+  window.addEventListener('popstate', callback);
+  return () => window.removeEventListener('popstate', callback);
+}
+
+// Snapshot functions for useSyncExternalStore
+function getUrlSnapshot(): string | null {
+  return getUrlViewParam();
+}
+
+function getServerSnapshot(): string | null {
+  return null;
+}
 
 function AppContent() {
   const { user, isAuthenticated, isLoading, login, logout, register } = useAuth();
-  const [view, setView] = useState<View>('landing');
+  const [navigatedView, setNavigatedView] = useState<View | null>(null);
   const [impersonatedBusiness, setImpersonatedBusiness] = useState<Business | null>(null);
   const [originalUser, setOriginalUser] = useState<User | null>(null);
+
+  // Use useSyncExternalStore to safely read URL params (handles SSR hydration)
+  const urlViewParam = useSyncExternalStore(subscribeToUrl, getUrlSnapshot, getServerSnapshot);
+
+  // Calculate current view: URL param takes priority, then navigated view, then landing
+  const view = useMemo<View>(() => {
+    if (urlViewParam === 'features') return 'features';
+    if (navigatedView !== null) return navigatedView;
+    return 'landing';
+  }, [urlViewParam, navigatedView]);
 
   // Handle impersonation - Super Admin can "become" a business owner
   const handleImpersonate = (business: Business) => {
@@ -61,17 +95,17 @@ function AppContent() {
       <div className="min-h-screen">
         {/* Impersonation Banner */}
         <div className="bg-yellow-500 text-yellow-900 px-4 py-2 text-center text-sm font-medium">
-          ⚠️ Modo simulación: Estás viendo el panel de <strong>{impersonatedBusiness.name}</strong> 
-          <button 
+          ⚠️ Modo simulación: Estás viendo el panel de <strong>{impersonatedBusiness.name}</strong>
+          <button
             onClick={handleExitImpersonation}
             className="ml-4 underline hover:no-underline"
           >
             Salir de simulación
           </button>
         </div>
-        <BusinessAdminPanel 
-          user={impersonatedUser} 
-          onLogout={handleExitImpersonation} 
+        <BusinessAdminPanel
+          user={impersonatedUser}
+          onLogout={handleExitImpersonation}
         />
       </div>
     );
@@ -94,8 +128,9 @@ function AppContent() {
             const result = await login({ email, password });
             return result;
           }}
-          onBack={() => setView('landing')}
-          onRegister={() => setView('register')}
+          onBack={() => setNavigatedView('landing')}
+          onRegister={() => setNavigatedView('register')}
+          onForgotPassword={() => setNavigatedView('forgot-password')}
         />
       );
     case 'register':
@@ -105,15 +140,29 @@ function AppContent() {
             const result = await register(data);
             return result;
           }}
-          onBack={() => setView('landing')}
-          onLogin={() => setView('login')}
+          onBack={() => setNavigatedView('landing')}
+          onLogin={() => setNavigatedView('login')}
+        />
+      );
+    case 'forgot-password':
+      return (
+        <ForgotPasswordView
+          onBack={() => setNavigatedView('landing')}
+          onLogin={() => setNavigatedView('login')}
+        />
+      );
+    case 'features':
+      return (
+        <FeaturesPage
+          onLogin={() => setNavigatedView('login')}
+          onRegister={() => setNavigatedView('register')}
         />
       );
     default:
       return (
         <LandingPage
-          onLogin={() => setView('login')}
-          onRegister={() => setView('register')}
+          onLogin={() => setNavigatedView('login')}
+          onRegister={() => setNavigatedView('register')}
         />
       );
   }

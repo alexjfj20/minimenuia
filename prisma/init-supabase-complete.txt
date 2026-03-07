@@ -1,0 +1,367 @@
+-- =============================================
+-- MINIMENU - Supabase Database Setup Completo
+-- =============================================
+-- Ejecutar en Supabase SQL Editor
+-- Este script crea todas las tablas necesarias
+-- =============================================
+
+-- =============================================
+-- PASO 1: Crear tablas si no existen
+-- =============================================
+
+-- Plans (debe ir primero porque otras tablas dependen de ella)
+CREATE TABLE IF NOT EXISTS plans (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    price FLOAT NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'COP',
+    period TEXT NOT NULL DEFAULT 'MONTHLY',
+    features TEXT NOT NULL DEFAULT '',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "isPublic" BOOLEAN NOT NULL DEFAULT true,
+    "isPopular" BOOLEAN NOT NULL DEFAULT false,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    icon TEXT NOT NULL DEFAULT 'zap',
+    color TEXT NOT NULL DEFAULT '#8b5cf6',
+    "maxUsers" INTEGER NOT NULL DEFAULT 1,
+    "maxProducts" INTEGER NOT NULL DEFAULT 50,
+    "maxCategories" INTEGER NOT NULL DEFAULT 5,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS plans_slug_idx ON plans(slug);
+
+-- Businesses
+CREATE TABLE IF NOT EXISTS businesses (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    "ownerId" TEXT NOT NULL DEFAULT '',
+    "ownerName" TEXT NOT NULL,
+    "ownerEmail" TEXT NOT NULL,
+    phone TEXT NOT NULL DEFAULT '',
+    address TEXT NOT NULL DEFAULT '',
+    "planId" TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    logo TEXT,
+    "primaryColor" TEXT NOT NULL DEFAULT '#8b5cf6',
+    "secondaryColor" TEXT NOT NULL DEFAULT '#ffffff',
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS businesses_slug_idx ON businesses(slug);
+
+-- Users
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'BUSINESS_ADMIN',
+    "businessId" TEXT,
+    "resetToken" TEXT,
+    "resetTokenExpiry" TIMESTAMP,
+    avatar TEXT,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS users_email_idx ON users(email);
+
+-- Categories
+CREATE TABLE IF NOT EXISTS categories (
+    id TEXT PRIMARY KEY,
+    "businessId" TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    icon TEXT,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS categories_businessId_idx ON categories("businessId");
+
+-- Products
+CREATE TABLE IF NOT EXISTS products (
+    id TEXT PRIMARY KEY,
+    "businessId" TEXT NOT NULL,
+    "categoryId" TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    price FLOAT NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'COP',
+    image TEXT,
+    "isAvailable" BOOLEAN NOT NULL DEFAULT true,
+    "isFeatured" BOOLEAN NOT NULL DEFAULT false,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS products_businessId_idx ON products("businessId");
+CREATE INDEX IF NOT EXISTS products_categoryId_idx ON products("categoryId");
+
+-- Menus
+CREATE TABLE IF NOT EXISTS menus (
+    id TEXT PRIMARY KEY,
+    "businessId" TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "qrCode" TEXT,
+    slug TEXT UNIQUE NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Menu Categories
+CREATE TABLE IF NOT EXISTS menu_categories (
+    id TEXT PRIMARY KEY,
+    "menuId" TEXT NOT NULL,
+    "categoryId" TEXT NOT NULL,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    UNIQUE("menuId", "categoryId")
+);
+
+-- Orders
+CREATE TABLE IF NOT EXISTS orders (
+    id TEXT PRIMARY KEY,
+    "businessId" TEXT NOT NULL,
+    "customerId" TEXT,
+    "customerName" TEXT NOT NULL,
+    "customerPhone" TEXT,
+    "customerEmail" TEXT,
+    "customerAddress" TEXT,
+    "customerNotes" TEXT,
+    "orderType" TEXT NOT NULL DEFAULT 'RESTAURANT',
+    "orderNumber" TEXT UNIQUE NOT NULL,
+    subtotal FLOAT NOT NULL DEFAULT 0,
+    "deliveryFee" FLOAT NOT NULL DEFAULT 0,
+    tax FLOAT NOT NULL DEFAULT 0,
+    total FLOAT NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'COP',
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    "paymentStatus" TEXT NOT NULL DEFAULT 'PENDING',
+    "paymentMethod" TEXT,
+    neighborhood TEXT,
+    "estimatedDelivery" TEXT,
+    "driverName" TEXT,
+    "invoiceNumber" TEXT,
+    notes TEXT,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS orders_businessId_idx ON orders("businessId");
+CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);
+CREATE INDEX IF NOT EXISTS orders_orderNumber_idx ON orders("orderNumber");
+
+-- Order Items
+CREATE TABLE IF NOT EXISTS order_items (
+    id TEXT PRIMARY KEY,
+    "orderId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "productName" TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    "unitPrice" FLOAT NOT NULL DEFAULT 0,
+    "totalPrice" FLOAT NOT NULL DEFAULT 0,
+    notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS order_items_orderId_idx ON order_items("orderId");
+
+-- Modules
+CREATE TABLE IF NOT EXISTS modules (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    type TEXT NOT NULL DEFAULT 'ADDON',
+    icon TEXT NOT NULL DEFAULT 'puzzle',
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- System Services
+CREATE TABLE IF NOT EXISTS system_services (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    price FLOAT NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'COP',
+    "billingType" TEXT NOT NULL DEFAULT 'MONTHLY',
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Business Modules
+CREATE TABLE IF NOT EXISTS business_modules (
+    id TEXT PRIMARY KEY,
+    "businessId" TEXT NOT NULL,
+    "moduleId" TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    "assignedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE("businessId", "moduleId")
+);
+
+-- Business Services
+CREATE TABLE IF NOT EXISTS business_services (
+    id TEXT PRIMARY KEY,
+    "businessId" TEXT NOT NULL,
+    "serviceId" TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    "assignedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE("businessId", "serviceId")
+);
+
+-- Integrations
+CREATE TABLE IF NOT EXISTS integrations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    "iconSvg" TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    "requiresManualSetup" BOOLEAN NOT NULL DEFAULT false,
+    "setupInstructions" TEXT,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Business Integrations
+CREATE TABLE IF NOT EXISTS business_integrations (
+    id TEXT PRIMARY KEY,
+    "businessId" TEXT NOT NULL,
+    "integrationId" TEXT NOT NULL,
+    config JSONB,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE("businessId", "integrationId")
+);
+
+-- Payment Gateways
+CREATE TABLE IF NOT EXISTS payment_gateways (
+    id TEXT PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    "displayName" TEXT NOT NULL,
+    type TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT false,
+    mode TEXT NOT NULL DEFAULT 'SANDBOX',
+    "publicKey" TEXT,
+    "secretKey" TEXT,
+    "accountId" TEXT,
+    "accountHolder" TEXT,
+    "qrCodeUrl" TEXT,
+    instructions TEXT,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Activity Logs
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id TEXT PRIMARY KEY,
+    "userId" TEXT,
+    "businessId" TEXT,
+    action TEXT NOT NULL,
+    "entityType" TEXT NOT NULL,
+    "entityId" TEXT,
+    details JSONB,
+    "ipAddress" TEXT,
+    "userAgent" TEXT,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS activity_logs_createdAt_idx ON activity_logs("createdAt");
+
+-- =============================================
+-- PASO 2: Insertar datos iniciales
+-- =============================================
+
+-- Insertar Plan Gratuito
+INSERT INTO plans (id, name, slug, description, price, currency, period, features, "isActive", "isPublic", "isPopular", "order", icon, color, "maxUsers", "maxProducts", "maxCategories", "createdAt", "updatedAt")
+VALUES (
+    'clx_plan_gratis_001',
+    'Gratis',
+    'gratis',
+    'Plan gratuito para comenzar',
+    0,
+    'COP',
+    'MONTHLY',
+    'Hasta 50 productos,1 usuario,Soporte por email',
+    true,
+    true,
+    false,
+    0,
+    'zap',
+    '#8b5cf6',
+    1,
+    50,
+    5,
+    NOW(),
+    NOW()
+) ON CONFLICT (slug) DO NOTHING;
+
+-- Insertar Plan Básico
+INSERT INTO plans (id, name, slug, description, price, currency, period, features, "isActive", "isPublic", "isPopular", "order", icon, color, "maxUsers", "maxProducts", "maxCategories", "createdAt", "updatedAt")
+VALUES (
+    'clx_plan_basico_002',
+    'Básico',
+    'basico',
+    'Plan básico para pequeños negocios',
+    29000,
+    'COP',
+    'MONTHLY',
+    'Hasta 200 productos,3 usuarios,Soporte prioritario,QR personalizado',
+    true,
+    true,
+    true,
+    1,
+    'star',
+    '#3b82f6',
+    3,
+    200,
+    10,
+    NOW(),
+    NOW()
+) ON CONFLICT (slug) DO NOTHING;
+
+-- Insertar Plan Pro
+INSERT INTO plans (id, name, slug, description, price, currency, period, features, "isActive", "isPublic", "isPopular", "order", icon, color, "maxUsers", "maxProducts", "maxCategories", "createdAt", "updatedAt")
+VALUES (
+    'clx_plan_pro_003',
+    'Pro',
+    'pro',
+    'Plan profesional para negocios en crecimiento',
+    59000,
+    'COP',
+    'MONTHLY',
+    'Productos ilimitados,10 usuarios,Soporte 24/7,Analytics avanzado,Multi-sucursal',
+    true,
+    true,
+    false,
+    2,
+    'crown',
+    '#8b5cf6',
+    10,
+    999999,
+    999,
+    NOW(),
+    NOW()
+) ON CONFLICT (slug) DO NOTHING;
+
+-- =============================================
+-- PASO 3: Verificar resultado
+-- =============================================
+
+SELECT '=== TABLAS CREADAS ===' as info;
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;
+
+SELECT '=== PLANES ===' as info;
+SELECT id, name, slug, price FROM plans;

@@ -37,83 +37,177 @@ import * as storage from './storage';
 const delay = (ms: number): Promise<void> => 
   new Promise(resolve => setTimeout(resolve, ms));
 
-// --- Auth Service ---
+// --- Auth Service (Database-backed) ---
 
 export const authService = {
   async login(credentials: LoginCredentials): Promise<ApiResponse<User>> {
-    await delay(500);
-    
-    // Simulated login - check for super admin
-    const isSuperAdmin = credentials.email === 'admin@minimenu.com' && 
-                         credentials.password === 'admin123';
-    
-    if (isSuperAdmin) {
-      const users = storage.getUsers();
-      const superAdmin = users.find(u => u.role === 'super_admin');
-      if (superAdmin) {
-        storage.setCurrentUser(superAdmin);
-        return { success: true, data: superAdmin, error: null, message: 'Inicio de sesión exitoso' };
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        return {
+          success: false,
+          data: null,
+          error: data.error ?? 'Error al iniciar sesión',
+          message: data.message ?? null,
+        };
       }
-    }
-    
-    // Check for other users
-    const user = storage.getUserByEmail(credentials.email);
-    if (user && credentials.password === 'demo123') {
-      storage.setCurrentUser(user);
+
+      // Map database role to frontend role format
+      const roleMap: Record<string, User['role']> = {
+        'SUPER_ADMIN': 'super_admin',
+        'BUSINESS_ADMIN': 'admin',
+        'STAFF': 'employee',
+      };
+
+      const user: User = {
+        id: data.data.id,
+        email: data.data.email,
+        name: data.data.name,
+        username: data.data.name.toLowerCase().replace(/\s+/g, ''),
+        role: roleMap[data.data.role] ?? 'admin',
+        status: 'active',
+        businessId: data.data.businessId,
+        businessName: data.data.businessName,
+        phone: null,
+        avatar: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+
       return { success: true, data: user, error: null, message: 'Inicio de sesión exitoso' };
+    } catch (error) {
+      console.error('Error en login:', error);
+      return {
+        success: false,
+        data: null,
+        error: 'Error de conexión',
+        message: 'No se pudo conectar con el servidor',
+      };
     }
-    
-    return { 
-      success: false, 
-      data: null, 
-      error: 'Credenciales inválidas', 
-      message: 'Email o contraseña incorrectos' 
-    };
   },
 
   async register(data: RegisterData): Promise<ApiResponse<User>> {
-    await delay(800);
-    
-    // Check if email already exists
-    const existingUser = storage.getUserByEmail(data.email);
-    if (existingUser) {
-      return { 
-        success: false, 
-        data: null, 
-        error: 'Email ya registrado', 
-        message: 'Ya existe una cuenta con este email' 
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok || !responseData.success) {
+        return {
+          success: false,
+          data: null,
+          error: responseData.error ?? 'Error al registrar',
+          message: responseData.message ?? null,
+        };
+      }
+
+      // Map database role to frontend role format
+      const roleMap: Record<string, User['role']> = {
+        'SUPER_ADMIN': 'super_admin',
+        'BUSINESS_ADMIN': 'admin',
+        'STAFF': 'employee',
+      };
+
+      const user: User = {
+        id: responseData.data.id,
+        email: responseData.data.email,
+        name: responseData.data.name,
+        username: responseData.data.name.toLowerCase().replace(/\s+/g, ''),
+        role: roleMap[responseData.data.role] ?? 'admin',
+        status: 'active',
+        businessId: responseData.data.businessId,
+        businessName: responseData.data.businessName,
+        phone: null,
+        avatar: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+
+      return { success: true, data: user, error: null, message: 'Cuenta creada exitosamente' };
+    } catch (error) {
+      console.error('Error en registro:', error);
+      return {
+        success: false,
+        data: null,
+        error: 'Error de conexión',
+        message: 'No se pudo conectar con el servidor',
       };
     }
-    
-    const newUser: User = {
-      id: storage.generateId('user'),
-      email: data.email,
-      name: data.name,
-      username: data.name.toLowerCase().replace(/\s+/g, ''),
-      role: 'admin',
-      status: 'active',
-      businessId: null,
-      businessName: null,
-      phone: data.phone,
-      avatar: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastLoginAt: null
-    };
-    
-    storage.addUser(newUser);
-    storage.setCurrentUser(newUser);
-    return { success: true, data: newUser, error: null, message: 'Registro exitoso' };
   },
 
   async logout(): Promise<ApiResponse<null>> {
-    await delay(200);
-    storage.setCurrentUser(null);
-    return { success: true, data: null, error: null, message: 'Sesión cerrada' };
+    try {
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      return {
+        success: data.success,
+        data: null,
+        error: data.error ?? null,
+        message: data.message ?? 'Sesión cerrada',
+      };
+    } catch (error) {
+      console.error('Error en logout:', error);
+      return { success: true, data: null, error: null, message: 'Sesión cerrada' };
+    }
   },
 
-  getCurrentUser(): User | null {
-    return storage.getCurrentUser();
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const response = await fetch('/api/auth/me');
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.data) {
+        return null;
+      }
+
+      // Map database role to frontend role format
+      const roleMap: Record<string, User['role']> = {
+        'SUPER_ADMIN': 'super_admin',
+        'BUSINESS_ADMIN': 'admin',
+        'STAFF': 'employee',
+      };
+
+      return {
+        id: data.data.id,
+        email: data.data.email,
+        name: data.data.name,
+        username: data.data.name.toLowerCase().replace(/\s+/g, ''),
+        role: roleMap[data.data.role] ?? 'admin',
+        status: 'active',
+        businessId: data.data.businessId,
+        businessName: data.data.businessName,
+        phone: null,
+        avatar: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error('Error obteniendo usuario actual:', error);
+      return null;
+    }
   }
 };
 

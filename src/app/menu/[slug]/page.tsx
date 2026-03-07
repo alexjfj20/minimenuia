@@ -48,6 +48,11 @@ interface MenuItem {
   isSpicy?: boolean;
   allergens?: string[];
   requiereEmpaque?: boolean;
+  // Campos de Oferta
+  onSale?: boolean;
+  salePrice?: number;
+  saleStartDate?: string;
+  saleEndDate?: string;
 }
 
 interface MenuCategory {
@@ -94,6 +99,12 @@ interface RestaurantInfo {
   valorEmpaqueUnitario?: number;
   domicilio?: number;
   impoconsumo?: number;
+  // Banner de Cabecera
+  banner?: string | null;
+  bannerEnabled?: boolean;
+  // Franja Hero Sutil
+  heroImageUrl?: string | null;
+  showHeroBanner?: boolean;
   // Propina Voluntaria
   tipEnabled?: boolean;
   tipPercentageDefault?: number;
@@ -128,10 +139,34 @@ function MenuItemCard({
 }) {
   const [imageError, setImageError] = useState(false);
 
+  // Calcular si la oferta está vigente
+  const isOfferActive = (): boolean => {
+    if (!item.onSale || !item.salePrice) return false;
+    
+    const now = new Date();
+    const startDate = item.saleStartDate ? new Date(item.saleStartDate) : null;
+    const endDate = item.saleEndDate ? new Date(item.saleEndDate) : null;
+    
+    // Si no hay fechas, la oferta está activa
+    if (!startDate && !endDate) return true;
+    
+    // Verificar rango de fechas
+    if (startDate && now < startDate) return false;
+    if (endDate && now > endDate) return false;
+    
+    return true;
+  };
+
+  const offerActive = isOfferActive();
+  const discountPercentage = offerActive && item.salePrice 
+    ? Math.round((1 - item.salePrice / item.price) * 100) 
+    : 0;
+
   return (
     <Card className={cn(
       'overflow-hidden transition-all duration-200 hover:shadow-lg group',
-      !item.isAvailable && 'opacity-60'
+      !item.isAvailable && 'opacity-60',
+      offerActive && 'ring-2 ring-orange-400'
     )}>
       <div className="relative h-40 bg-gray-100">
         {item.image && !imageError ? (
@@ -149,6 +184,12 @@ function MenuItemCard({
         
         {/* Badges */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
+          {/* Badge de Oferta - Primero si está activa */}
+          {offerActive && (
+            <Badge className="bg-orange-500 text-white text-xs animate-pulse">
+              🏷️ -{discountPercentage}% OFERTA
+            </Badge>
+          )}
           {item.isFeatured && (
             <Badge className="bg-yellow-500 text-white text-xs">
               <Star className="w-3 h-3 mr-1" />
@@ -181,9 +222,22 @@ function MenuItemCard({
       <CardContent className="p-4">
         <div className="flex justify-between items-start gap-2 mb-2">
           <h3 className="font-semibold text-gray-900 line-clamp-1">{item.name}</h3>
-          <span className="font-bold text-purple-600 whitespace-nowrap">
-            {formatPrice(item.price)}
-          </span>
+          <div className="text-right">
+            {offerActive && item.salePrice ? (
+              <>
+                <span className="text-sm text-gray-400 line-through block">
+                  {formatPrice(item.price)}
+                </span>
+                <span className="font-bold text-orange-600 whitespace-nowrap">
+                  {formatPrice(item.salePrice)}
+                </span>
+              </>
+            ) : (
+              <span className="font-bold text-purple-600 whitespace-nowrap">
+                {formatPrice(item.price)}
+              </span>
+            )}
+          </div>
         </div>
         
         <p className="text-sm text-gray-500 line-clamp-2 mb-2">
@@ -197,7 +251,12 @@ function MenuItemCard({
         <Button
           onClick={() => onAddToCart(item)}
           disabled={!item.isAvailable || (item.stock ?? 0) <= 0}
-          className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300"
+          className={cn(
+            "w-full disabled:bg-gray-300",
+            offerActive 
+              ? "bg-orange-500 hover:bg-orange-600" 
+              : "bg-purple-600 hover:bg-purple-700"
+          )}
           size="sm"
         >
           <Plus className="w-4 h-4 mr-1" />
@@ -239,6 +298,11 @@ function CartSidebar({
     department: '',
     notes: ''
   });
+  
+  // Restaurant form state - Datos del Cliente
+  const [restaurantCustomerName, setRestaurantCustomerName] = useState('');
+  const [restaurantCustomerPhone, setRestaurantCustomerPhone] = useState('');
+  const [orderForName, setOrderForName] = useState('');
   
   // Collapsible sections
   const [showDeliveryForm, setShowDeliveryForm] = useState(true);
@@ -305,15 +369,22 @@ function CartSidebar({
   }, [items]);
 
   // Payment methods - usar los configurados en el perfil, filtrando solo los habilitados
+  // SIEMPRE mostrar Efectivo primero
   const paymentMethods = useMemo(() => {
     const configuredMethods = restaurant.paymentMethods?.filter(m => m.enabled) ?? [];
-    // Si no hay métodos configurados, usar los por defecto
+    // Si no hay métodos configurados, usar los por defecto (Efectivo primero)
     if (configuredMethods.length === 0) {
       return [
+        { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
         { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true }
       ] as PaymentMethodConfig[];
     }
-    return configuredMethods;
+    // Ordenar: Efectivo (cash) siempre primero, luego los demás
+    return configuredMethods.sort((a, b) => {
+      if (a.id === 'cash') return -1;
+      if (b.id === 'cash') return 1;
+      return 0;
+    });
   }, [restaurant.paymentMethods]);
 
   // Reset tip when order mode changes - use a callback instead of effect
@@ -328,18 +399,74 @@ function CartSidebar({
     }
   };
 
-  // WhatsApp order for restaurant
-  const handleRestaurantOrder = () => {
+  // WhatsApp order for restaurant - also saves to database
+  const handleRestaurantOrder = async () => {
     if (items.length === 0) return;
 
+    // Validate required fields for restaurant
+    if (!restaurantCustomerName || !restaurantCustomerPhone) {
+      alert('Por favor complete los campos obligatorios: Nombre y Celular');
+      return;
+    }
+
+    const selectedPaymentMethod = paymentMethods.find(p => p.id === selectedPayment);
+    const paymentMethodName = selectedPaymentMethod?.name || 'Efectivo';
+
+    // Generate order number for display
+    const now = new Date();
+    const orderNumber = `REST-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Date.now()).slice(-6)}`;
+
+    // Save order to database FIRST
+    try {
+      const orderData = {
+        businessId: restaurant.id,
+        customerName: restaurantCustomerName,
+        customerPhone: restaurantCustomerPhone,
+        customerNotes: orderForName ? `Para: ${orderForName}` : undefined,
+        orderType: 'RESTAURANT',
+        subtotal: subtotal,
+        deliveryFee: 0,
+        tax: impoconsumo,
+        total: total,
+        paymentMethod: paymentMethodName,
+        notes: orderForName ? `Para: ${orderForName}` : undefined,
+        items: items.map(item => ({
+          productId: item.id,
+          productName: item.name,
+          quantity: item.quantity,
+          unitPrice: item.price,
+          totalPrice: item.price * item.quantity,
+          notes: item.notes || undefined
+        }))
+      };
+
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderData)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        console.log('[Pedido Restaurante] Guardado en BD:', result.data?.id);
+      } else {
+        console.error('[Pedido Restaurante] Error guardando:', result.error);
+      }
+    } catch (error) {
+      console.error('[Pedido Restaurante] Error al guardar en BD:', error);
+      // Continue with WhatsApp even if DB save fails
+    }
+
+    // Now send WhatsApp message with new fields
     const orderText = items
       .map(item => `• ${item.quantity}x ${item.name} - ${formatPrice(item.price * item.quantity)}`)
       .join('\n');
 
     const tipLine = tipAmount > 0 ? `Propina Voluntaria: ${formatPrice(tipAmount)}\n` : '';
 
-    const selectedPaymentMethod = paymentMethods.find(p => p.id === selectedPayment);
-    const paymentMethodName = selectedPaymentMethod?.name || 'No especificado';
     const paymentPhone = selectedPaymentMethod?.phone || '';
     const paymentHolder = selectedPaymentMethod?.accountHolder || '';
 
@@ -347,7 +474,18 @@ function CartSidebar({
       ? `💳 *Método de Pago:* ${paymentMethodName}\n${paymentPhone ? `📱 Número: ${paymentPhone}\n` : ''}${paymentHolder ? `👤 Titular: ${paymentHolder}\n` : ''}`
       : `💳 *Método de Pago:* ${paymentMethodName}\n`;
 
+    // Build customer info section
+    const customerInfo = `👤 *DATOS DEL CLIENTE*\n` +
+      `Nombre: ${restaurantCustomerName}\n` +
+      `Celular: ${restaurantCustomerPhone}\n`;
+
+    // Build "Para quién es el pedido" section
+    const orderForLine = orderForName ? `🍽️ *Para:* ${orderForName}\n` : '';
+
     const message = `🍽️ *PEDIDO EN RESTAURANTE*\n\n` +
+      customerInfo +
+      orderForLine +
+      `━━━━━━━━━━━━━━━━━━\n\n` +
       `${orderText}\n\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
       `Subtotal: ${formatPrice(subtotal)}\n` +
@@ -362,8 +500,8 @@ function CartSidebar({
     window.open(whatsappUrl, '_blank');
   };
 
-  // WhatsApp order for delivery
-  const handleDeliveryOrder = () => {
+  // WhatsApp order for delivery - also saves to database
+  const handleDeliveryOrder = async () => {
     if (items.length === 0) return;
     
     // Validate required fields
@@ -372,12 +510,69 @@ function CartSidebar({
       return;
     }
 
+    const selectedPaymentMethod = paymentMethods.find(p => p.id === selectedPayment);
+    const paymentMethodName = selectedPaymentMethod?.name || 'Efectivo';
+
+    // Generate invoice number
+    const now = new Date();
+    const invoiceNumber = `DOM-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Date.now()).slice(-6)}`;
+
+    // Calculate estimated delivery (45 minutes from now)
+    const estimatedDelivery = new Date(now.getTime() + 45 * 60000).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+
+    // Save order to database FIRST
+    try {
+      const orderData = {
+        businessId: restaurant.id,
+        customerName: deliveryForm.name,
+        customerPhone: deliveryForm.phone,
+        customerAddress: `${deliveryForm.address}, ${deliveryForm.city}, ${deliveryForm.department}`,
+        customerNotes: deliveryForm.notes || undefined,
+        orderType: 'DELIVERY',
+        subtotal: subtotal,
+        deliveryFee: deliveryFee,
+        tax: impoconsumo,
+        total: total,
+        paymentMethod: paymentMethodName,
+        neighborhood: deliveryForm.city,
+        estimatedDelivery: estimatedDelivery,
+        invoiceNumber: invoiceNumber,
+        notes: deliveryForm.notes || undefined,
+        items: items.map(item => ({
+          productId: item.id,
+          productName: item.name,
+          quantity: item.quantity,
+          unitPrice: item.price,
+          totalPrice: item.price * item.quantity,
+          notes: item.notes || undefined
+        }))
+      };
+
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderData)
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('[Pedido Domicilio] Guardado en BD:', result.data?.id);
+      } else {
+        console.error('[Pedido Domicilio] Error guardando:', result.error);
+      }
+    } catch (error) {
+      console.error('[Pedido Domicilio] Error al guardar en BD:', error);
+      // Continue with WhatsApp even if DB save fails
+    }
+
+    // Now send WhatsApp message
     const orderText = items
       .map(item => `• ${item.quantity}x ${item.name} - ${formatPrice(item.price * item.quantity)}`)
       .join('\n');
 
-    const selectedPaymentMethod = paymentMethods.find(p => p.id === selectedPayment);
-    const paymentMethodName = selectedPaymentMethod?.name || 'No especificado';
     const paymentPhone = selectedPaymentMethod?.phone || '';
     const paymentHolder = selectedPaymentMethod?.accountHolder || '';
 
@@ -661,6 +856,53 @@ function CartSidebar({
                 </div>
               )}
 
+              {/* Restaurant Customer Data Form (only for restaurant mode) */}
+              {orderMode === 'restaurant' && (
+                <div className="bg-blue-50 rounded-lg p-4 mb-4 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">👤</span>
+                    <span className="font-medium text-gray-900">Datos del Cliente</span>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Nombre *</label>
+                      <input
+                        type="text"
+                        value={restaurantCustomerName}
+                        onChange={(e) => setRestaurantCustomerName(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Tu nombre"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">Celular *</label>
+                      <input
+                        type="tel"
+                        value={restaurantCustomerPhone}
+                        onChange={(e) => setRestaurantCustomerPhone(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="+57 300 123 4567"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ¿Para quién es el pedido? - Available for both modes */}
+              <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">🍽️</span>
+                  <span className="font-medium text-gray-900">¿Para quién es el pedido?</span>
+                </div>
+                <input
+                  type="text"
+                  value={orderForName}
+                  onChange={(e) => setOrderForName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  placeholder="Nombre del cliente (opcional)"
+                />
+              </div>
+
               {/* Delivery Form (only for delivery mode) */}
               {orderMode === 'delivery' && (
                 <div className="space-y-3 mb-4">
@@ -899,17 +1141,23 @@ export default function PublicMenuPage() {
             impoconsumo: data.data.business.impoconsumo ?? 8,
             valorEmpaqueUnitario: data.data.business.valorEmpaqueUnitario,
             domicilio: data.data.business.domicilio,
+            // Banner de Cabecera
+            banner: data.data.business.banner ?? null,
+            bannerEnabled: data.data.business.bannerEnabled ?? true,
+            // Franja Hero Sutil
+            heroImageUrl: data.data.business.heroImageUrl ?? null,
+            showHeroBanner: data.data.business.showHeroBanner ?? false,
             // Propina Voluntaria
             tipEnabled: data.data.business.tipEnabled ?? false,
             tipPercentageDefault: data.data.business.tipPercentageDefault ?? 10,
             tipOnlyOnPremise: data.data.business.tipOnlyOnPremise ?? true,
-            // Métodos de Pago
+            // Métodos de Pago (Efectivo primero)
             paymentMethods: data.data.business.paymentMethods ?? [
+              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
               { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true }
+              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
             ]
           });
           
@@ -917,7 +1165,21 @@ export default function PublicMenuPage() {
           setCategories(data.data.categories || []);
           
           // Map products to menu items
-          const items = (data.data.products || []).map((p: { id: string; name: string; description: string; price: number; category: string; available: boolean; featured: boolean; image: string | null; stock: number }) => ({
+          const items = (data.data.products || []).map((p: { 
+            id: string; 
+            name: string; 
+            description: string; 
+            price: number; 
+            category: string; 
+            available: boolean; 
+            featured: boolean; 
+            image: string | null; 
+            stock: number;
+            onSale?: boolean;
+            salePrice?: number;
+            saleStartDate?: string;
+            saleEndDate?: string;
+          }) => ({
             id: p.id,
             name: p.name,
             description: p.description || '',
@@ -926,7 +1188,12 @@ export default function PublicMenuPage() {
             image: p.image,
             isAvailable: p.available,
             isFeatured: p.featured,
-            stock: p.stock ?? 0
+            stock: p.stock ?? 0,
+            // Campos de Oferta
+            onSale: p.onSale ?? false,
+            salePrice: p.salePrice,
+            saleStartDate: p.saleStartDate,
+            saleEndDate: p.saleEndDate
           }));
           setMenuItems(items);
           
@@ -1110,6 +1377,45 @@ export default function PublicMenuPage() {
           </div>
         </div>
       </header>
+
+      {/* Banner de Cabecera */}
+      {restaurant.bannerEnabled && restaurant.banner && (
+        <div className="w-full bg-gray-100">
+          <img
+            src={restaurant.banner}
+            alt={`Banner de ${restaurant.name}`}
+            className="w-full h-auto max-h-48 sm:max-h-64 object-cover"
+          />
+        </div>
+      )}
+
+      {/* Franja Hero Sutil */}
+      {restaurant?.showHeroBanner === true && restaurant?.heroImageUrl && (
+        <div className="relative w-full h-32 sm:h-40 overflow-hidden">
+          {/* Imagen de fondo */}
+          <img
+            src={restaurant.heroImageUrl}
+            alt={`Promoción de ${restaurant.name}`}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          {/* Overlay negro al 45% */}
+          <div className="absolute inset-0 bg-black/45" />
+          {/* Degradado lateral */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
+          
+          {/* Contenido sobre la imagen */}
+          <div className="relative h-full flex flex-col justify-center px-4 sm:px-6 max-w-6xl mx-auto">
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">{restaurant.name}</h2>
+            <p className="text-white/75 text-sm hidden sm:block">{restaurant.description || 'Tu descripción o slogan aquí'}</p>
+            {/* Badge condicional de oferta */}
+            <div className="mt-2 inline-flex">
+              <span className="px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full">
+                🔥 Oferta del día
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Categories */}
       <div className="sticky top-[88px] sm:top-[72px] z-20 bg-white border-b">
