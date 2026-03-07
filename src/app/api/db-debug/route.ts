@@ -1,4 +1,4 @@
-// Test múltiples variaciones de conexión a Supabase
+// Test conexión con región correcta: aws-1-us-east-2
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
@@ -16,27 +16,15 @@ export async function GET(): Promise<NextResponse> {
   const password = 'Azul1340134';
   const projectId = 'qsymkskyiaemvynumfal';
 
-  // Diferentes variaciones de URL para probar
+  // La región correcta es aws-1-us-east-2 según el test anterior
   const variations = [
     {
-      name: 'Pooler con usuario completo (postgres.PROJECT_ID)',
-      url: `postgresql://postgres.${projectId}:${password}@aws-0-us-east-1.pooler.supabase.com:6543/postgres`,
-    },
-    {
-      name: 'Pooler con usuario simple (postgres)',
-      url: `postgresql://postgres:${password}@aws-0-us-east-1.pooler.supabase.com:6543/postgres`,
-    },
-    {
-      name: 'Direct con usuario completo',
-      url: `postgresql://postgres.${projectId}:${password}@db.${projectId}.supabase.co:5432/postgres`,
-    },
-    {
-      name: 'Direct con usuario simple',
-      url: `postgresql://postgres:${password}@db.${projectId}.supabase.co:5432/postgres`,
-    },
-    {
-      name: 'Pooler región alternativa (aws-1-us-east-2)',
+      name: 'Pooler aws-1-us-east-2 con usuario completo',
       url: `postgresql://postgres.${projectId}:${password}@aws-1-us-east-2.pooler.supabase.com:6543/postgres`,
+    },
+    {
+      name: 'Direct aws-1-us-east-2',
+      url: `postgresql://postgres.${projectId}:${password}@db.${projectId}.supabase.co:5432/postgres`,
     },
   ];
 
@@ -72,31 +60,30 @@ export async function GET(): Promise<NextResponse> {
     }
   }
 
-  // También mostrar la URL configurada en Vercel
-  const vercelUrl = process.env.DATABASE_URL || 'No configurada';
-
-  // Encontrar cuáles funcionaron
-  const workingConnections = results.filter(r => r.success);
+  // URLs correctas para la región aws-1-us-east-2
+  const correctPoolerUrl = `postgresql://postgres.${projectId}:TU_CONTRASEÑA@aws-1-us-east-2.pooler.supabase.com:6543/postgres`;
+  const correctDirectUrl = `postgresql://postgres.${projectId}:TU_CONTRASEÑA@db.${projectId}.supabase.co:5432/postgres`;
 
   return NextResponse.json({
-    summary: {
-      totalTests: results.length,
-      successful: workingConnections.length,
-      failed: results.length - workingConnections.length,
-    },
-    vercelConfig: {
-      DATABASE_URL: vercelUrl.replace(password, '****').replace(/:[^:@]+@/g, ':****@'),
+    discovery: {
+      region: 'aws-1-us-east-2',
+      message: 'Tu proyecto está en la región aws-1-us-east-2, NO en aws-0-us-east-1',
     },
     results,
-    workingConnection: workingConnections.length > 0 ? workingConnections[0] : null,
-    nextSteps: workingConnections.length > 0
-      ? [`Usa esta URL en Vercel: ${workingConnections[0].url}`]
-      : [
-          'Ninguna variación funcionó',
-          'Ve a Supabase Dashboard > Settings > Database',
-          'Copia el EXACTO connection string que muestra Supabase',
-          'Verifica que la región sea correcta (aws-0-us-east-1)',
-          'Intenta resetear la contraseña de la base de datos',
-        ],
+    correctUrls: {
+      DATABASE_URL: correctPoolerUrl.replace('TU_CONTRASEÑA', '****'),
+      DIRECT_URL: correctDirectUrl.replace('TU_CONTRASEÑA', '****'),
+    },
+    instructions: [
+      '1. Ve a Supabase Dashboard > Settings > Database',
+      '2. Busca "Connection string" o "Connection pooling"',
+      '3. Verifica que la región sea aws-1-us-east-2',
+      '4. Copia la contraseña correcta',
+      '5. Actualiza Vercel con:',
+      '',
+      '   DATABASE_URL=postgresql://postgres.qsymkskyiaemvynumfal:TU_CONTRASEÑA@aws-1-us-east-2.pooler.supabase.com:6543/postgres',
+      '',
+      '   DIRECT_URL=postgresql://postgres.qsymkskyiaemvynumfal:TU_CONTRASEÑA@db.qsymkskyiaemvynumfal.supabase.co:5432/postgres',
+    ],
   });
 }
