@@ -11,72 +11,46 @@ export async function GET(): Promise<NextResponse> {
   const databaseUrl = process.env.DATABASE_URL || '';
   const directUrl = process.env.DIRECT_URL || '';
 
+  // Credenciales correctas del proyecto saasmenuia
+  const correctDatabaseUrl = 'postgresql://postgres.zobvdpegchzgwntemzou:Azul134013470@aws-1-us-east-2.pooler.supabase.com:6543/postgres';
+  const correctDirectUrl = 'postgresql://postgres.zobvdpegchzgwntemzou:Azul134013470@db.zobvdpegchzgwntemzou.supabase.co:5432/postgres';
+
   // Función para enmascarar URL (ocultar contraseña)
   const maskUrl = (url: string): string => {
     if (!url) return 'NO CONFIGURADO';
     try {
       const parsed = new URL(url);
-      const maskedPassword = parsed.password ? '****' : 'sin-password';
+      const maskedPassword = parsed.password ? '****' + parsed.password.slice(-3) : 'sin-password';
       return `${parsed.protocol}//${parsed.username}:${maskedPassword}@${parsed.host}${parsed.pathname}`;
     } catch {
       return 'URL INVÁLIDA';
     }
   };
 
-  // Extraer información de las URLs
-  const parseUrlInfo = (url: string) => {
-    if (!url) return null;
-    try {
-      const parsed = new URL(url);
-      return {
-        user: parsed.username,
-        host: parsed.hostname,
-        port: parsed.port,
-        database: parsed.pathname.replace('/', ''),
-      };
-    } catch {
-      return null;
-    }
-  };
-
-  const dbInfo = parseUrlInfo(databaseUrl);
-  const directInfo = parseUrlInfo(directUrl);
-
-  // Verificar si las variables están configuradas
-  const hasDatabaseUrl = !!databaseUrl && databaseUrl.includes('supabase');
-  const hasDirectUrl = !!directUrl && directUrl.includes('supabase');
+  // Verificar si las variables están configuradas correctamente
+  const isDatabaseUrlCorrect = databaseUrl === correctDatabaseUrl;
+  const isDirectUrlCorrect = directUrl === correctDirectUrl;
+  const allCorrect = isDatabaseUrlCorrect && isDirectUrlCorrect;
 
   return NextResponse.json({
-    status: hasDatabaseUrl && hasDirectUrl ? 'CONFIGURADO' : 'PENDIENTE',
-    message: hasDatabaseUrl && hasDirectUrl
-      ? '✅ Las variables de entorno están configuradas'
-      : '⚠️ Configura las variables DATABASE_URL y DIRECT_URL en Vercel',
+    status: allCorrect ? 'OK' : 'ERROR',
+    message: allCorrect
+      ? '✅ Todas las variables de entorno están configuradas correctamente'
+      : '⚠️ Las variables de entorno no coinciden con las esperadas',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
     credentials: {
       databaseUrl: maskUrl(databaseUrl),
       directUrl: maskUrl(directUrl),
     },
-    config: {
-      databaseUrl: {
-        configured: hasDatabaseUrl,
-        host: dbInfo?.host || null,
-        port: dbInfo?.port || null,
-      },
-      directUrl: {
-        configured: hasDirectUrl,
-        host: directInfo?.host || null,
-        port: directInfo?.port || null,
-      },
+    comparison: {
+      databaseUrlMatch: isDatabaseUrlCorrect,
+      directUrlMatch: isDirectUrlCorrect,
     },
-    setupInstructions: !hasDatabaseUrl || !hasDirectUrl ? {
-      step1: 'Crea un nuevo proyecto en https://supabase.com',
-      step2: 'Ve a Settings > Database',
-      step3: 'Copia el Project Reference y establece una contraseña',
-      step4: 'Copia los connection strings:',
-      DATABASE_URL_format: 'postgresql://postgres.[PROJECT-REF]:[PASSWORD]@[REGION].pooler.supabase.com:6543/postgres',
-      DIRECT_URL_format: 'postgresql://postgres.[PROJECT-REF]:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres',
-      step5: 'Actualiza las variables en Vercel y haz Redeploy',
-    } : undefined,
+    project: {
+      name: 'saasmenuia',
+      projectId: 'zobvdpegchzgwntemzou',
+      region: 'aws-1-us-east-2',
+    },
   });
 }
