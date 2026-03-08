@@ -1,18 +1,10 @@
 // ============================================================================
-// Menu Public API - v3.1 (Shared Store + Payment Methods Sync - FIX CACHE)
-// FIX: Payment methods from profile should sync to menu
+// Menu Public API - v4.1 (Aislamiento Total SaaS - DB + Store Aislado)
 // ============================================================================
 
-const API_VERSION = '3.1-FIX-CACHE';
-
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { 
-  getBusinessProfileAsync,
-  type PaymentMethodConfig,
-  type BusinessProfile 
-} from '@/lib/business-store';
+import { db } from '@/lib/db';
+import { getBusinessProfileAsync } from '@/lib/business-store';
 
 // ============================================================================
 // INTERFACES
@@ -30,11 +22,6 @@ interface Product {
   stock: number;
   createdAt: string;
   updatedAt: string;
-  // Campos de Oferta
-  onSale?: boolean;
-  salePrice?: number;
-  saleStartDate?: string;
-  saleEndDate?: string;
 }
 
 interface Category {
@@ -45,7 +32,7 @@ interface Category {
 }
 
 interface MenuData {
-  business: BusinessProfile;
+  business: any; // Flexible structure for compatibility
   categories: Category[];
   products: Product[];
 }
@@ -57,27 +44,7 @@ interface MenuResponse {
 }
 
 // ============================================================================
-// FILE-BASED STORAGE PATHS (for products only)
-// ============================================================================
-
-const DATA_DIR = path.join(process.cwd(), 'db');
-const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-async function readJSON<T>(filePath: string, defaultValue: T): Promise<T> {
-  try {
-    const data = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(data) as T;
-  } catch {
-    return defaultValue;
-  }
-}
-
-// ============================================================================
-// GET - Obtener menú público por slug (v2 - using shared store)
+// GET - Obtener menú público por slug (Aislado por Negocio)
 // ============================================================================
 
 export async function GET(
@@ -86,54 +53,91 @@ export async function GET(
 ): Promise<NextResponse<MenuResponse>> {
   try {
     const { slug } = await params;
-    
-    console.log('========================================');
-    console.log('[Menu API v3.0] GET menu for slug:', slug);
-    console.log('[Menu API v3.0] API Version:', API_VERSION);
-    
-    // Get business profile from shared store (async to ensure file is loaded)
-    const profile = await getBusinessProfileAsync();
-    
-    console.log('[Menu API] Profile loaded:', profile.name);
-    console.log('[Menu API] Payment methods from store:', profile.paymentMethods?.map(m => `${m.name}(${m.enabled ? 'on' : 'off'})`).join(', '));
-    
-    // Read products and categories
-    const defaultProductsData = {
-      products: [] as Product[],
-      categories: [] as Category[],
-      updatedAt: new Date().toISOString()
-    };
-    
-    const productsData = await readJSON<{
-      products: Product[];
-      categories: Category[];
-      updatedAt: string;
-    }>(PRODUCTS_FILE, defaultProductsData);
-    
-    // Build response
+
+    console.log('[Menu API v4.1] GET menu for slug:', slug);
+
+    // 1. Get business from DB by slug
+    const business = await db.business.findUnique({
+      where: { slug }
+    });
+
+    if (!business) {
+      console.log('[Menu API] Business not found for slug:', slug);
+      return NextResponse.json({
+        success: false,
+        error: 'Establecimiento no encontrado'
+      }, { status: 404 });
+    }
+
+    // 2. Get categories from DB
+    const dbCategories = await db.category.findMany({
+      where: {
+        businessId: business.id,
+        isActive: true
+      },
+      orderBy: { order: 'asc' }
+    });
+
+    // 3. Get products from DB
+    const dbProducts = await db.product.findMany({
+      where: {
+        businessId: business.id,
+        isAvailable: true
+      },
+      include: { category: true },
+      orderBy: { order: 'asc' }
+    });
+
+    // 4. Get advanced settings from isolated store
+    const advancedSettings = await getBusinessProfileAsync(business.id);
+
+    // 5. Build response mapping (Database values Override store values for core fields)
     const menuData: MenuData = {
       business: {
-        ...profile,
-        slug: slug || profile.slug
+        ...advancedSettings, // Features like IVA, payment methods, etc.
+        id: business.id,
+        name: business.name,
+        slug: business.slug,
+        phone: business.phone || advancedSettings.phone,
+        address: business.address || advancedSettings.address,
+        primaryColor: business.primaryColor || advancedSettings.primaryColor,
+        secondaryColor: business.secondaryColor || advancedSettings.secondaryColor,
+        logo: business.logo || advancedSettings.logo,
       },
-      categories: productsData.categories || [],
-      products: productsData.products || []
+      categories: dbCategories.map(c => ({
+        id: c.id,
+        name: c.name,
+        icon: c.icon || '🍴',
+        order: c.order
+      })),
+      products: dbProducts.map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description || '',
+        price: p.price,
+        category: p.category.name,
+        available: p.isAvailable,
+        featured: p.isFeatured,
+        image: p.image,
+        stock: 0,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString()
+      }))
     };
-    
-    console.log('[Menu API] Returning menu with', menuData.products.length, 'products');
-    console.log('[Menu API] Active payment methods:', menuData.business.paymentMethods?.filter(m => m.enabled).map(m => m.name).join(', '));
-    
+
+    console.log('[Menu API] Returning isolated menu with', menuData.products.length, 'products');
+
     return NextResponse.json({
       success: true,
       data: menuData
     });
 
   } catch (error) {
-    console.error('[Menu API] Error reading menu:', error);
-    
+    console.error('[Menu API] Error loading menu:', error);
+
     return NextResponse.json({
       success: false,
-      error: 'Error al cargar el menú'
+      error: 'Error al cargar el menú desde el sistema multi-tenant'
     }, { status: 500 });
   }
 }

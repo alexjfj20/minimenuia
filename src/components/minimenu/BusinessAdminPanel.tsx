@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -312,111 +312,8 @@ const defaultCategories: Category[] = [
 const defaultPrinterTypes = ['Térmica', 'Inyección', 'Láser', 'Matricial'];
 const defaultPrinterAreas = ['Cocina', 'Barra', 'Caja', 'General'];
 
-const mockOrders: Order[] = [
-  { id: 'ORD-001', customer: 'Pedro Martínez', items: 3, total: 80000, status: 'pending', time: '12:30 PM', date: '2025-02-28', phone: '+57 300 111 2222', address: 'Calle 10 #20-30', notes: 'Sin cebolla' },
-  { id: 'ORD-002', customer: 'Laura Sánchez', items: 1, total: 12000, status: 'preparing', time: '12:15 PM', date: '2025-02-28', phone: '+57 300 333 4444', address: 'Carrera 5 #15-25' },
-  { id: 'ORD-003', customer: 'Carlos López', items: 5, total: 95000, status: 'ready', time: '11:45 AM', date: '2025-02-27', phone: '+57 300 555 6666', address: 'Av. Principal #45-67' },
-  { id: 'ORD-004', customer: 'Ana García', items: 2, total: 43000, status: 'delivered', time: '11:00 AM', date: '2025-02-27', phone: '+57 300 777 8888', address: 'Diagonal 8 #12-34', notes: 'Enviar factura' }
-];
-
-// Mock delivery orders data
-const mockDeliveryOrders: DeliveryOrder[] = [
-  {
-    id: 'DOM-001',
-    invoiceNumber: 'FAC-2024-001',
-    customer: 'María Rodríguez',
-    phone: '+57 301 234 5678',
-    address: 'Calle 45 #67-89, Apto 302',
-    neighborhood: 'Chapinero',
-    items: 4,
-    subtotal: 65000,
-    deliveryFee: 5000,
-    total: 70000,
-    status: 'pending',
-    paymentMethod: 'cash',
-    paymentStatus: 'pending',
-    notes: 'Portero azul, timbre 3',
-    createdAt: '14:30',
-    date: '2025-02-28',
-    estimatedDelivery: '15:15'
-  },
-  {
-    id: 'DOM-002',
-    invoiceNumber: 'FAC-2024-002',
-    customer: 'Juan Pérez',
-    phone: '+57 302 345 6789',
-    address: 'Carrera 10 #20-30',
-    neighborhood: 'La Candelaria',
-    items: 2,
-    subtotal: 42000,
-    deliveryFee: 4000,
-    total: 46000,
-    status: 'on_the_way',
-    paymentMethod: 'transfer',
-    paymentStatus: 'paid',
-    createdAt: '13:45',
-    date: '2025-02-28',
-    estimatedDelivery: '14:30',
-    driver: 'Carlos Mensajero'
-  },
-  {
-    id: 'DOM-003',
-    invoiceNumber: 'FAC-2024-003',
-    customer: 'Ana Martínez',
-    phone: '+57 303 456 7890',
-    address: 'Av. Caracas #50-60, Local 5',
-    neighborhood: 'Centro',
-    items: 6,
-    subtotal: 120000,
-    deliveryFee: 6000,
-    total: 126000,
-    status: 'preparing',
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
-    notes: 'Edificio de oficinas, piso 3',
-    createdAt: '13:00',
-    date: '2025-02-27',
-    estimatedDelivery: '14:00'
-  },
-  {
-    id: 'DOM-004',
-    invoiceNumber: 'FAC-2024-004',
-    customer: 'Luis Gómez',
-    phone: '+57 304 567 8901',
-    address: 'Diagonal 30 #15-25',
-    neighborhood: 'Teusaquillo',
-    items: 3,
-    subtotal: 55000,
-    deliveryFee: 5000,
-    total: 60000,
-    status: 'delivered',
-    paymentMethod: 'cash',
-    paymentStatus: 'paid',
-    createdAt: '11:30',
-    date: '2025-02-27',
-    estimatedDelivery: '12:15',
-    driver: 'Pedro Mensajero'
-  },
-  {
-    id: 'DOM-005',
-    invoiceNumber: 'FAC-2024-005',
-    customer: 'Carolina Silva',
-    phone: '+57 305 678 9012',
-    address: 'Calle 80 #15-40',
-    neighborhood: 'Chapinero',
-    items: 1,
-    subtotal: 25000,
-    deliveryFee: 4000,
-    total: 29000,
-    status: 'cancelled',
-    paymentMethod: 'transfer',
-    paymentStatus: 'refunded',
-    notes: 'Cliente canceló por demora',
-    createdAt: '10:00',
-    date: '2025-02-26',
-    estimatedDelivery: '10:45'
-  }
-];
+// Removed mockOrders and mockDeliveryOrders to ensure full SaaS isolation.
+// All data is now fetched from the database via API.
 
 // --- Helper functions for OrderCard (must be outside component) ---
 function getTimerColor(minutes: number): string {
@@ -467,12 +364,12 @@ function OrderCard({ order, timer, onView }: OrderCardProps): JSX.Element {
     cancelled: 'Cancelado'
   };
 
-  const typeBorder = order.type === 'restaurante' 
-    ? 'border-l-4 border-l-green-500' 
+  const typeBorder = order.type === 'restaurante'
+    ? 'border-l-4 border-l-green-500'
     : 'border-l-4 border-l-orange-500';
 
   return (
-    <div 
+    <div
       className={`bg-white rounded-lg shadow-sm p-3 cursor-pointer hover:shadow-md transition-all ${typeBorder} ${timerBg}`}
       onClick={onView}
     >
@@ -495,7 +392,7 @@ function OrderCard({ order, timer, onView }: OrderCardProps): JSX.Element {
 
       {/* Customer */}
       <p className="text-sm font-medium text-gray-800 truncate">{order.customer}</p>
-      
+
       {/* Details */}
       <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
         <span>{order.items} items</span>
@@ -517,12 +414,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showProductModal, setShowProductModal] = useState(false);
   const [searchProduct, setSearchProduct] = useState('');
-  
+
   // --- Product Filters ---
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterAvailability, setFilterAvailability] = useState<string>('all');
   const [filterFeatured, setFilterFeatured] = useState<string>('all');
-  
+
   // --- Products State ---
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
@@ -535,7 +432,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       try {
         const response = await fetch('/api/products');
         const data = await response.json();
-        
+
         if (data.success && data.data) {
           setProducts(data.data.products || []);
           setCategories(data.data.categories || defaultCategories);
@@ -550,7 +447,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
     loadProducts();
   }, []);
-  
+
   // --- Product Form State ---
   const [productForm, setProductForm] = useState({
     name: '',
@@ -568,21 +465,21 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     saleStartDate: '',
     saleEndDate: ''
   });
-  
+
   // --- New Category State ---
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState('📦');
-  
+
   // --- Image Upload State ---
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  
+
   // --- Edit/Delete Product States ---
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
+
   // --- AI Product Creation States ---
   const [showAITextModal, setShowAITextModal] = useState(false);
   const [showAIVoiceModal, setShowAIVoiceModal] = useState(false);
@@ -597,10 +494,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     category: string;
     image: string | null;
   } | null>(null);
-  
+
   // --- Speech Recognition Reference ---
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  
+
   // --- Share Menu States ---
   const [menuSlug, setMenuSlug] = useState<string>('');
   const [menuSlugActive, setMenuSlugActive] = useState<boolean>(false);
@@ -820,7 +717,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         // Then sync with server
         const response = await fetch('/api/settings/profile');
         const data = await response.json();
-        
+
         if (data.success && data.data) {
           setProfileId(data.data.id);
           setProfileForm({
@@ -936,12 +833,33 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     loadProfile();
   }, []);
 
-  const stats = {
-    todayOrders: 24,
-    todayRevenue: 485000,
-    pendingOrders: 3,
-    totalProducts: products.length
-  };
+  // --- Calculate real-time stats from database orders ---
+  const stats = useMemo(() => {
+    // Definir "hoy" para Colombia/Local
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const allOrders = [...dbRestaurantOrders, ...dbDeliveryOrders];
+
+    // Pedidos de hoy
+    const todayOrdersList = allOrders.filter(order => {
+      const orderDate = new Date(order.createdAt || '');
+      orderDate.setHours(0, 0, 0, 0);
+      return orderDate.getTime() === today.getTime() && order.status !== 'cancelled';
+    });
+
+    // Pedidos pendientes (estados activos)
+    const pendingOrdersList = allOrders.filter(order =>
+      ['pending', 'preparing', 'confirmed', 'on_the_way'].includes(order.status)
+    );
+
+    return {
+      todayOrders: todayOrdersList.length,
+      todayRevenue: todayOrdersList.reduce((sum, order) => sum + (order.total || 0), 0),
+      pendingOrders: pendingOrdersList.length,
+      totalProducts: products.length
+    };
+  }, [dbRestaurantOrders, dbDeliveryOrders, products]);
 
   const sidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -960,15 +878,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- AI Product Creation Handlers ---
   const handleAITextCreate = async (): Promise<void> => {
     if (!aiTextPrompt.trim()) return;
-    
+
     setIsAIProcessing(true);
     try {
       // Simular llamada a API de IA
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
+
       // Generar imagen con IA
       const generatedImage = await generateAIImage('Producto generado por IA', aiTextPrompt);
-      
+
       // Producto generado simulado
       setAiGeneratedProduct({
         name: 'Producto generado por IA',
@@ -986,7 +904,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   const handleAIVoiceCreate = useCallback((): void => {
     // Check if Speech Recognition is available
-    const SpeechRecognitionAPI = typeof window !== 'undefined' 
+    const SpeechRecognitionAPI = typeof window !== 'undefined'
       ? (window.SpeechRecognition || window.webkitSpeechRecognition)
       : null;
 
@@ -1031,7 +949,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       setIsRecording(false);
       let errorMessage = 'Error desconocido al grabar audio';
-      
+
       switch (event.error) {
         case 'not-allowed':
         case 'permission-denied':
@@ -1052,7 +970,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         default:
           errorMessage = `Error: ${event.error}`;
       }
-      
+
       setSpeechError(errorMessage);
     };
 
@@ -1080,11 +998,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       // Aquí iría la llamada real a la API de IA
       // Por ahora simulamos el procesamiento
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
+
       // Extraer precio si se menciona
       const priceMatch = transcript.match(/(\d+)\s*(mil|pesos|cop)?/i);
       const extractedPrice = priceMatch ? parseInt(priceMatch[1]) * 1000 : 15000;
-      
+
       // Determinar categoría basada en palabras clave
       let category = 'Platos Principales';
       const lowerTranscript = transcript.toLowerCase();
@@ -1098,7 +1016,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
       // Generar nombre del producto (primeras palabras significativas)
       const words = transcript.split(' ').filter(w => w.length > 3).slice(0, 4);
-      const generatedName = words.length > 0 
+      const generatedName = words.length > 0
         ? words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
         : 'Nuevo Producto';
 
@@ -1126,15 +1044,18 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       const response = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(product)
+        body: JSON.stringify({
+          ...product,
+          businessId: profileId ?? user.businessId // profileId es el ID real del negocio cargado desde la DB
+        })
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success && data.product) {
         setProducts(prev => [...prev, data.product as Product]);
         console.log('[Products] Added product:', data.product.name);
-        
+
         // Update categories if a new one was added
         if (data.product.category && !categories.find(c => c.name === data.product.category)) {
           setCategories(prev => [...prev, {
@@ -1186,7 +1107,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- AI Image Generation Function ---
   const generateAIImage = async (productName: string, description: string): Promise<string | null> => {
     setIsGeneratingImage(true);
-    
+
     try {
       // Build effective prompt for food product image
       // IMPORTANTE: Instrucciones explícitas para NO incluir texto en la imagen
@@ -1210,17 +1131,17 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         'pure image without any text overlay',
         'food only without text'
       ];
-      
+
       const prompt = promptComponents.filter(Boolean).join(', ');
-      
+
       console.log('[AI Image] Requesting image for:', productName);
 
       // Create abort controller for timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
-      
+
       let response: Response;
-      
+
       try {
         response = await fetch('/api/generate-image', {
           method: 'POST',
@@ -1235,33 +1156,33 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         });
       } catch (fetchError) {
         clearTimeout(timeoutId);
-        
+
         // Handle network-level errors
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {
           console.warn('[AI Image] Request timed out');
           setSpeechError('La generación está tomando mucho tiempo. El producto se guardará sin imagen.');
           return null;
         }
-        
+
         console.warn('[AI Image] Network error:', fetchError instanceof Error ? fetchError.message : 'Unknown');
         setSpeechError('Error de conexión. El producto se guardará sin imagen.');
         return null;
       }
-      
+
       clearTimeout(timeoutId);
 
       // Handle HTTP error responses
       if (!response.ok) {
         let errorMessage = 'Error al generar la imagen';
-        
+
         try {
           const responseText = await response.text();
-          
+
           // Handle HTML error pages (502, 503, 504 from load balancers)
           if (responseText.includes('<html>') || responseText.includes('<!DOCTYPE')) {
             const statusMessage = response.statusText || 'Service Unavailable';
             console.warn(`[AI Image] Server returned HTML error: ${response.status} ${statusMessage}`);
-            
+
             // Map common status codes to user-friendly messages
             if (response.status === 502 || response.status === 503 || response.status === 504) {
               errorMessage = 'El servidor de imágenes está temporalmente no disponible. El producto se guardará sin imagen.';
@@ -1281,7 +1202,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         } catch {
           errorMessage = 'Error al procesar la respuesta del servidor';
         }
-        
+
         console.warn('[AI Image] Generation failed:', errorMessage);
         setSpeechError(errorMessage);
         return null;
@@ -1289,7 +1210,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
       // Parse successful response
       let data: { success?: boolean; image?: string; error?: string; attempts?: number };
-      
+
       try {
         data = await response.json();
       } catch {
@@ -1314,7 +1235,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       }
 
       console.log('[AI Image] Image generated successfully', data.attempts ? `(${data.attempts} attempts)` : '');
-      
+
       return data.image;
 
     } catch (unexpectedError) {
@@ -1329,7 +1250,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   const handleSaveAIProduct = (): void => {
     if (!aiGeneratedProduct) return;
-    
+
     addProductToList({
       name: aiGeneratedProduct.name,
       description: aiGeneratedProduct.description,
@@ -1339,7 +1260,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       featured: false,
       image: aiGeneratedProduct.image
     });
-    
+
     setShowAITextModal(false);
     setShowAIVoiceModal(false);
     setAiGeneratedProduct(null);
@@ -1348,7 +1269,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   const handleSaveProduct = async (): Promise<void> => {
     if (!productForm.name.trim() || productForm.price <= 0) return;
-    
+
     if (editingProduct) {
       // Update existing product via API
       try {
@@ -1357,15 +1278,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: editingProduct.id,
+            businessId: profileId ?? user.businessId, // profileId es el ID real del negocio cargado desde la DB
             ...productForm
           })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success && data.product) {
-          setProducts(prev => prev.map(p => 
-            p.id === editingProduct.id 
+          setProducts(prev => prev.map(p =>
+            p.id === editingProduct.id
               ? (data.product as Product)
               : p
           ));
@@ -1394,7 +1316,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         saleEndDate: productForm.saleEndDate
       });
     }
-    
+
     setShowProductModal(false);
     resetProductForm();
   };
@@ -1428,14 +1350,14 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   const handleDeleteProduct = async (): Promise<void> => {
     if (!productToDelete) return;
-    
+
     try {
-      const response = await fetch(`/api/products?id=${productToDelete.id}`, {
+      const response = await fetch(`/api/products?id=${productToDelete.id}&businessId=${profileId ?? user.businessId}`, {
         method: 'DELETE'
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
         setProducts(prev => prev.filter(p => p.id !== productToDelete.id));
         console.log('[Products] Deleted product:', productToDelete.name);
@@ -1443,7 +1365,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     } catch (error) {
       console.error('[Products] Error deleting product:', error);
     }
-    
+
     setShowDeleteConfirm(false);
     setProductToDelete(null);
   };
@@ -1476,12 +1398,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const handleCreateCategory = (): void => {
     const trimmedName = newCategoryName.trim();
     if (!trimmedName) return;
-    
+
     // Check if category already exists
     if (categories.some(cat => cat.name.toLowerCase() === trimmedName.toLowerCase())) {
       return; // Category already exists
     }
-    
+
     // Create new category
     const newCategory: Category = {
       id: `cat-${Date.now()}`,
@@ -1489,18 +1411,18 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       icon: newCategoryIcon,
       order: categories.length + 1
     };
-    
+
     // Add to categories list
     setCategories(prev => [...prev, newCategory]);
-    
+
     // Select the new category in the form
     setProductForm(prev => ({ ...prev, category: trimmedName }));
-    
+
     // Reset new category input
     setShowNewCategoryInput(false);
     setNewCategoryName('');
     setNewCategoryIcon('📦');
-    
+
     console.log('[Categories] Created new category:', trimmedName);
   };
 
@@ -1636,7 +1558,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       // 1. Load from localStorage (created from admin panel)
       const savedInvoices = localStorage.getItem('deliveryInvoices');
       const localInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
-      
+
       // 2. Load from database (created from public cart "Tu pedido")
       let dbInvoices: DeliveryInvoice[] = [];
       try {
@@ -1691,15 +1613,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               deliveryFee: order.deliveryFee,
               empaqueTotal: 0,
               total: order.total,
-              paymentMethod: (order.paymentMethod === 'Efectivo' || order.paymentMethod === 'cash') ? 'cash' : 
-                             (order.paymentMethod === 'Tarjeta' || order.paymentMethod === 'card') ? 'card' : 'transfer',
+              paymentMethod: (order.paymentMethod === 'Efectivo' || order.paymentMethod === 'cash') ? 'cash' :
+                (order.paymentMethod === 'Tarjeta' || order.paymentMethod === 'card') ? 'card' : 'transfer',
               paymentStatus: order.paymentStatus === 'PAID' ? 'paid' : 'pending',
               notes: order.notes ?? '',
               status: order.status === 'PENDING' ? 'pending' :
-                     order.status === 'CONFIRMED' ? 'confirmed' :
-                     order.status === 'PREPARING' ? 'preparing' :
-                     order.status === 'ON_THE_WAY' ? 'on_the_way' :
-                     order.status === 'DELIVERED' ? 'delivered' : 'pending',
+                order.status === 'CONFIRMED' ? 'confirmed' :
+                  order.status === 'PREPARING' ? 'preparing' :
+                    order.status === 'ON_THE_WAY' ? 'on_the_way' :
+                      order.status === 'DELIVERED' ? 'delivered' : 'pending',
               createdAt: order.createdAt,
               estimatedDelivery: order.estimatedDelivery ?? ''
             }));
@@ -1708,7 +1630,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       } catch (dbError) {
         console.error('[DeliveryInvoices] Error loading from DB:', dbError);
       }
-      
+
       // 3. Combine and deduplicate by id
       const allInvoices = [...localInvoices];
       for (const dbInvoice of dbInvoices) {
@@ -1716,10 +1638,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           allInvoices.push(dbInvoice);
         }
       }
-      
+
       // 4. Sort by createdAt descending
       allInvoices.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      
+
       setDeliveryInvoices(allInvoices);
       console.log(`[DeliveryInvoices] Loaded ${localInvoices.length} local + ${dbInvoices.length} from DB = ${allInvoices.length} total`);
     } catch (error) {
@@ -1733,8 +1655,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const loadAllOrdersFromDatabase = async (): Promise<void> => {
     setIsLoadingOrders(true);
     try {
-      const businessId = profileId ?? 'business-1';
-      
+      const businessId = user.businessId || profileId || 'business-1';
+
       // Load restaurant orders
       const restaurantResponse = await fetch(`/api/orders?businessId=${businessId}&orderType=RESTAURANT`);
       if (restaurantResponse.ok) {
@@ -1758,9 +1680,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             items: order.items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0),
             total: order.total,
             status: (order.status === 'PENDING' ? 'pending' :
-                     order.status === 'PREPARING' ? 'preparing' :
-                     order.status === 'READY' ? 'ready' :
-                     order.status === 'DELIVERED' ? 'delivered' : 'pending') as Order['status'],
+              order.status === 'PREPARING' ? 'preparing' :
+                order.status === 'READY' ? 'ready' :
+                  order.status === 'DELIVERED' ? 'delivered' : 'pending') as Order['status'],
             time: new Date(order.createdAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
             date: new Date(order.createdAt).toLocaleDateString('es-CO'),
             phone: order.customerPhone,
@@ -1772,7 +1694,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           console.log(`[Orders] Loaded ${orders.length} restaurant orders from DB`);
         }
       }
-      
+
       // Load delivery orders
       const deliveryResponse = await fetch(`/api/orders?businessId=${businessId}&orderType=DELIVERY`);
       if (deliveryResponse.ok) {
@@ -1809,15 +1731,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             deliveryFee: order.deliveryFee,
             total: order.total,
             status: (order.status === 'PENDING' ? 'pending' :
-                     order.status === 'CONFIRMED' ? 'confirmed' :
-                     order.status === 'PREPARING' ? 'preparing' :
-                     order.status === 'ON_THE_WAY' ? 'on_the_way' :
-                     order.status === 'DELIVERED' ? 'delivered' :
-                     order.status === 'CANCELLED' ? 'cancelled' : 'pending') as DeliveryOrder['status'],
-            paymentMethod: (order.paymentMethod === 'Efectivo' || order.paymentMethod === 'cash') ? 'cash' : 
-                           (order.paymentMethod === 'Tarjeta' || order.paymentMethod === 'card') ? 'card' : 'transfer',
-            paymentStatus: order.paymentStatus === 'PAID' ? 'paid' : 
-                          order.paymentStatus === 'REFUNDED' ? 'refunded' : 'pending',
+              order.status === 'CONFIRMED' ? 'confirmed' :
+                order.status === 'PREPARING' ? 'preparing' :
+                  order.status === 'ON_THE_WAY' ? 'on_the_way' :
+                    order.status === 'DELIVERED' ? 'delivered' :
+                      order.status === 'CANCELLED' ? 'cancelled' : 'pending') as DeliveryOrder['status'],
+            paymentMethod: (order.paymentMethod === 'Efectivo' || order.paymentMethod === 'cash') ? 'cash' :
+              (order.paymentMethod === 'Tarjeta' || order.paymentMethod === 'card') ? 'card' : 'transfer',
+            paymentStatus: order.paymentStatus === 'PAID' ? 'paid' :
+              order.paymentStatus === 'REFUNDED' ? 'refunded' : 'pending',
             notes: order.notes,
             createdAt: order.createdAt,
             date: new Date(order.createdAt).toLocaleDateString('es-CO'),
@@ -1909,12 +1831,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // Create invoice
   const handleCreateInvoice = async (): Promise<void> => {
     if (cart.length === 0) return;
-    
+
     setIsCreatingInvoice(true);
-    
+
     const totals = getCartTotals();
     const newInvoiceNumber = lastInvoiceNumber + 1;
-    
+
     const newInvoice: RestaurantInvoice = {
       id: `inv-${Date.now()}`,
       invoiceNumber: `FAC-${String(newInvoiceNumber).padStart(4, '0')}`,
@@ -1933,14 +1855,14 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       status: 'paid',
       createdAt: new Date().toISOString()
     };
-    
+
     try {
       const response = await fetch('/api/restaurant-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newInvoice)
       });
-      
+
       if (response.ok) {
         setLastInvoiceNumber(newInvoiceNumber);
         setInvoices(prev => [newInvoice, ...prev]);
@@ -2060,7 +1982,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- Delete Single Invoice ---
   const deleteSingleInvoice = async (invoiceId: string): Promise<void> => {
     try {
-      const response = await fetch(`/api/restaurant-invoice?id=${invoiceId}`, {
+      const response = await fetch(`/api/restaurant-invoice?id=${invoiceId}&businessId=${profileId ?? user.businessId}`, {
         method: 'DELETE'
       });
 
@@ -2091,7 +2013,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       const response = await fetch('/api/restaurant-invoice/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: Array.from(selectedInvoiceIds) })
+        body: JSON.stringify({
+          ids: Array.from(selectedInvoiceIds),
+          businessId: profileId ?? user.businessId // profileId es el ID real del negocio cargado desde la DB
+        })
       });
 
       const data = await response.json();
@@ -2390,7 +2315,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // Get filtered products for invoice
   const getFilteredProductsForInvoice = (): Product[] => {
     let filtered = products.filter(p => p.available);
-    
+
     if (productSearchQuery.trim()) {
       const query = productSearchQuery.toLowerCase();
       filtered = filtered.filter(p =>
@@ -2398,7 +2323,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         p.description.toLowerCase().includes(query)
       );
     }
-    
+
     return filtered;
   };
 
@@ -2412,13 +2337,20 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     loadDeliveryInvoices();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reload delivery invoices when navigating to domicilios tab
+  // Load all data on mount and refresh periodically
+  useEffect(() => {
+    loadAllOrdersFromDatabase();
+    // Refresh every 30 seconds for real-time dashboard
+    const interval = setInterval(loadAllOrdersFromDatabase, 30000);
+    return () => clearInterval(interval);
+  }, [user.businessId, profileId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (activeTab === 'domicilios') {
       loadDeliveryInvoices();
     }
-    // Load all orders when navigating to pedidos tab
-    if (activeTab === 'pedidos') {
+    // Refresh orders when navigating to dashboard or pedidos
+    if (activeTab === 'dashboard' || activeTab === 'pedidos') {
       loadAllOrdersFromDatabase();
     }
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2447,26 +2379,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- Función para abrir el modal correcto según tipo de pedido ---
   const handleViewUnifiedOrder = (unifiedOrder: UnifiedOrder): void => {
     if (unifiedOrder.type === 'domicilio') {
-      // Buscar primero en dbDeliveryOrders (pedidos de la base de datos)
-      let deliveryOrder = dbDeliveryOrders.find(d => d.id === unifiedOrder.id);
-      if (deliveryOrder) {
-        openDeliveryDetail(deliveryOrder);
-        return;
-      }
-      // Si no se encuentra, buscar en mockDeliveryOrders
-      deliveryOrder = mockDeliveryOrders.find(d => d.id === unifiedOrder.id);
+      const deliveryOrder = dbDeliveryOrders.find(d => d.id === unifiedOrder.id);
       if (deliveryOrder) {
         openDeliveryDetail(deliveryOrder);
       }
     } else {
-      // Buscar primero en dbRestaurantOrders (pedidos de la base de datos)
-      let restaurantOrder = dbRestaurantOrders.find(o => o.id === unifiedOrder.id);
-      if (restaurantOrder) {
-        openOrderDetail(restaurantOrder);
-        return;
-      }
-      // Si no se encuentra, buscar en mockOrders
-      restaurantOrder = mockOrders.find(o => o.id === unifiedOrder.id);
+      const restaurantOrder = dbRestaurantOrders.find(o => o.id === unifiedOrder.id);
       if (restaurantOrder) {
         openOrderDetail(restaurantOrder);
       }
@@ -2490,25 +2408,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   const handleSaveOrderChanges = async (): Promise<void> => {
     if (!selectedOrder) return;
-    
+
     setIsSavingOrderChanges(true);
     try {
-      // Verificar si es un pedido de demostración (mock)
-      const isMockOrder = selectedOrder.id.startsWith('ORD-');
-      
-      if (isMockOrder) {
-        // Para pedidos de demostración, solo actualizar localmente
-        // Buscar y actualizar en mockOrders
-        const orderIndex = mockOrders.findIndex(o => o.id === selectedOrder.id);
-        if (orderIndex !== -1) {
-          mockOrders[orderIndex] = { ...selectedOrder };
-        }
-        
-        setToastMessage({ type: 'success', message: `Pedido de demostración ${selectedOrder.id} actualizado (solo local)` });
-        closeOrderDetail();
-        return;
-      }
-      
+
       // Guardar en la base de datos via API para pedidos reales
       const response = await fetch('/api/orders', {
         method: 'PUT',
@@ -2521,16 +2424,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           notes: selectedOrder.notes
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (!data.success) {
         throw new Error(data.error || 'Error al guardar');
       }
-      
+
       // Mostrar mensaje de éxito
       setToastMessage({ type: 'success', message: `Pedido ${selectedOrder.id} actualizado correctamente` });
-      
+
       // Cerrar el modal
       closeOrderDetail();
     } catch (error) {
@@ -2565,24 +2468,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- Guardar cambios de pedido de domicilio ---
   const handleSaveDeliveryChanges = async (): Promise<void> => {
     if (!selectedDelivery) return;
-    
+
     setIsSavingDeliveryChanges(true);
     try {
-      // Verificar si es un pedido de demostración (mock)
-      const isMockDelivery = selectedDelivery.id.startsWith('DOM-');
-      
-      if (isMockDelivery) {
-        // Para pedidos de demostración, solo actualizar localmente
-        const deliveryIndex = mockDeliveryOrders.findIndex(d => d.id === selectedDelivery.id);
-        if (deliveryIndex !== -1) {
-          mockDeliveryOrders[deliveryIndex] = { ...selectedDelivery };
-        }
-        
-        setToastMessage({ type: 'success', message: `Pedido de demostración ${selectedDelivery.invoiceNumber} actualizado (solo local)` });
-        closeDeliveryDetail();
-        return;
-      }
-      
+
       // Guardar en la base de datos via API para pedidos reales
       const response = await fetch('/api/orders', {
         method: 'PUT',
@@ -2596,16 +2485,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           notes: selectedDelivery.notes
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (!data.success) {
         throw new Error(data.error || 'Error al guardar');
       }
-      
+
       // Mostrar mensaje de éxito
       setToastMessage({ type: 'success', message: `Pedido de domicilio ${selectedDelivery.invoiceNumber} actualizado correctamente` });
-      
+
       // Cerrar el modal
       closeDeliveryDetail();
     } catch (error) {
@@ -2617,9 +2506,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   };
 
   const getFilteredDeliveries = (): DeliveryOrder[] => {
-    return mockDeliveryOrders.filter(delivery => {
+    return dbDeliveryOrders.filter(delivery => {
       const matchesFilter = deliveryFilter === 'all' || delivery.status === deliveryFilter;
-      const matchesSearch = !deliverySearch || 
+      const matchesSearch = !deliverySearch ||
         delivery.customer.toLowerCase().includes(deliverySearch.toLowerCase()) ||
         delivery.invoiceNumber.toLowerCase().includes(deliverySearch.toLowerCase()) ||
         delivery.address.toLowerCase().includes(deliverySearch.toLowerCase());
@@ -2631,7 +2520,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const getFilteredDeliveryInvoices = (): DeliveryInvoice[] => {
     return deliveryInvoices.filter(invoice => {
       const matchesFilter = deliveryFilter === 'all' || invoice.status === deliveryFilter;
-      const matchesSearch = !deliverySearch || 
+      const matchesSearch = !deliverySearch ||
         invoice.customerName.toLowerCase().includes(deliverySearch.toLowerCase()) ||
         invoice.invoiceNumber.toLowerCase().includes(deliverySearch.toLowerCase()) ||
         invoice.customerAddress.toLowerCase().includes(deliverySearch.toLowerCase()) ||
@@ -2644,7 +2533,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const getFilteredDeliveryInvoicesByDate = (): DeliveryInvoice[] => {
     const baseFiltered = getFilteredDeliveryInvoices();
     if (!deliveryDateFrom && !deliveryDateTo) return baseFiltered;
-    
+
     return baseFiltered.filter(invoice => {
       const invoiceDate = new Date(invoice.createdAt);
       const dateFrom = deliveryDateFrom ? new Date(deliveryDateFrom) : null;
@@ -2739,7 +2628,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       let existingInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
       existingInvoices = existingInvoices.filter(inv => !idsArray.includes(inv.id));
       localStorage.setItem('deliveryInvoices', JSON.stringify(existingInvoices));
-      
+
       setDeliveryInvoices(existingInvoices);
       setToastMessage({
         type: 'success',
@@ -2834,7 +2723,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // Filter orders by date range
   const getFilteredOrdersByDate = (orders: Order[]): Order[] => {
     if (!orderDateFrom && !orderDateTo) return orders;
-    
+
     return orders.filter(order => {
       // Parse time string (e.g., "12:30 PM") to a comparable date
       // For this mock data, we'll use a simple approach
@@ -2864,7 +2753,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // Filter deliveries by date range
   const getFilteredDeliveriesByDate = (deliveries: DeliveryOrder[]): DeliveryOrder[] => {
     if (!deliveryDateFrom && !deliveryDateTo) return deliveries;
-    
+
     return deliveries.filter(delivery => {
       const deliveryDate = new Date(delivery.createdAt);
       const dateFrom = deliveryDateFrom ? new Date(deliveryDateFrom) : null;
@@ -2883,7 +2772,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   // Get filtered orders (combined with date filter)
   const getFilteredOrders = (): Order[] => {
-    return getFilteredOrdersByDate(mockOrders);
+    return getFilteredOrdersByDate(dbRestaurantOrders);
   };
 
   // Get filtered deliveries (combined with date filter) - replaces original
@@ -3029,21 +2918,21 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const playNotificationSound = (): void => {
     try {
       const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      
+
       // Create a pleasant notification sound
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
-      
+
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
-      
+
       oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
       oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
       oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
-      
+
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-      
+
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.3);
     } catch (error) {
@@ -3059,10 +2948,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       type,
       timestamp: new Date()
     };
-    
+
     setNotifications(prev => [...prev, notification]);
     playNotificationSound();
-    
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== notification.id));
@@ -3094,12 +2983,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     return '';
   };
 
-  // Get all unified orders (restaurant + delivery) - combines DB orders with mock data
+  // Get all unified orders (restaurant + delivery) - ONLY from DB (No mock data)
   const getAllUnifiedOrders = (): UnifiedOrder[] => {
-    // Use database orders if available, otherwise fall back to mock data
-    const restaurantOrders: UnifiedOrder[] = (dbRestaurantOrders.length > 0 ? dbRestaurantOrders : mockOrders).map(order => ({
+    const restaurantOrders: UnifiedOrder[] = dbRestaurantOrders.map(order => ({
       id: order.id,
-      orderNumber: order.orderNumber, // Número amigable del pedido (ORD-0001)
+      orderNumber: order.orderNumber,
       customer: order.customer,
       items: order.items,
       total: order.total,
@@ -3112,10 +3000,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       notes: order.notes,
       createdAt: order.createdAt ?? new Date().toISOString()
     }));
-    
-    const deliveryOrders: UnifiedOrder[] = (dbDeliveryOrders.length > 0 ? dbDeliveryOrders : mockDeliveryOrders).map(order => ({
+
+    const deliveryOrders: UnifiedOrder[] = dbDeliveryOrders.map(order => ({
       id: order.id,
-      orderNumber: order.orderNumber, // Número amigable del pedido (ORD-0001)
+      orderNumber: order.orderNumber,
       customer: order.customer,
       items: order.items,
       total: order.total,
@@ -3128,7 +3016,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       notes: order.notes,
       createdAt: order.createdAt ?? new Date().toISOString()
     }));
-    
+
     return [...restaurantOrders, ...deliveryOrders];
   };
 
@@ -3205,7 +3093,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     const updateTimers = (): void => {
       const allOrders = getAllUnifiedOrders();
       const newTimers = new Map<string, number>();
-      
+
       allOrders.forEach(order => {
         if (shouldShowTimer(order.status)) {
           const minutes = getElapsedMinutes(order.createdAt);
@@ -3215,37 +3103,37 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           }
         }
       });
-      
+
       setOrderTimers(newTimers);
     };
-    
+
     // Actualizar inmediatamente
     updateTimers();
     // Actualizar cada 10 segundos para mayor precisión
     const interval = setInterval(updateTimers, 10000);
-    
+
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dbRestaurantOrders, dbDeliveryOrders]);
 
   // Check for new orders and notify
   useEffect(() => {
-    const currentCount = mockOrders.length + mockDeliveryOrders.length;
-    
+    const currentCount = dbRestaurantOrders.length + dbDeliveryOrders.length;
+
     if (previousOrderCount > 0 && currentCount > previousOrderCount) {
       const newCount = currentCount - previousOrderCount;
       addNotification(`🔔 ${newCount} nuevo${newCount > 1 ? 's' : ''} pedido${newCount > 1 ? 's' : ''} recibido${newCount > 1 ? 's' : ''}`, 'restaurante');
     }
-    
+
     setPreviousOrderCount(currentCount);
-  }, [mockOrders.length, mockDeliveryOrders.length]);
+  }, [dbRestaurantOrders.length, dbDeliveryOrders.length]);
 
   // --- Ticket and PDF Functions ---
   const printThermalTicket = (delivery: DeliveryOrder): void => {
     // Generate QR Code URL for thermal ticket
     const qrData = `FACTURA: ${delivery.invoiceNumber}\\nPedido: ${delivery.id}\\nTotal: $${delivery.total.toLocaleString()}`;
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrData)}`;
-    
+
     // Logo URL (use business logo)
     const logoUrl = profileForm.logo || profileForm.avatar || '';
 
@@ -3496,7 +3384,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     // Generate QR Code URL for the invoice
     const qrData = `FACTURA: ${delivery.invoiceNumber}\\nPedido: ${delivery.id}\\nCliente: ${delivery.customer}\\nTotal: $${delivery.total.toLocaleString()}\\nFecha: ${new Date().toLocaleDateString('es-CO')}`;
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
-    
+
     // Logo URL (use business logo)
     const logoUrl = profileForm.logo || profileForm.avatar || '';
 
@@ -4576,18 +4464,18 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     if (!slug) return false;
     setIsCheckingSlug(true);
     setSlugError(null);
-    
+
     try {
       // Simular verificación de slug - en producción sería una llamada a la API
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       // Simular que algunos slugs no están disponibles
       const reservedSlugs = ['admin', 'api', 'menu', 'dashboard', 'login', 'register'];
       if (reservedSlugs.includes(slug)) {
         setSlugError('Este slug no está disponible');
         return false;
       }
-      
+
       return true;
     } catch {
       setSlugError('Error al verificar disponibilidad');
@@ -4673,7 +4561,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const handleSaveShareSettings = async (): Promise<void> => {
     setIsSavingShare(true);
     setToastMessage(null);
-    
+
     try {
       // Validar slug si está activo
       if (menuSlugActive && menuSlug) {
@@ -4682,17 +4570,17 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           setIsSavingShare(false);
           return;
         }
-        
+
         const isAvailable = await checkSlugAvailability(menuSlug);
         if (!isAvailable) {
           setIsSavingShare(false);
           return;
         }
       }
-      
+
       // Simular guardado - en producción sería una llamada a la API
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       setToastMessage({ type: 'success', message: 'Configuración guardada correctamente' });
       setTimeout(() => setToastMessage(null), 3000);
     } catch {
@@ -4724,7 +4612,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- Profile Save Function ---
   const handleSaveProfile = async (): Promise<void> => {
     setIsSavingProfile(true);
-    
+
     try {
       // Validar campos requeridos
       if (!profileForm.businessName.trim()) {
@@ -4805,7 +4693,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         // Save to localStorage for persistence
         localStorage.setItem('businessProfile', JSON.stringify(data.data));
       }
-      
+
       setToastMessage({ type: 'success', message: 'Perfil actualizado correctamente' });
       setTimeout(() => setToastMessage(null), 3000);
     } catch (error) {
@@ -4932,11 +4820,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   const handleSavePrinter = (): void => {
     if (!printerForm.name.trim() || !printerForm.ip.trim()) return;
-    
+
     if (editingPrinter) {
       // Update existing
-      const updated = printers.map(p => 
-        p.id === editingPrinter.id 
+      const updated = printers.map(p =>
+        p.id === editingPrinter.id
           ? { ...p, ...printerForm }
           : p
       );
@@ -4950,7 +4838,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       };
       savePrinters([...printers, newPrinter]);
     }
-    
+
     setShowPrinterModal(false);
   };
 
@@ -4962,7 +4850,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   };
 
   const togglePrinterActive = (printerId: string): void => {
-    const updated = printers.map(p => 
+    const updated = printers.map(p =>
       p.id === printerId ? { ...p, isActive: !p.isActive } : p
     );
     savePrinters(updated);
@@ -5053,9 +4941,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         <div className="p-4 border-t border-gray-800">
           <div className="flex items-center gap-3 mb-3">
             {profileForm.avatar ? (
-              <img 
-                src={profileForm.avatar} 
-                alt="Avatar" 
+              <img
+                src={profileForm.avatar}
+                alt="Avatar"
                 className="w-10 h-10 rounded-full object-cover border-2 border-purple-500"
               />
             ) : (
@@ -5118,7 +5006,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -5134,7 +5022,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -5148,7 +5036,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   </div>
                 </CardContent>
               </Card>
-              
+
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
@@ -5171,23 +5059,29 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {mockOrders.map(order => (
+                  {getAllUnifiedOrders().slice(0, 5).map(order => (
                     <div key={order.id} className="flex items-center justify-between py-2 border-b last:border-0">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
                           <ShoppingCart className="w-5 h-5 text-gray-600" />
                         </div>
                         <div>
-                          <p className="font-medium">{order.customer}</p>
-                          <p className="text-sm text-gray-500">{order.orderNumber ?? order.id} • {order.items} items</p>
+                          <p className="font-medium text-sm truncate max-w-[150px]">{order.customer}</p>
+                          <p className="text-xs text-gray-500">{order.orderNumber || order.id.slice(-6)} • {order.items} items</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-medium">${order.total.toLocaleString()}</p>
+                        <p className="font-medium text-sm">${order.total.toLocaleString()}</p>
                         <StatusBadge status={order.status} />
                       </div>
                     </div>
                   ))}
+                  {getAllUnifiedOrders().length === 0 && (
+                    <div className="text-center py-8 text-gray-400">
+                      <ShoppingCart className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                      <p>No hay pedidos recientes</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -5202,7 +5096,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                 <TabsTrigger value="productos">Productos</TabsTrigger>
                 <TabsTrigger value="categorias">Categorías</TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="productos" className="space-y-6">
                 <div className="flex items-center gap-4 flex-wrap">
                   <Button
@@ -5212,7 +5106,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <Plus className="w-4 h-4 mr-2" />
                     Agregar Producto
                   </Button>
-                  
+
                   <Button
                     onClick={() => setShowAITextModal(true)}
                     variant="outline"
@@ -5221,7 +5115,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <Sparkles className="w-4 h-4 mr-2" />
                     Crear con IA (Texto)
                   </Button>
-                  
+
                   <Button
                     onClick={() => setShowAIVoiceModal(true)}
                     variant="outline"
@@ -5230,7 +5124,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <Mic className="w-4 h-4 mr-2" />
                     Crear con IA (Voz)
                   </Button>
-                  
+
                   <div className="relative flex-1 max-w-sm">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <Input
@@ -5240,7 +5134,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       className="pl-10"
                     />
                   </div>
-                  
+
                   {/* Product Filters */}
                   <div className="flex gap-2 flex-wrap">
                     <select
@@ -5253,7 +5147,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         <option key={cat.id} value={cat.name}>{cat.icon} {cat.name}</option>
                       ))}
                     </select>
-                    
+
                     <select
                       className="h-10 rounded-md border border-gray-300 px-3 text-sm"
                       value={filterAvailability}
@@ -5263,7 +5157,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       <option value="available">✅ Activos</option>
                       <option value="unavailable">❌ Inactivos</option>
                     </select>
-                    
+
                     <select
                       className="h-10 rounded-md border border-gray-300 px-3 text-sm"
                       value={filterFeatured}
@@ -5273,7 +5167,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       <option value="featured">⭐ Destacados</option>
                       <option value="normal">📌 Normales</option>
                     </select>
-                    
+
                     {(filterCategory !== 'all' || filterAvailability !== 'all' || filterFeatured !== 'all' || searchProduct) && (
                       <Button
                         variant="outline"
@@ -5302,89 +5196,89 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       // Filter by category
                       const matchesCategory = filterCategory === 'all' || p.category === filterCategory;
                       // Filter by availability
-                      const matchesAvailability = filterAvailability === 'all' || 
+                      const matchesAvailability = filterAvailability === 'all' ||
                         (filterAvailability === 'available' && p.available) ||
                         (filterAvailability === 'unavailable' && !p.available);
                       // Filter by featured
                       const matchesFeatured = filterFeatured === 'all' ||
                         (filterFeatured === 'featured' && p.featured) ||
                         (filterFeatured === 'normal' && !p.featured);
-                      
+
                       return matchesSearch && matchesCategory && matchesAvailability && matchesFeatured;
                     })
                     .map(product => (
-                    <Card key={product.id} className="hover:shadow-lg transition-shadow overflow-hidden">
-                      {/* Product Image */}
-                      <div className="w-full h-40 bg-gray-100 relative">
-                        {product.image && product.image.startsWith('data:image/') ? (
-                          <img 
-                            src={product.image} 
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              if (target.parentElement) {
-                                target.parentElement.innerHTML = `
+                      <Card key={product.id} className="hover:shadow-lg transition-shadow overflow-hidden">
+                        {/* Product Image */}
+                        <div className="w-full h-40 bg-gray-100 relative">
+                          {product.image && product.image.startsWith('data:image/') ? (
+                            <img
+                              src={product.image}
+                              alt={product.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                if (target.parentElement) {
+                                  target.parentElement.innerHTML = `
                                   <div class="w-full h-full flex items-center justify-center">
                                     <svg class="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                     </svg>
                                   </div>
                                 `;
-                              }
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <ImageIcon className="w-12 h-12 text-gray-300" />
-                          </div>
-                        )}
-                      </div>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <h4 className="font-medium">{product.name}</h4>
-                            <p className="text-sm text-gray-500">{product.category}</p>
-                          </div>
-                          {product.featured && (
-                            <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                                }
+                              }}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <ImageIcon className="w-12 h-12 text-gray-300" />
+                            </div>
                           )}
                         </div>
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <p className="text-xl font-bold">${product.price.toLocaleString()}</p>
-                            <p className="text-sm text-gray-500">Stock: {product.stock ?? 0}</p>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <h4 className="font-medium">{product.name}</h4>
+                              <p className="text-sm text-gray-500">{product.category}</p>
+                            </div>
+                            {product.featured && (
+                              <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                            )}
                           </div>
-                          <Badge variant={product.available ? 'default' : 'secondary'}>
-                            {product.available ? 'Disponible' : 'Agotado'}
-                          </Badge>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="flex-1"
-                            onClick={() => openEditProduct(product)}
-                          >
-                            <Edit className="w-4 h-4 mr-1" />
-                            Editar
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="text-red-600 hover:bg-red-50"
-                            onClick={() => openDeleteConfirm(product)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="text-xl font-bold">${product.price.toLocaleString()}</p>
+                              <p className="text-sm text-gray-500">Stock: {product.stock ?? 0}</p>
+                            </div>
+                            <Badge variant={product.available ? 'default' : 'secondary'}>
+                              {product.available ? 'Disponible' : 'Agotado'}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => openEditProduct(product)}
+                            >
+                              <Edit className="w-4 h-4 mr-1" />
+                              Editar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:bg-red-50"
+                              onClick={() => openDeleteConfirm(product)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                 </div>
               </TabsContent>
-              
+
               <TabsContent value="categorias" className="space-y-6">
                 <Button className="bg-purple-600 hover:bg-purple-700">
                   <Plus className="w-4 h-4 mr-2" />
@@ -5416,11 +5310,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                 {notifications.map(notif => (
                   <div
                     key={notif.id}
-                    className={`p-4 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in ${
-                      notif.type === 'restaurante' 
-                        ? 'bg-orange-500 text-white' 
-                        : 'bg-blue-500 text-white'
-                    }`}
+                    className={`p-4 rounded-lg shadow-lg flex items-start gap-3 animate-slide-in ${notif.type === 'restaurante'
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-blue-500 text-white'
+                      }`}
                   >
                     <Bell className="w-5 h-5 flex-shrink-0 mt-0.5" />
                     <div className="flex-1">
@@ -5554,19 +5447,19 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   </div>
                 </div>
                 <div className="p-4 flex-1 overflow-hidden">
-                <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
-                  {getOrdersByType('all').map(order => (
-                    <OrderCard 
-                      key={order.id} 
-                      order={order} 
-                      timer={orderTimers.get(order.id)}
-                      onView={() => handleViewUnifiedOrder(order)}
-                    />
-                  ))}
-                  {getOrdersByType('all').length === 0 && (
-                    <p className="text-center text-gray-500 py-8">No hay pedidos</p>
-                  )}
-                </div>
+                  <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
+                    {getOrdersByType('all').map(order => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
+                        timer={orderTimers.get(order.id)}
+                        onView={() => handleViewUnifiedOrder(order)}
+                      />
+                    ))}
+                    {getOrdersByType('all').length === 0 && (
+                      <p className="text-center text-gray-500 py-8">No hay pedidos</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -5589,19 +5482,19 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   </div>
                 </div>
                 <div className="p-4 flex-1 overflow-hidden">
-                <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
-                  {getOrdersByType('restaurante').map(order => (
-                    <OrderCard 
-                      key={order.id} 
-                      order={order} 
-                      timer={orderTimers.get(order.id)}
-                      onView={() => handleViewUnifiedOrder(order)}
-                    />
-                  ))}
-                  {getOrdersByType('restaurante').length === 0 && (
-                    <p className="text-center text-gray-500 py-8">No hay pedidos de restaurante</p>
-                  )}
-                </div>
+                  <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
+                    {getOrdersByType('restaurante').map(order => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
+                        timer={orderTimers.get(order.id)}
+                        onView={() => handleViewUnifiedOrder(order)}
+                      />
+                    ))}
+                    {getOrdersByType('restaurante').length === 0 && (
+                      <p className="text-center text-gray-500 py-8">No hay pedidos de restaurante</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -5624,19 +5517,19 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   </div>
                 </div>
                 <div className="p-4 flex-1 overflow-hidden">
-                <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
-                  {getOrdersByType('domicilio').map(order => (
-                    <OrderCard 
-                      key={order.id} 
-                      order={order} 
-                      timer={orderTimers.get(order.id)}
-                      onView={() => handleViewUnifiedOrder(order)}
-                    />
-                  ))}
-                  {getOrdersByType('domicilio').length === 0 && (
-                    <p className="text-center text-gray-500 py-8">No hay pedidos a domicilio</p>
-                  )}
-                </div>
+                  <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-3 pr-1">
+                    {getOrdersByType('domicilio').map(order => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
+                        timer={orderTimers.get(order.id)}
+                        onView={() => handleViewUnifiedOrder(order)}
+                      />
+                    ))}
+                    {getOrdersByType('domicilio').length === 0 && (
+                      <p className="text-center text-gray-500 py-8">No hay pedidos a domicilio</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -5646,9 +5539,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex-1 overflow-y-auto max-h-[70vh] space-y-3">
                   {getOrdersByType(mobileOrderColumn).map(order => (
-                    <OrderCard 
-                      key={order.id} 
-                      order={order} 
+                    <OrderCard
+                      key={order.id}
+                      order={order}
                       timer={orderTimers.get(order.id)}
                       onView={() => handleViewUnifiedOrder(order)}
                     />
@@ -5717,7 +5610,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   {/* Products Grid */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto pr-2">
                     {getFilteredProductsForInvoice().map(product => (
-                      <Card 
+                      <Card
                         key={product.id}
                         className="cursor-pointer hover:shadow-md transition-shadow"
                         onClick={() => addToCart(product)}
@@ -5902,11 +5795,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                 <CardContent>
                   {/* Toast Notification */}
                   {invoiceToast && (
-                    <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${
-                      invoiceToast.type === 'success' ? 'bg-green-100 text-green-800' :
+                    <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 ${invoiceToast.type === 'success' ? 'bg-green-100 text-green-800' :
                       invoiceToast.type === 'error' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
                       {invoiceToast.type === 'success' && <Check className="w-4 h-4" />}
                       {invoiceToast.type === 'error' && <X className="w-4 h-4" />}
                       {invoiceToast.type === 'warning' && <AlertTriangle className="w-4 h-4" />}
@@ -6083,13 +5975,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                   ${invoice.total.toLocaleString()}
                                 </td>
                                 <td className="py-3 px-3">
-                                  <span className={`text-xs px-2 py-1 rounded ${
-                                    invoice.paymentMethod === 'cash' ? 'bg-green-100 text-green-700' :
+                                  <span className={`text-xs px-2 py-1 rounded ${invoice.paymentMethod === 'cash' ? 'bg-green-100 text-green-700' :
                                     invoice.paymentMethod === 'card' ? 'bg-blue-100 text-blue-700' :
-                                    'bg-purple-100 text-purple-700'
-                                  }`}>
+                                      'bg-purple-100 text-purple-700'
+                                    }`}>
                                     {invoice.paymentMethod === 'cash' ? 'Efectivo' :
-                                     invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}
+                                      invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}
                                   </span>
                                 </td>
                                 <td className="py-3 px-3 text-gray-600">
@@ -6242,11 +6133,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                           <div
                             key={product.id}
                             onClick={() => addToDeliveryCart(product)}
-                            className={`p-3 rounded-lg border cursor-pointer transition-all hover:border-purple-400 hover:bg-purple-50 ${
-                              deliveryCart.some(item => item.productId === product.id) 
-                                ? 'border-purple-500 bg-purple-50' 
-                                : 'border-gray-200'
-                            }`}
+                            className={`p-3 rounded-lg border cursor-pointer transition-all hover:border-purple-400 hover:bg-purple-50 ${deliveryCart.some(item => item.productId === product.id)
+                              ? 'border-purple-500 bg-purple-50'
+                              : 'border-gray-200'
+                              }`}
                           >
                             <div className="flex items-center gap-2 mb-1">
                               {product.image ? (
@@ -6462,9 +6352,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       <Button
                         onClick={handleCreateDeliveryInvoice}
                         disabled={
-                          deliveryCart.length === 0 || 
-                          !deliveryCustomerName.trim() || 
-                          !deliveryCustomerPhone.trim() || 
+                          deliveryCart.length === 0 ||
+                          !deliveryCustomerName.trim() ||
+                          !deliveryCustomerPhone.trim() ||
                           !deliveryCustomerAddress.trim() ||
                           isCreatingDeliveryInvoice
                         }
@@ -6508,272 +6398,272 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             {deliveryViewMode === 'list' && (
               <>
                 {/* Stats Cards - Using real delivery invoices */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card className="bg-yellow-50 border-yellow-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-yellow-600">Pendientes</p>
-                      <p className="text-2xl font-bold text-yellow-700">
-                        {deliveryInvoices.filter(d => d.status === 'pending').length}
-                      </p>
-                    </div>
-                    <Clock className="w-8 h-8 text-yellow-500" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-orange-50 border-orange-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-orange-600">Preparando</p>
-                      <p className="text-2xl font-bold text-orange-700">
-                        {deliveryInvoices.filter(d => d.status === 'preparing').length}
-                      </p>
-                    </div>
-                    <Package className="w-8 h-8 text-orange-500" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-purple-50 border-purple-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-purple-600">En Camino</p>
-                      <p className="text-2xl font-bold text-purple-700">
-                        {deliveryInvoices.filter(d => d.status === 'on_the_way').length}
-                      </p>
-                    </div>
-                    <Truck className="w-8 h-8 text-purple-500" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-green-50 border-green-200">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-green-600">Entregados</p>
-                      <p className="text-2xl font-bold text-green-700">
-                        {deliveryInvoices.filter(d => d.status === 'delivered').length}
-                      </p>
-                    </div>
-                    <Check className="w-8 h-8 text-green-500" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card className="bg-yellow-50 border-yellow-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-yellow-600">Pendientes</p>
+                          <p className="text-2xl font-bold text-yellow-700">
+                            {deliveryInvoices.filter(d => d.status === 'pending').length}
+                          </p>
+                        </div>
+                        <Clock className="w-8 h-8 text-yellow-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-orange-50 border-orange-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-orange-600">Preparando</p>
+                          <p className="text-2xl font-bold text-orange-700">
+                            {deliveryInvoices.filter(d => d.status === 'preparing').length}
+                          </p>
+                        </div>
+                        <Package className="w-8 h-8 text-orange-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-purple-50 border-purple-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-purple-600">En Camino</p>
+                          <p className="text-2xl font-bold text-purple-700">
+                            {deliveryInvoices.filter(d => d.status === 'on_the_way').length}
+                          </p>
+                        </div>
+                        <Truck className="w-8 h-8 text-purple-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-green-50 border-green-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-green-600">Entregados</p>
+                          <p className="text-2xl font-bold text-green-700">
+                            {deliveryInvoices.filter(d => d.status === 'delivered').length}
+                          </p>
+                        </div>
+                        <Check className="w-8 h-8 text-green-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
 
-            {/* Filters and Search */}
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  variant={deliveryFilter === 'all' ? 'default' : 'outline'}
-                  onClick={() => setDeliveryFilter('all')}
-                  className={deliveryFilter === 'all' ? 'bg-purple-600 hover:bg-purple-700' : ''}
-                >
-                  Todos
-                </Button>
-                <Button
-                  variant={deliveryFilter === 'pending' ? 'default' : 'outline'}
-                  onClick={() => setDeliveryFilter('pending')}
-                  className={deliveryFilter === 'pending' ? 'bg-yellow-500 hover:bg-yellow-600' : ''}
-                >
-                  Pendientes
-                </Button>
-                <Button
-                  variant={deliveryFilter === 'on_the_way' ? 'default' : 'outline'}
-                  onClick={() => setDeliveryFilter('on_the_way')}
-                  className={deliveryFilter === 'on_the_way' ? 'bg-purple-500 hover:bg-purple-600' : ''}
-                >
-                  En Camino
-                </Button>
-                <Button
-                  variant={deliveryFilter === 'delivered' ? 'default' : 'outline'}
-                  onClick={() => setDeliveryFilter('delivered')}
-                  className={deliveryFilter === 'delivered' ? 'bg-green-500 hover:bg-green-600' : ''}
-                >
-                  Entregados
-                </Button>
-              </div>
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar por cliente, factura o dirección..."
-                  value={deliverySearch}
-                  onChange={(e) => setDeliverySearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-            </div>
-
-            {/* NEW: Date Filter Row for Domicilios */}
-            <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50 rounded-lg">
-              <span className="text-sm font-medium text-gray-700">Filtrar por fecha:</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={deliveryDateFrom}
-                  onChange={(e) => setDeliveryDateFrom(e.target.value)}
-                  className="px-3 py-1.5 border rounded-lg text-sm"
-                  placeholder="Desde"
-                />
-                <span className="text-gray-500">a</span>
-                <input
-                  type="date"
-                  value={deliveryDateTo}
-                  onChange={(e) => setDeliveryDateTo(e.target.value)}
-                  className="px-3 py-1.5 border rounded-lg text-sm"
-                  placeholder="Hasta"
-                />
-              </div>
-              {(deliveryDateFrom || deliveryDateTo) && (
-                <Button size="sm" variant="outline" onClick={clearDeliveryDateFilter}>
-                  Limpiar
-                </Button>
-              )}
-            </div>
-
-            {/* NEW: Bulk Actions Bar for Domicilios */}
-            {selectedDeliveryIds.size > 0 && (
-              <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                <span className="text-sm font-medium text-purple-700">
-                  {selectedDeliveryIds.size} domicilio{selectedDeliveryIds.size !== 1 ? 's' : ''} seleccionado{selectedDeliveryIds.size !== 1 ? 's' : ''}
-                </span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => setShowDeliveryDeleteConfirm(true)}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Eliminar seleccionados
-                </Button>
-              </div>
-            )}
-
-            {/* Delivery Invoices Table - Using real invoices from TPV */}
-            <Card>
-              <CardContent className="p-0">
-                {isLoadingDeliveryInvoices ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-                  </div>
-                ) : deliveryInvoices.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">
-                    <Truck className="w-16 h-16 mx-auto mb-3 text-gray-300" />
-                    <p className="text-lg font-medium">No hay facturas de domicilio</p>
-                    <p className="text-sm mt-1">Crea facturas de domicilio desde el TPV para verlas aquí</p>
+                {/* Filters and Search */}
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex gap-2 flex-wrap">
                     <Button
-                      className="mt-4 bg-purple-600 hover:bg-purple-700"
-                      onClick={() => setDeliveryViewMode('create')}
+                      variant={deliveryFilter === 'all' ? 'default' : 'outline'}
+                      onClick={() => setDeliveryFilter('all')}
+                      className={deliveryFilter === 'all' ? 'bg-purple-600 hover:bg-purple-700' : ''}
                     >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Crear Primera Factura
+                      Todos
+                    </Button>
+                    <Button
+                      variant={deliveryFilter === 'pending' ? 'default' : 'outline'}
+                      onClick={() => setDeliveryFilter('pending')}
+                      className={deliveryFilter === 'pending' ? 'bg-yellow-500 hover:bg-yellow-600' : ''}
+                    >
+                      Pendientes
+                    </Button>
+                    <Button
+                      variant={deliveryFilter === 'on_the_way' ? 'default' : 'outline'}
+                      onClick={() => setDeliveryFilter('on_the_way')}
+                      className={deliveryFilter === 'on_the_way' ? 'bg-purple-500 hover:bg-purple-600' : ''}
+                    >
+                      En Camino
+                    </Button>
+                    <Button
+                      variant={deliveryFilter === 'delivered' ? 'default' : 'outline'}
+                      onClick={() => setDeliveryFilter('delivered')}
+                      className={deliveryFilter === 'delivered' ? 'bg-green-500 hover:bg-green-600' : ''}
+                    >
+                      Entregados
                     </Button>
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="px-3 py-3">
-                            <input
-                              type="checkbox"
-                              checked={selectedDeliveryIds.size === getFilteredDeliveryInvoicesByDate().length && getFilteredDeliveryInvoicesByDate().length > 0}
-                              onChange={(e) => toggleAllDeliveryInvoices(e.target.checked)}
-                              className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                            />
-                          </th>
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Factura</th>
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Cliente</th>
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Dirección</th>
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Items</th>
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Total</th>
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Estado</th>
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Pago</th>
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Fecha</th>
-                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Entrega Est.</th>
-                          <th className="text-right px-4 py-3 font-medium text-gray-600 text-sm">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {getFilteredDeliveryInvoicesByDate().map(invoice => (
-                          <tr key={invoice.id} className="hover:bg-gray-50">
-                            <td className="px-3 py-3">
-                              <input
-                                type="checkbox"
-                                checked={selectedDeliveryIds.has(invoice.id)}
-                                onChange={() => toggleDeliveryInvoiceSelection(invoice.id)}
-                                className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                              />
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="font-medium text-purple-600">{invoice.invoiceNumber}</span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div>
-                                <p className="font-medium text-gray-900">{invoice.customerName}</p>
-                                <p className="text-xs text-gray-500">{invoice.customerPhone}</p>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="max-w-[200px]">
-                                <p className="text-sm text-gray-900 truncate">{invoice.customerAddress}</p>
-                                <p className="text-xs text-gray-500">{invoice.customerNeighborhood}</p>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-center">{invoice.items.reduce((sum, item) => sum + item.quantity, 0)}</td>
-                            <td className="px-4 py-3">
-                              <div>
-                                <p className="font-bold text-gray-900">${invoice.total.toLocaleString()}</p>
-                                <p className="text-xs text-gray-500">Domicilio: ${invoice.deliveryFee.toLocaleString()}</p>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <Badge className={getDeliveryInvoiceStatusColor(invoice.status)}>
-                                {getDeliveryInvoiceStatusText(invoice.status)}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div>
-                                <Badge className={getDeliveryInvoicePaymentStatusColor(invoice.paymentStatus)}>
-                                  {invoice.paymentStatus === 'pending' ? 'Pendiente' : 'Pagado'}
-                                </Badge>
-                                <p className="text-xs text-gray-500 mt-1">{getDeliveryInvoicePaymentMethodText(invoice.paymentMethod)}</p>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {new Date(invoice.createdAt).toLocaleDateString('es-CO', {
-                                day: '2-digit',
-                                month: 'short',
-                                year: 'numeric'
-                              })}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">{invoice.estimatedDelivery}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-end gap-1">
-                                {/* Ver detalles */}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-gray-600 hover:text-purple-600 hover:bg-purple-50"
-                                  title="Ver detalles"
-                                  onClick={() => {
-                                    setSelectedDeliveryInvoice(invoice);
-                                    setShowDeliveryInvoiceDetail(true);
-                                  }}
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                                {/* Imprimir directo */}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-gray-600 hover:text-blue-600 hover:bg-blue-50"
-                                  title="Imprimir ticket"
-                                  onClick={() => {
-                                    const ticketContent = `
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por cliente, factura o dirección..."
+                      value={deliverySearch}
+                      onChange={(e) => setDeliverySearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* NEW: Date Filter Row for Domicilios */}
+                <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium text-gray-700">Filtrar por fecha:</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={deliveryDateFrom}
+                      onChange={(e) => setDeliveryDateFrom(e.target.value)}
+                      className="px-3 py-1.5 border rounded-lg text-sm"
+                      placeholder="Desde"
+                    />
+                    <span className="text-gray-500">a</span>
+                    <input
+                      type="date"
+                      value={deliveryDateTo}
+                      onChange={(e) => setDeliveryDateTo(e.target.value)}
+                      className="px-3 py-1.5 border rounded-lg text-sm"
+                      placeholder="Hasta"
+                    />
+                  </div>
+                  {(deliveryDateFrom || deliveryDateTo) && (
+                    <Button size="sm" variant="outline" onClick={clearDeliveryDateFilter}>
+                      Limpiar
+                    </Button>
+                  )}
+                </div>
+
+                {/* NEW: Bulk Actions Bar for Domicilios */}
+                {selectedDeliveryIds.size > 0 && (
+                  <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <span className="text-sm font-medium text-purple-700">
+                      {selectedDeliveryIds.size} domicilio{selectedDeliveryIds.size !== 1 ? 's' : ''} seleccionado{selectedDeliveryIds.size !== 1 ? 's' : ''}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setShowDeliveryDeleteConfirm(true)}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Eliminar seleccionados
+                    </Button>
+                  </div>
+                )}
+
+                {/* Delivery Invoices Table - Using real invoices from TPV */}
+                <Card>
+                  <CardContent className="p-0">
+                    {isLoadingDeliveryInvoices ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                      </div>
+                    ) : deliveryInvoices.length === 0 ? (
+                      <div className="text-center py-12 text-gray-500">
+                        <Truck className="w-16 h-16 mx-auto mb-3 text-gray-300" />
+                        <p className="text-lg font-medium">No hay facturas de domicilio</p>
+                        <p className="text-sm mt-1">Crea facturas de domicilio desde el TPV para verlas aquí</p>
+                        <Button
+                          className="mt-4 bg-purple-600 hover:bg-purple-700"
+                          onClick={() => setDeliveryViewMode('create')}
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Crear Primera Factura
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-3 py-3">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedDeliveryIds.size === getFilteredDeliveryInvoicesByDate().length && getFilteredDeliveryInvoicesByDate().length > 0}
+                                  onChange={(e) => toggleAllDeliveryInvoices(e.target.checked)}
+                                  className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                />
+                              </th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Factura</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Cliente</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Dirección</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Items</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Total</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Estado</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Pago</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Fecha</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600 text-sm">Entrega Est.</th>
+                              <th className="text-right px-4 py-3 font-medium text-gray-600 text-sm">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {getFilteredDeliveryInvoicesByDate().map(invoice => (
+                              <tr key={invoice.id} className="hover:bg-gray-50">
+                                <td className="px-3 py-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedDeliveryIds.has(invoice.id)}
+                                    onChange={() => toggleDeliveryInvoiceSelection(invoice.id)}
+                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                  />
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="font-medium text-purple-600">{invoice.invoiceNumber}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div>
+                                    <p className="font-medium text-gray-900">{invoice.customerName}</p>
+                                    <p className="text-xs text-gray-500">{invoice.customerPhone}</p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="max-w-[200px]">
+                                    <p className="text-sm text-gray-900 truncate">{invoice.customerAddress}</p>
+                                    <p className="text-xs text-gray-500">{invoice.customerNeighborhood}</p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-center">{invoice.items.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                                <td className="px-4 py-3">
+                                  <div>
+                                    <p className="font-bold text-gray-900">${invoice.total.toLocaleString()}</p>
+                                    <p className="text-xs text-gray-500">Domicilio: ${invoice.deliveryFee.toLocaleString()}</p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Badge className={getDeliveryInvoiceStatusColor(invoice.status)}>
+                                    {getDeliveryInvoiceStatusText(invoice.status)}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div>
+                                    <Badge className={getDeliveryInvoicePaymentStatusColor(invoice.paymentStatus)}>
+                                      {invoice.paymentStatus === 'pending' ? 'Pendiente' : 'Pagado'}
+                                    </Badge>
+                                    <p className="text-xs text-gray-500 mt-1">{getDeliveryInvoicePaymentMethodText(invoice.paymentMethod)}</p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">
+                                  {new Date(invoice.createdAt).toLocaleDateString('es-CO', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric'
+                                  })}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-600">{invoice.estimatedDelivery}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center justify-end gap-1">
+                                    {/* Ver detalles */}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-gray-600 hover:text-purple-600 hover:bg-purple-50"
+                                      title="Ver detalles"
+                                      onClick={() => {
+                                        setSelectedDeliveryInvoice(invoice);
+                                        setShowDeliveryInvoiceDetail(true);
+                                      }}
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </Button>
+                                    {/* Imprimir directo */}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+                                      title="Imprimir ticket"
+                                      onClick={() => {
+                                        const ticketContent = `
                                       <html>
                                       <head>
                                         <title>Ticket ${invoice.invoiceNumber}</title>
@@ -6820,36 +6710,36 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                       </body>
                                       </html>
                                     `;
-                                    const printWindow = window.open('', '_blank', 'width=320,height=500');
-                                    if (printWindow) {
-                                      printWindow.document.write(ticketContent);
-                                      printWindow.document.close();
-                                    }
-                                  }}
-                                >
-                                  <Printer className="w-4 h-4" />
-                                </Button>
-                                {/* Editar */}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-gray-600 hover:text-green-600 hover:bg-green-50"
-                                  title="Editar factura"
-                                  onClick={() => {
-                                    setEditingDeliveryInvoice({ ...invoice });
-                                    setShowDeliveryInvoiceEdit(true);
-                                  }}
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                                {/* Descargar PDF */}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-gray-600 hover:text-purple-600 hover:bg-purple-50"
-                                  title="Descargar PDF"
-                                  onClick={() => {
-                                    const pdfContent = `
+                                        const printWindow = window.open('', '_blank', 'width=320,height=500');
+                                        if (printWindow) {
+                                          printWindow.document.write(ticketContent);
+                                          printWindow.document.close();
+                                        }
+                                      }}
+                                    >
+                                      <Printer className="w-4 h-4" />
+                                    </Button>
+                                    {/* Editar */}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-gray-600 hover:text-green-600 hover:bg-green-50"
+                                      title="Editar factura"
+                                      onClick={() => {
+                                        setEditingDeliveryInvoice({ ...invoice });
+                                        setShowDeliveryInvoiceEdit(true);
+                                      }}
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                    {/* Descargar PDF */}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-gray-600 hover:text-purple-600 hover:bg-purple-50"
+                                      title="Descargar PDF"
+                                      onClick={() => {
+                                        const pdfContent = `
                                       <html>
                                       <head>
                                         <title>Factura ${invoice.invoiceNumber}</title>
@@ -6931,58 +6821,58 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                       </body>
                                       </html>
                                     `;
-                                    // Crear blob y descargar como archivo
-                                    const blob = new Blob([pdfContent], { type: 'text/html;charset=utf-8' });
-                                    const url = URL.createObjectURL(blob);
-                                    const link = document.createElement('a');
-                                    link.href = url;
-                                    link.download = `Factura_${invoice.invoiceNumber}.html`;
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                    URL.revokeObjectURL(url);
-                                    setToastMessage({ type: 'success', message: `✅ PDF descargado: Factura_${invoice.invoiceNumber}.html` });
-                                    setTimeout(() => setToastMessage(null), 3000);
-                                  }}
-                                >
-                                  <FileText className="w-4 h-4" />
-                                </Button>
-                                {/* Eliminar */}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-gray-600 hover:text-red-600 hover:bg-red-50"
-                                  title="Eliminar factura"
-                                  onClick={() => {
-                                    if (confirm(`¿Está seguro de eliminar la factura ${invoice.invoiceNumber}?\n\nEsta acción no se puede deshacer.`)) {
-                                      const savedInvoices = localStorage.getItem('deliveryInvoices');
-                                      let existingInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
-                                      existingInvoices = existingInvoices.filter(inv => inv.id !== invoice.id);
-                                      localStorage.setItem('deliveryInvoices', JSON.stringify(existingInvoices));
-                                      setDeliveryInvoices(existingInvoices);
-                                      setToastMessage({ type: 'success', message: `✅ Factura ${invoice.invoiceNumber} eliminada correctamente` });
-                                      setTimeout(() => setToastMessage(null), 3000);
-                                    }
-                                  }}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                {getFilteredDeliveryInvoicesByDate().length === 0 && deliveryInvoices.length > 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Truck className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>No se encontraron domicilios con los filtros aplicados</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                                        // Crear blob y descargar como archivo
+                                        const blob = new Blob([pdfContent], { type: 'text/html;charset=utf-8' });
+                                        const url = URL.createObjectURL(blob);
+                                        const link = document.createElement('a');
+                                        link.href = url;
+                                        link.download = `Factura_${invoice.invoiceNumber}.html`;
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                        URL.revokeObjectURL(url);
+                                        setToastMessage({ type: 'success', message: `✅ PDF descargado: Factura_${invoice.invoiceNumber}.html` });
+                                        setTimeout(() => setToastMessage(null), 3000);
+                                      }}
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </Button>
+                                    {/* Eliminar */}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-gray-600 hover:text-red-600 hover:bg-red-50"
+                                      title="Eliminar factura"
+                                      onClick={() => {
+                                        if (confirm(`¿Está seguro de eliminar la factura ${invoice.invoiceNumber}?\n\nEsta acción no se puede deshacer.`)) {
+                                          const savedInvoices = localStorage.getItem('deliveryInvoices');
+                                          let existingInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
+                                          existingInvoices = existingInvoices.filter(inv => inv.id !== invoice.id);
+                                          localStorage.setItem('deliveryInvoices', JSON.stringify(existingInvoices));
+                                          setDeliveryInvoices(existingInvoices);
+                                          setToastMessage({ type: 'success', message: `✅ Factura ${invoice.invoiceNumber} eliminada correctamente` });
+                                          setTimeout(() => setToastMessage(null), 3000);
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {getFilteredDeliveryInvoicesByDate().length === 0 && deliveryInvoices.length > 0 && (
+                      <div className="text-center py-8 text-gray-500">
+                        <Truck className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                        <p>No se encontraron domicilios con los filtros aplicados</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </>
             )}
           </div>
@@ -7523,7 +7413,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                           <td className="py-3 px-4 text-center">
                             <button
                               onClick={() => {
-                                const updatedProducts = products.map(p => 
+                                const updatedProducts = products.map(p =>
                                   p.id === product.id ? { ...p, requiereEmpaque: !p.requiereEmpaque } : p
                                 );
                                 setProducts(updatedProducts);
@@ -7568,9 +7458,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           <div className="space-y-6">
             {/* Toast Notification */}
             {toastMessage && (
-              <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
-                toastMessage.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-              } text-white flex items-center gap-2 animate-in fade-in slide-in-from-top-2`}>
+              <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${toastMessage.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+                } text-white flex items-center gap-2 animate-in fade-in slide-in-from-top-2`}>
                 {toastMessage.type === 'success' ? (
                   <Check className="w-5 h-5" />
                 ) : (
@@ -7829,9 +7718,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           <div className="space-y-6">
             {/* Toast Notification */}
             {toastMessage && (
-              <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
-                toastMessage.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-              } text-white flex items-center gap-2 animate-in fade-in slide-in-from-top-2`}>
+              <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${toastMessage.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+                } text-white flex items-center gap-2 animate-in fade-in slide-in-from-top-2`}>
                 {toastMessage.type === 'success' ? (
                   <Check className="w-5 h-5" />
                 ) : (
@@ -7857,16 +7745,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <Label>Nombre del Negocio</Label>
-                        <Input 
-                          placeholder="Nombre del negocio" 
+                        <Input
+                          placeholder="Nombre del negocio"
                           value={profileForm.businessName}
                           onChange={(e) => setProfileForm(prev => ({ ...prev, businessName: e.target.value }))}
                         />
                       </div>
                       <div>
                         <Label>Teléfono</Label>
-                        <Input 
-                          placeholder="Teléfono" 
+                        <Input
+                          placeholder="Teléfono"
                           value={profileForm.phone}
                           onChange={(e) => setProfileForm(prev => ({ ...prev, phone: e.target.value }))}
                         />
@@ -7874,8 +7762,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     </div>
                     <div>
                       <Label>Dirección</Label>
-                      <Input 
-                        placeholder="Dirección" 
+                      <Input
+                        placeholder="Dirección"
                         value={profileForm.address}
                         onChange={(e) => setProfileForm(prev => ({ ...prev, address: e.target.value }))}
                       />
@@ -7883,12 +7771,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <Label>Impoconsumo (%)</Label>
-                        <Input 
+                        <Input
                           type="number"
                           min="0"
                           max="100"
                           step="0.1"
-                          placeholder="8" 
+                          placeholder="8"
                           value={profileForm.impoconsumo}
                           onChange={(e) => setProfileForm(prev => ({ ...prev, impoconsumo: parseFloat(e.target.value) || 0 }))}
                         />
@@ -7898,32 +7786,32 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       <div>
                         <Label>Color Primario</Label>
                         <div className="flex items-center gap-2">
-                          <Input 
-                            type="color" 
+                          <Input
+                            type="color"
                             value={profileForm.primaryColor}
                             onChange={(e) => setProfileForm(prev => ({ ...prev, primaryColor: e.target.value }))}
-                            className="w-16 h-10" 
+                            className="w-16 h-10"
                           />
-                          <Input 
+                          <Input
                             value={profileForm.primaryColor}
                             onChange={(e) => setProfileForm(prev => ({ ...prev, primaryColor: e.target.value }))}
-                            className="flex-1" 
+                            className="flex-1"
                           />
                         </div>
                       </div>
                       <div>
                         <Label>Color Secundario</Label>
                         <div className="flex items-center gap-2">
-                          <Input 
-                            type="color" 
+                          <Input
+                            type="color"
                             value={profileForm.secondaryColor}
                             onChange={(e) => setProfileForm(prev => ({ ...prev, secondaryColor: e.target.value }))}
-                            className="w-16 h-10" 
+                            className="w-16 h-10"
                           />
-                          <Input 
+                          <Input
                             value={profileForm.secondaryColor}
                             onChange={(e) => setProfileForm(prev => ({ ...prev, secondaryColor: e.target.value }))}
-                            className="flex-1" 
+                            className="flex-1"
                           />
                         </div>
                       </div>
@@ -7932,7 +7820,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     {/* Imágenes del Negocio */}
                     <div className="space-y-4 pt-4 border-t border-gray-200">
                       <h3 className="font-medium text-gray-900">Imágenes del Negocio</h3>
-                      
+
                       {/* Franja Hero Sutil */}
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
@@ -7968,25 +7856,25 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                             </span>
                           </div>
                         </div>
-                        
+
                         {/* Preview de la Franja Hero */}
-                        <div 
+                        <div
                           className="relative w-full h-40 rounded-lg overflow-hidden border border-gray-200 group"
                           style={{ backgroundColor: profileForm.heroImageUrl ? 'transparent' : '#1a1a1a' }}
                         >
                           {profileForm.heroImageUrl ? (
                             <>
                               {/* Imagen de fondo */}
-                              <img 
-                                src={profileForm.heroImageUrl} 
-                                alt="Hero Banner" 
+                              <img
+                                src={profileForm.heroImageUrl}
+                                alt="Hero Banner"
                                 className="absolute inset-0 w-full h-full object-cover"
                               />
                               {/* Overlay negro al 45% */}
                               <div className="absolute inset-0 bg-black/45" />
                               {/* Degradado lateral */}
                               <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
-                              
+
                               {/* Contenido sobre la imagen */}
                               <div className="relative h-full flex flex-col justify-center p-6">
                                 <h4 className="text-2xl font-bold text-white mb-1">{profileForm.businessName || 'Mi Negocio'}</h4>
@@ -7998,7 +7886,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                   </span>
                                 </div>
                               </div>
-                              
+
                               {/* Botón de edición */}
                               <button
                                 type="button"
@@ -8014,9 +7902,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                               <ImageIcon className="w-10 h-10 text-gray-500 mb-2" />
                               <span className="text-gray-400 text-sm font-medium">Click para subir imagen hero</span>
                               <span className="text-gray-500 text-xs mt-1">Recomendado: 1200x300px</span>
-                              <input 
-                                type="file" 
-                                className="hidden" 
+                              <input
+                                type="file"
+                                className="hidden"
                                 accept="image/*"
                                 onChange={async (e) => {
                                   const file = e.target.files?.[0];
@@ -8025,8 +7913,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                     reader.onload = async (event) => {
                                       const heroImageUrl = event.target?.result as string;
                                       // Update state
-                                      setProfileForm(prev => ({ 
-                                        ...prev, 
+                                      setProfileForm(prev => ({
+                                        ...prev,
                                         heroImageUrl,
                                         showHeroBanner: true
                                       }));
@@ -8057,7 +7945,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                           )}
                         </div>
                       </div>
-                      
+
                       {/* Avatar */}
                       <div>
                         <Label className="text-sm font-medium">Avatar</Label>
@@ -8065,9 +7953,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         <div className="flex items-center gap-4">
                           {profileForm.avatar ? (
                             <div className="relative">
-                              <img 
-                                src={profileForm.avatar} 
-                                alt="Avatar" 
+                              <img
+                                src={profileForm.avatar}
+                                alt="Avatar"
                                 className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
                               />
                               <button
@@ -8081,9 +7969,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                           ) : (
                             <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-gray-300 rounded-full cursor-pointer hover:bg-gray-50 transition-colors">
                               <ImageIcon className="w-6 h-6 text-gray-400" />
-                              <input 
-                                type="file" 
-                                className="hidden" 
+                              <input
+                                type="file"
+                                className="hidden"
                                 accept="image/*"
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
@@ -8109,9 +7997,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         <div className="flex items-center gap-4">
                           {profileForm.logo ? (
                             <div className="relative">
-                              <img 
-                                src={profileForm.logo} 
-                                alt="Logo" 
+                              <img
+                                src={profileForm.logo}
+                                alt="Logo"
                                 className="w-32 h-16 object-contain border border-gray-200 rounded-lg bg-white p-1"
                               />
                               <button
@@ -8125,9 +8013,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                           ) : (
                             <label className="flex flex-col items-center justify-center w-32 h-16 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                               <ImageIcon className="w-6 h-6 text-gray-400" />
-                              <input 
-                                type="file" 
-                                className="hidden" 
+                              <input
+                                type="file"
+                                className="hidden"
                                 accept="image/*"
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
@@ -8153,9 +8041,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         <div className="flex items-center gap-4">
                           {profileForm.favicon ? (
                             <div className="relative">
-                              <img 
-                                src={profileForm.favicon} 
-                                alt="Favicon" 
+                              <img
+                                src={profileForm.favicon}
+                                alt="Favicon"
                                 className="w-10 h-10 object-contain border border-gray-200 rounded-lg bg-white p-1"
                               />
                               <button
@@ -8169,9 +8057,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                           ) : (
                             <label className="flex flex-col items-center justify-center w-10 h-10 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                               <ImageIcon className="w-4 h-4 text-gray-400" />
-                              <input 
-                                type="file" 
-                                className="hidden" 
+                              <input
+                                type="file"
+                                className="hidden"
                                 accept="image/*"
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
@@ -8208,9 +8096,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         <div className="flex flex-col gap-2">
                           {profileForm.banner ? (
                             <div className="relative inline-block">
-                              <img 
-                                src={profileForm.banner} 
-                                alt="Banner" 
+                              <img
+                                src={profileForm.banner}
+                                alt="Banner"
                                 className="w-full max-w-md h-24 object-cover border border-gray-200 rounded-lg"
                               />
                               <button
@@ -8225,9 +8113,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                             <label className="flex flex-col items-center justify-center w-full max-w-md h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                               <ImageIcon className="w-8 h-8 text-gray-400 mb-1" />
                               <span className="text-sm text-gray-500">Click para subir banner</span>
-                              <input 
-                                type="file" 
-                                className="hidden" 
+                              <input
+                                type="file"
+                                className="hidden"
                                 accept="image/*"
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
@@ -8254,9 +8142,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       <div className="flex items-center gap-4">
                         {profileForm.favicon ? (
                           <div className="relative">
-                            <img 
-                              src={profileForm.favicon} 
-                              alt="Favicon" 
+                            <img
+                              src={profileForm.favicon}
+                              alt="Favicon"
                               className="w-16 h-16 rounded-lg object-cover border-2 border-gray-200"
                             />
                             <button
@@ -8270,9 +8158,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         ) : (
                           <label className="flex flex-col items-center justify-center w-16 h-16 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                             <ImageIcon className="w-6 h-6 text-gray-400" />
-                            <input 
-                              type="file" 
-                              className="hidden" 
+                            <input
+                              type="file"
+                              className="hidden"
                               accept="image/*"
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
@@ -8291,7 +8179,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       </div>
                     </div>
 
-                    <Button 
+                    <Button
                       onClick={handleSaveProfile}
                       disabled={isSavingProfile || isLoadingProfile}
                       className="bg-purple-600 hover:bg-purple-700"
@@ -8340,16 +8228,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                             {profileForm.tipEnabled ? 'Propina Activada' : 'Propina Desactivada'}
                           </p>
                           <p className="text-sm text-gray-500">
-                            {profileForm.tipEnabled 
-                              ? 'Los clientes podrán agregar propina voluntaria' 
+                            {profileForm.tipEnabled
+                              ? 'Los clientes podrán agregar propina voluntaria'
                               : 'No se mostrará opción de propina'}
                           </p>
                         </div>
                       </div>
-                      <Switch 
+                      <Switch
                         checked={profileForm.tipEnabled}
                         onCheckedChange={(checked) => setProfileForm(prev => ({ ...prev, tipEnabled: checked }))}
-                        className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300" 
+                        className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300"
                       />
                     </div>
 
@@ -8362,14 +8250,14 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                             Porcentaje que se sugerirá automáticamente sobre el subtotal
                           </p>
                           <div className="flex items-center gap-3">
-                            <Input 
+                            <Input
                               type="number"
                               min="0"
                               max="100"
                               step="1"
                               value={profileForm.tipPercentageDefault}
-                              onChange={(e) => setProfileForm(prev => ({ 
-                                ...prev, 
+                              onChange={(e) => setProfileForm(prev => ({
+                                ...prev,
                                 tipPercentageDefault: Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
                               }))}
                               className="w-24"
@@ -8381,11 +8269,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                   key={pct}
                                   type="button"
                                   onClick={() => setProfileForm(prev => ({ ...prev, tipPercentageDefault: pct }))}
-                                  className={`px-3 py-1 text-sm rounded-lg border transition-colors ${
-                                    profileForm.tipPercentageDefault === pct
-                                      ? 'bg-purple-600 text-white border-purple-600'
-                                      : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
-                                  }`}
+                                  className={`px-3 py-1 text-sm rounded-lg border transition-colors ${profileForm.tipPercentageDefault === pct
+                                    ? 'bg-purple-600 text-white border-purple-600'
+                                    : 'bg-white text-gray-600 border-gray-200 hover:border-purple-300'
+                                    }`}
                                 >
                                   {pct}%
                                 </button>
@@ -8405,30 +8292,30 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                 Solo en Establecimiento
                               </p>
                               <p className="text-sm text-gray-500">
-                                {profileForm.tipOnlyOnPremise 
-                                  ? 'Propina solo para pedidos en el local (no domicilio ni para llevar)' 
+                                {profileForm.tipOnlyOnPremise
+                                  ? 'Propina solo para pedidos en el local (no domicilio ni para llevar)'
                                   : 'Propina disponible para todos los tipos de pedido'}
                               </p>
                             </div>
                           </div>
-                          <Switch 
+                          <Switch
                             checked={profileForm.tipOnlyOnPremise}
                             onCheckedChange={(checked) => setProfileForm(prev => ({ ...prev, tipOnlyOnPremise: checked }))}
-                            className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300" 
+                            className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300"
                           />
                         </div>
 
                         {/* Info legal */}
                         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                           <p className="text-xs text-yellow-800">
-                            <strong>📋 Normativa Colombia:</strong> La propina es voluntaria, no genera IVA, 
+                            <strong>📋 Normativa Colombia:</strong> La propina es voluntaria, no genera IVA,
                             y no se considera ingreso gravado del restaurante. Debe registrarse separadamente en contabilidad.
                           </p>
                         </div>
                       </>
                     )}
 
-                    <Button 
+                    <Button
                       onClick={handleSaveProfile}
                       disabled={isSavingProfile || isLoadingProfile}
                       className="bg-purple-600 hover:bg-purple-700"
@@ -8469,10 +8356,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     <p className="text-sm text-gray-600 mb-4">
                       Configura cada método de pago con su información. Solo los métodos activados serán visibles en el menú.
                     </p>
-                    
+
                     <div className="space-y-4">
                       {profileForm.paymentMethods.map((method) => (
-                        <div 
+                        <div
                           key={method.id}
                           className={`border rounded-lg overflow-hidden ${method.enabled ? 'border-green-200 bg-green-50/30' : 'border-gray-200 bg-gray-50'}`}
                         >
@@ -8489,20 +8376,20 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                 </p>
                               </div>
                             </div>
-                            <Switch 
+                            <Switch
                               checked={method.enabled}
                               onCheckedChange={(checked) => {
                                 setProfileForm(prev => ({
                                   ...prev,
-                                  paymentMethods: prev.paymentMethods.map(m => 
+                                  paymentMethods: prev.paymentMethods.map(m =>
                                     m.id === method.id ? { ...m, enabled: checked } : m
                                   )
                                 }));
                               }}
-                              className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300" 
+                              className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300"
                             />
                           </div>
-                          
+
                           {/* Campos editables */}
                           <div className="p-4 space-y-3 bg-white">
                             {/* Número de Celular */}
@@ -8514,7 +8401,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                 onChange={(e) => {
                                   setProfileForm(prev => ({
                                     ...prev,
-                                    paymentMethods: prev.paymentMethods.map(m => 
+                                    paymentMethods: prev.paymentMethods.map(m =>
                                       m.id === method.id ? { ...m, phone: e.target.value } : m
                                     )
                                   }));
@@ -8522,7 +8409,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                 className="text-sm"
                               />
                             </div>
-                            
+
                             {/* Nombre del Titular */}
                             <div>
                               <Label className="text-xs text-gray-500 mb-1 block">Nombre del Titular</Label>
@@ -8532,7 +8419,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                 onChange={(e) => {
                                   setProfileForm(prev => ({
                                     ...prev,
-                                    paymentMethods: prev.paymentMethods.map(m => 
+                                    paymentMethods: prev.paymentMethods.map(m =>
                                       m.id === method.id ? { ...m, accountHolder: e.target.value } : m
                                     )
                                   }));
@@ -8540,15 +8427,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                 className="text-sm"
                               />
                             </div>
-                            
+
                             {/* Código QR */}
                             <div>
                               <Label className="text-xs text-gray-500 mb-1 block">Código QR (Opcional)</Label>
                               <div className="flex items-center gap-3">
                                 {method.qrImage ? (
                                   <div className="relative">
-                                    <img 
-                                      src={method.qrImage} 
+                                    <img
+                                      src={method.qrImage}
                                       alt={`QR ${method.name}`}
                                       className="w-20 h-20 rounded-lg border object-cover"
                                     />
@@ -8557,7 +8444,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                       onClick={() => {
                                         setProfileForm(prev => ({
                                           ...prev,
-                                          paymentMethods: prev.paymentMethods.map(m => 
+                                          paymentMethods: prev.paymentMethods.map(m =>
                                             m.id === method.id ? { ...m, qrImage: null } : m
                                           )
                                         }));
@@ -8571,9 +8458,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                   <label className="flex flex-col items-center justify-center w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                                     <ImageIcon className="w-6 h-6 text-gray-400" />
                                     <span className="text-xs text-gray-400 mt-1">Subir QR</span>
-                                    <input 
-                                      type="file" 
-                                      className="hidden" 
+                                    <input
+                                      type="file"
+                                      className="hidden"
                                       accept="image/*"
                                       onChange={(e) => {
                                         const file = e.target.files?.[0];
@@ -8582,7 +8469,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                           reader.onload = (event) => {
                                             setProfileForm(prev => ({
                                               ...prev,
-                                              paymentMethods: prev.paymentMethods.map(m => 
+                                              paymentMethods: prev.paymentMethods.map(m =>
                                                 m.id === method.id ? { ...m, qrImage: event.target?.result as string } : m
                                               )
                                             }));
@@ -8606,12 +8493,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     {/* Info */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                       <p className="text-xs text-blue-800">
-                        <strong>💡 Importante:</strong> Solo los métodos de pago activados serán mostrados a los clientes 
+                        <strong>💡 Importante:</strong> Solo los métodos de pago activados serán mostrados a los clientes
                         en el carrito de compras del menú digital. Asegúrate de ingresar la información correcta.
                       </p>
                     </div>
 
-                    <Button 
+                    <Button
                       onClick={handleSaveProfile}
                       disabled={isSavingProfile || isLoadingProfile}
                       className="bg-purple-600 hover:bg-purple-700"
@@ -8644,14 +8531,14 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   />
                 </div>
                 <div className="flex gap-2">
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={handleDownloadQR}
                   >
                     <Download className="w-4 h-4 mr-2" />
                     Descargar QR
                   </Button>
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={() => copyToClipboard(getMenuUrl())}
                   >
@@ -8666,7 +8553,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
         {/* Backup Tab */}
         {activeTab === 'backup' && (
-          <BackupSection 
+          <BackupSection
             businessName={profileForm.businessName}
             onToast={(message) => setToastMessage(message)}
           />
@@ -8719,7 +8606,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       <Badge className="bg-green-100 text-green-700">Activo</Badge>
                     </div>
                     <p className="text-purple-600 text-sm mb-4">Ideal para negocios en crecimiento</p>
-                    
+
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-gray-500">Fecha Inicio:</span>
@@ -9050,16 +8937,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     {productForm.available ? 'Plato Activo' : 'Plato Inactivo'}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {productForm.available 
-                      ? 'Este plato será visible en el menú' 
+                    {productForm.available
+                      ? 'Este plato será visible en el menú'
                       : 'Este plato no será visible en el menú'}
                   </p>
                 </div>
               </div>
-              <Switch 
+              <Switch
                 checked={productForm.available}
                 onCheckedChange={(checked) => setProductForm(prev => ({ ...prev, available: checked }))}
-                className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300" 
+                className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300"
               />
             </div>
 
@@ -9069,9 +8956,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               <div className="mt-2">
                 {imagePreview || productForm.image ? (
                   <div className="relative inline-block">
-                    <img 
-                      src={imagePreview || productForm.image || ''} 
-                      alt="Preview" 
+                    <img
+                      src={imagePreview || productForm.image || ''}
+                      alt="Preview"
                       className="w-32 h-32 object-cover rounded-lg border"
                     />
                     <button
@@ -9091,9 +8978,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       </p>
                       <p className="text-xs text-gray-400">PNG, JPG (máx. 5MB)</p>
                     </div>
-                    <input 
-                      type="file" 
-                      className="hidden" 
+                    <input
+                      type="file"
+                      className="hidden"
                       accept="image/*"
                       onChange={handleImageUpload}
                     />
@@ -9104,16 +8991,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
             <div>
               <Label>Nombre del Producto</Label>
-              <Input 
-                placeholder="Nombre del producto" 
+              <Input
+                placeholder="Nombre del producto"
                 value={productForm.name}
                 onChange={(e) => setProductForm(prev => ({ ...prev, name: e.target.value }))}
               />
             </div>
             <div>
               <Label>Descripción</Label>
-              <Input 
-                placeholder="Descripción corta" 
+              <Input
+                placeholder="Descripción corta"
                 value={productForm.description}
                 onChange={(e) => setProductForm(prev => ({ ...prev, description: e.target.value }))}
               />
@@ -9121,18 +9008,18 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Precio</Label>
-                <Input 
-                  type="number" 
-                  placeholder="0" 
+                <Input
+                  type="number"
+                  placeholder="0"
                   value={productForm.price || ''}
                   onChange={(e) => setProductForm(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
                 />
               </div>
               <div>
                 <Label>Stock</Label>
-                <Input 
-                  type="number" 
-                  placeholder="0" 
+                <Input
+                  type="number"
+                  placeholder="0"
                   min="0"
                   value={productForm.stock || ''}
                   onChange={(e) => setProductForm(prev => ({ ...prev, stock: parseInt(e.target.value) || 0 }))}
@@ -9141,7 +9028,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             </div>
             <div>
               <Label>Categoría</Label>
-              <select 
+              <select
                 className="w-full h-10 rounded-md border border-gray-300 px-3"
                 value={showNewCategoryInput ? '__new__' : productForm.category}
                 onChange={(e) => {
@@ -9158,7 +9045,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                 ))}
                 <option value="__new__">➕ Nueva Categoría...</option>
               </select>
-              
+
               {/* New Category Input */}
               {showNewCategoryInput && (
                 <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-dashed border-gray-300 space-y-3">
@@ -9182,15 +9069,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       <option value="🥩">🥩</option>
                       <option value="🍟">🍟</option>
                     </select>
-                    <Input 
-                      placeholder="Nombre de la categoría" 
+                    <Input
+                      placeholder="Nombre de la categoría"
                       value={newCategoryName}
                       onChange={(e) => setNewCategoryName(e.target.value)}
                       className="flex-1"
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button 
+                    <Button
                       type="button"
                       size="sm"
                       onClick={handleCreateCategory}
@@ -9199,7 +9086,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     >
                       Crear Categoría
                     </Button>
-                    <Button 
+                    <Button
                       type="button"
                       size="sm"
                       variant="outline"
@@ -9217,10 +9104,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             </div>
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
-                <Switch 
+                <Switch
                   checked={productForm.featured}
                   onCheckedChange={(checked) => setProductForm(prev => ({ ...prev, featured: checked }))}
-                  className="data-[state=checked]:bg-yellow-500" 
+                  className="data-[state=checked]:bg-yellow-500"
                 />
                 <span className="text-sm">⭐ Destacado</span>
               </label>
@@ -9237,16 +9124,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     {productForm.requiereEmpaque ? 'Requiere Empaque' : 'Sin Empaque'}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {productForm.requiereEmpaque 
-                      ? 'Se cobrará el valor del empaque en domicilios' 
+                    {productForm.requiereEmpaque
+                      ? 'Se cobrará el valor del empaque en domicilios'
                       : 'No se cobrará el empaque en domicilios'}
                   </p>
                 </div>
               </div>
-              <Switch 
+              <Switch
                 checked={productForm.requiereEmpaque}
                 onCheckedChange={(checked) => setProductForm(prev => ({ ...prev, requiereEmpaque: checked }))}
-                className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300" 
+                className="data-[state=checked]:bg-blue-600 data-[state=unchecked]:bg-gray-300"
               />
             </div>
 
@@ -9263,20 +9150,20 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       {productForm.onSale ? 'Producto en Oferta' : 'Sin Oferta'}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {productForm.onSale 
-                        ? 'Se mostrará con precio especial en el menú' 
+                      {productForm.onSale
+                        ? 'Se mostrará con precio especial en el menú'
                         : 'Activa para aplicar un descuento'}
                     </p>
                   </div>
                 </div>
-                <Switch 
+                <Switch
                   checked={productForm.onSale ?? false}
-                  onCheckedChange={(checked) => setProductForm(prev => ({ 
-                    ...prev, 
+                  onCheckedChange={(checked) => setProductForm(prev => ({
+                    ...prev,
                     onSale: checked,
                     salePrice: checked ? prev.salePrice : 0
                   }))}
-                  className="data-[state=checked]:bg-orange-500 data-[state=unchecked]:bg-gray-300" 
+                  className="data-[state=checked]:bg-orange-500 data-[state=unchecked]:bg-gray-300"
                 />
               </div>
 
@@ -9293,13 +9180,13 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-orange-600">Precio de Oferta *</Label>
-                      <Input 
-                        type="number" 
-                        placeholder="0" 
+                      <Input
+                        type="number"
+                        placeholder="0"
                         value={productForm.salePrice || ''}
-                        onChange={(e) => setProductForm(prev => ({ 
-                          ...prev, 
-                          salePrice: parseFloat(e.target.value) || 0 
+                        onChange={(e) => setProductForm(prev => ({
+                          ...prev,
+                          salePrice: parseFloat(e.target.value) || 0
                         }))}
                         className="mt-1 border-orange-300 focus:ring-orange-500"
                       />
@@ -9319,8 +9206,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm font-medium text-gray-700">Fecha Inicio</Label>
-                      <Input 
-                        type="date" 
+                      <Input
+                        type="date"
                         value={productForm.saleStartDate ?? ''}
                         onChange={(e) => setProductForm(prev => ({ ...prev, saleStartDate: e.target.value }))}
                         className="mt-1"
@@ -9328,8 +9215,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-gray-700">Fecha Fin</Label>
-                      <Input 
-                        type="date" 
+                      <Input
+                        type="date"
                         value={productForm.saleEndDate ?? ''}
                         onChange={(e) => setProductForm(prev => ({ ...prev, saleEndDate: e.target.value }))}
                         className="mt-1"
@@ -9351,8 +9238,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               setShowProductModal(false);
               resetProductForm();
             }}>Cancelar</Button>
-            <Button 
-              onClick={handleSaveProduct} 
+            <Button
+              onClick={handleSaveProduct}
               className="bg-purple-600 hover:bg-purple-700"
               disabled={!productForm.name.trim() || productForm.price <= 0}
             >
@@ -9381,7 +9268,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                 onChange={(e) => setAiTextPrompt(e.target.value)}
               />
             </div>
-            
+
             {!aiGeneratedProduct && (
               <Button
                 onClick={handleAITextCreate}
@@ -9405,7 +9292,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             {aiGeneratedProduct && (
               <div className="space-y-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
                 <h4 className="font-medium text-purple-800">Producto generado:</h4>
-                
+
                 {/* Generated Image with Fallback - Text Modal */}
                 <div className="w-full h-40 bg-white rounded-lg overflow-hidden border relative">
                   {isGeneratingImage ? (
@@ -9417,8 +9304,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       </div>
                     </div>
                   ) : aiGeneratedProduct.image ? (
-                    <img 
-                      src={aiGeneratedProduct.image} 
+                    <img
+                      src={aiGeneratedProduct.image}
                       alt={aiGeneratedProduct.name}
                       className="w-full h-full object-cover"
                       onError={(e) => {
@@ -9448,7 +9335,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     </div>
                   )}
                 </div>
-                
+
                 <div className="space-y-2 text-sm">
                   <p><strong>Nombre:</strong> {aiGeneratedProduct.name}</p>
                   <p><strong>Descripción:</strong> {aiGeneratedProduct.description}</p>
@@ -9483,11 +9370,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               <button
                 onClick={handleAIVoiceCreate}
                 disabled={isAIProcessing}
-                className={`w-20 h-20 rounded-full flex items-center justify-center transition-all disabled:opacity-50 ${
-                  isRecording
-                    ? 'bg-red-500 hover:bg-red-600 animate-pulse'
-                    : 'bg-purple-600 hover:bg-purple-700'
-                }`}
+                className={`w-20 h-20 rounded-full flex items-center justify-center transition-all disabled:opacity-50 ${isRecording
+                  ? 'bg-red-500 hover:bg-red-600 animate-pulse'
+                  : 'bg-purple-600 hover:bg-purple-700'
+                  }`}
               >
                 <Mic className={`w-8 h-8 text-white ${isRecording ? 'animate-bounce' : ''}`} />
               </button>
@@ -9495,8 +9381,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                 {isRecording
                   ? '🎤 Grabando... Habla ahora'
                   : isAIProcessing
-                  ? '⏳ Procesando...'
-                  : 'Toca el micrófono y describe tu producto'}
+                    ? '⏳ Procesando...'
+                    : 'Toca el micrófono y describe tu producto'}
               </p>
             </div>
 
@@ -9523,7 +9409,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             {aiGeneratedProduct && (
               <div className="space-y-3 p-4 bg-purple-50 rounded-lg border border-purple-200">
                 <h4 className="font-medium text-purple-800">Producto generado:</h4>
-                
+
                 {/* Generated Image with Fallback - Voice Modal */}
                 <div className="w-full h-40 bg-white rounded-lg overflow-hidden border relative">
                   {isGeneratingImage ? (
@@ -9535,8 +9421,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       </div>
                     </div>
                   ) : aiGeneratedProduct.image ? (
-                    <img 
-                      src={aiGeneratedProduct.image} 
+                    <img
+                      src={aiGeneratedProduct.image}
                       alt={aiGeneratedProduct.name}
                       className="w-full h-full object-cover"
                       onError={(e) => {
@@ -9566,7 +9452,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     </div>
                   )}
                 </div>
-                
+
                 <div className="space-y-2 text-sm">
                   <p><strong>Nombre:</strong> {aiGeneratedProduct.name}</p>
                   <p><strong>Descripción:</strong> {aiGeneratedProduct.description}</p>
@@ -9609,8 +9495,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             }}>
               Cancelar
             </Button>
-            <Button 
-              onClick={handleDeleteProduct} 
+            <Button
+              onClick={handleDeleteProduct}
               className="bg-red-600 hover:bg-red-700"
             >
               Eliminar
@@ -10181,7 +10067,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             {isDeletingOrders && (
               <div className="mt-4 space-y-2">
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-red-500 transition-all duration-300"
                     style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
                   />
@@ -10193,8 +10079,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             )}
           </div>
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowOrderDeleteConfirm(false)}
               disabled={isDeletingOrders}
             >
@@ -10245,7 +10131,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             {isDeletingDeliveries && (
               <div className="mt-4 space-y-2">
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-red-500 transition-all duration-300"
                     style={{ width: `${(deliveryDeleteProgress.current / deliveryDeleteProgress.total) * 100}%` }}
                   />
@@ -10257,8 +10143,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             )}
           </div>
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowDeliveryDeleteConfirm(false)}
               disabled={isDeletingDeliveries}
             >
@@ -10463,8 +10349,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             <Button variant="outline" onClick={() => setShowPrinterModal(false)}>
               Cancelar
             </Button>
-            <Button 
-              onClick={handleSavePrinter} 
+            <Button
+              onClick={handleSavePrinter}
               className="bg-purple-600 hover:bg-purple-700"
               disabled={!printerForm.name.trim() || !printerForm.ip.trim()}
             >
@@ -10499,8 +10385,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             }}>
               Cancelar
             </Button>
-            <Button 
-              onClick={handleDeletePrinter} 
+            <Button
+              onClick={handleDeletePrinter}
               className="bg-red-600 hover:bg-red-700"
             >
               Eliminar
@@ -10550,7 +10436,7 @@ function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Eleme
   // State for backup creation
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
-  
+
   // State for restore
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restorePreview, setRestorePreview] = useState<BackupMetadata | null>(null);
@@ -10558,7 +10444,7 @@ function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Eleme
   const [restoreProgress, setRestoreProgress] = useState(0);
   const [confirmationCode, setConfirmationCode] = useState('');
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
-  
+
   // State for schedule
   const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({
     frequency: 'disabled',
@@ -10566,11 +10452,11 @@ function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Eleme
     email: ''
   });
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
-  
+
   // State for history
   const [backupHistory, setBackupHistory] = useState<BackupHistoryItem[]>([]);
   const [lastBackup, setLastBackup] = useState<string | null>(null);
-  
+
   // Collections to include in backup
   const [collectionsToInclude, setCollectionsToInclude] = useState({
     products: true,
@@ -10587,7 +10473,7 @@ function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Eleme
     try {
       const response = await fetch('/api/backup/history');
       const data = await response.json();
-      
+
       if (data.success) {
         setBackupHistory(data.data.history || []);
         setLastBackup(data.data.lastBackup);
@@ -10652,7 +10538,7 @@ function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Eleme
         createdAt: new Date().toISOString(),
         businessName
       };
-      
+
       setBackupHistory(prev => [newHistoryItem, ...prev]);
       setLastBackup(new Date().toISOString());
 
@@ -10801,7 +10687,7 @@ function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Eleme
     const diff = Date.now() - new Date(dateStr).getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor(diff / (1000 * 60 * 60));
-    
+
     if (days > 0) return `hace ${days} día${days > 1 ? 's' : ''}`;
     if (hours > 0) return `hace ${hours} hora${hours > 1 ? 's' : ''}`;
     return 'hace unos minutos';
@@ -10882,7 +10768,7 @@ function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Eleme
             {isCreatingBackup && (
               <div className="space-y-2">
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-purple-600 transition-all duration-300"
                     style={{ width: `${backupProgress}%` }}
                   />
@@ -11084,7 +10970,7 @@ function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Eleme
               {isRestoring && (
                 <div className="space-y-2">
                   <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-red-500 transition-all duration-300"
                       style={{ width: `${restoreProgress}%` }}
                     />
@@ -11166,11 +11052,11 @@ function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Eleme
                       <td className="py-2 px-3">
                         <span className={cn(
                           'px-2 py-1 rounded text-xs font-medium',
-                          item.type === 'manual' 
-                            ? 'bg-blue-100 text-blue-700' 
+                          item.type === 'manual'
+                            ? 'bg-blue-100 text-blue-700'
                             : item.type === 'auto'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-orange-100 text-orange-700'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-orange-100 text-orange-700'
                         )}>
                           {item.type === 'manual' ? 'Manual' : item.type === 'auto' ? 'Auto' : 'Restore'}
                         </span>

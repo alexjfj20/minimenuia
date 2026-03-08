@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { db } from '@/lib/db';
 
 // ============================================================================
 // INTERFACES
@@ -16,6 +15,13 @@ interface BusinessProfile {
   logo: string | null;
   slug: string;
   updatedAt: string;
+  // Campos adicionales para compatibilidad
+  description?: string;
+  avatar?: string | null;
+  banner?: string | null;
+  bannerEnabled?: boolean;
+  heroImageUrl?: string | null;
+  showHeroBanner?: boolean;
 }
 
 interface ProfileResponse {
@@ -25,78 +31,76 @@ interface ProfileResponse {
 }
 
 interface UpdateProfileRequest {
+  businessId: string;
   name?: string;
   phone?: string;
   address?: string;
   primaryColor?: string;
   secondaryColor?: string;
   logo?: string | null;
+  slug?: string;
+  description?: string;
+  avatar?: string | null;
+  banner?: string | null;
+  bannerEnabled?: boolean;
 }
 
 // ============================================================================
-// FILE-BASED STORAGE
+// GET - Obtener perfil del negocio filtrado por businessId
 // ============================================================================
 
-const DATA_DIR = path.join(process.cwd(), 'db');
-const PROFILE_FILE = path.join(DATA_DIR, 'business_profile.json');
-
-const DEFAULT_PROFILE: BusinessProfile = {
-  id: 'business-1',
-  name: 'Restaurante El Sabor',
-  phone: '+57 300 123 4567',
-  address: 'Calle 123 #45-67, Bogotá',
-  primaryColor: '#8b5cf6',
-  secondaryColor: '#ffffff',
-  logo: null,
-  slug: 'restaurante-el-sabor',
-  updatedAt: new Date().toISOString()
-};
-
-async function ensureDataDir(): Promise<void> {
+export async function GET(request: NextRequest): Promise<NextResponse<ProfileResponse>> {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch {
-    // Directory already exists
-  }
-}
+    const { searchParams } = new URL(request.url);
+    const businessId = searchParams.get('businessId');
 
-async function readProfile(): Promise<BusinessProfile> {
-  try {
-    await ensureDataDir();
-    const data = await fs.readFile(PROFILE_FILE, 'utf-8');
-    return JSON.parse(data) as BusinessProfile;
-  } catch {
-    // File doesn't exist, return default and create it
-    await writeProfile(DEFAULT_PROFILE);
-    return DEFAULT_PROFILE;
-  }
-}
+    if (!businessId) {
+      return NextResponse.json({
+        success: false,
+        error: 'businessId es requerido para obtener el perfil'
+      }, { status: 400 });
+    }
 
-async function writeProfile(profile: BusinessProfile): Promise<void> {
-  await ensureDataDir();
-  await fs.writeFile(PROFILE_FILE, JSON.stringify(profile, null, 2), 'utf-8');
-}
+    const business = await db.business.findUnique({
+      where: { id: businessId }
+    });
 
-// ============================================================================
-// GET - Obtener perfil del negocio
-// ============================================================================
+    if (!business) {
+      return NextResponse.json({
+        success: false,
+        error: 'Negocio no encontrado'
+      }, { status: 404 });
+    }
 
-export async function GET(): Promise<NextResponse<ProfileResponse>> {
-  try {
-    const profile = await readProfile();
-    
+    const profile: BusinessProfile = {
+      id: business.id,
+      name: business.name,
+      phone: business.phone || '',
+      address: business.address || '',
+      primaryColor: business.primaryColor || '#8b5cf6',
+      secondaryColor: business.secondaryColor || '#ffffff',
+      logo: business.logo || null,
+      slug: business.slug,
+      description: business.description || '',
+      avatar: business.avatar || null,
+      banner: business.banner || null,
+      bannerEnabled: business.bannerEnabled ?? true,
+      heroImageUrl: business.heroImageUrl || null,
+      showHeroBanner: business.showHeroBanner ?? false,
+      updatedAt: business.updatedAt.toISOString()
+    };
+
     return NextResponse.json({
       success: true,
       data: profile
     });
 
   } catch (error) {
-    console.error('[Profile API] Error reading profile:', error);
-    
+    console.error('[Profile API] Error reading profile from DB:', error);
     return NextResponse.json({
-      success: true,
-      data: DEFAULT_PROFILE
-    });
+      success: false,
+      error: 'Error al obtener el perfil de la base de datos'
+    }, { status: 500 });
   }
 }
 
@@ -107,46 +111,62 @@ export async function GET(): Promise<NextResponse<ProfileResponse>> {
 export async function PUT(request: NextRequest): Promise<NextResponse<ProfileResponse>> {
   try {
     const body: UpdateProfileRequest = await request.json();
-    
-    // Read current profile
-    const currentProfile = await readProfile();
-    
-    // Update with new values
-    const updatedProfile: BusinessProfile = {
-      ...currentProfile,
-      ...(body.name !== undefined && { name: body.name }),
-      ...(body.phone !== undefined && { phone: body.phone }),
-      ...(body.address !== undefined && { address: body.address }),
-      ...(body.primaryColor !== undefined && { primaryColor: body.primaryColor }),
-      ...(body.secondaryColor !== undefined && { secondaryColor: body.secondaryColor }),
-      ...(body.logo !== undefined && { logo: body.logo }),
-      updatedAt: new Date().toISOString()
-    };
+    const { businessId } = body;
 
-    // Validate required fields
-    if (!updatedProfile.name?.trim()) {
+    if (!businessId) {
       return NextResponse.json({
         success: false,
-        error: 'El nombre del negocio es requerido'
+        error: 'businessId es requerido para actualizar el perfil'
       }, { status: 400 });
     }
 
-    // Save to file
-    await writeProfile(updatedProfile);
+    // Update business in DB
+    const updatedBusiness = await db.business.update({
+      where: { id: businessId },
+      data: {
+        ...(body.name !== undefined && { name: body.name }),
+        ...(body.phone !== undefined && { phone: body.phone }),
+        ...(body.address !== undefined && { address: body.address }),
+        ...(body.primaryColor !== undefined && { primaryColor: body.primaryColor }),
+        ...(body.secondaryColor !== undefined && { secondaryColor: body.secondaryColor }),
+        ...(body.logo !== undefined && { logo: body.logo }),
+        ...(body.description !== undefined && { description: body.description }),
+        ...(body.avatar !== undefined && { avatar: body.avatar }),
+        ...(body.banner !== undefined && { banner: body.banner }),
+        ...(body.bannerEnabled !== undefined && { bannerEnabled: body.bannerEnabled }),
+        ...(body.slug !== undefined && { slug: body.slug }),
+      }
+    });
 
-    console.log('[Profile API] Profile updated successfully:', updatedProfile.name);
+    const profile: BusinessProfile = {
+      id: updatedBusiness.id,
+      name: updatedBusiness.name,
+      phone: updatedBusiness.phone || '',
+      address: updatedBusiness.address || '',
+      primaryColor: updatedBusiness.primaryColor || '#8b5cf6',
+      secondaryColor: updatedBusiness.secondaryColor || '#ffffff',
+      logo: updatedBusiness.logo || null,
+      slug: updatedBusiness.slug,
+      description: updatedBusiness.description || '',
+      avatar: updatedBusiness.avatar || null,
+      banner: updatedBusiness.banner || null,
+      bannerEnabled: updatedBusiness.bannerEnabled ?? true,
+      updatedAt: updatedBusiness.updatedAt.toISOString()
+    };
+
+    console.log('[Profile API] Profile updated in DB successfully:', profile.name);
 
     return NextResponse.json({
       success: true,
-      data: updatedProfile
+      data: profile
     });
 
   } catch (error) {
-    console.error('[Profile API] Error updating profile:', error);
-    
+    console.error('[Profile API] Error updating profile in DB:', error);
+
     return NextResponse.json({
       success: false,
-      error: 'Error al actualizar el perfil'
+      error: 'Error al actualizar el perfil en la base de datos'
     }, { status: 500 });
   }
 }

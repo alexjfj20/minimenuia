@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { db } from '@/lib/db';
+import { Currency } from '@prisma/client';
 
 // ============================================================================
 // INTERFACES
@@ -48,6 +48,7 @@ interface ProductsResponse {
 }
 
 interface CreateProductRequest {
+  businessId: string;
   name: string;
   description: string;
   price: number;
@@ -65,6 +66,7 @@ interface CreateProductRequest {
 
 interface UpdateProductRequest {
   id: string;
+  businessId: string;
   name?: string;
   description?: string;
   price?: number;
@@ -81,113 +83,73 @@ interface UpdateProductRequest {
 }
 
 // ============================================================================
-// FILE-BASED STORAGE
+// GET - Obtener todos los productos filtrados por businessId
 // ============================================================================
 
-const DATA_DIR = path.join(process.cwd(), 'db');
-const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json');
-
-const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'cat-1', name: 'Entradas', icon: '🥗', order: 1 },
-  { id: 'cat-2', name: 'Platos Principales', icon: '🍽️', order: 2 },
-  { id: 'cat-3', name: 'Bebidas', icon: '🥤', order: 3 },
-  { id: 'cat-4', name: 'Postres', icon: '🍰', order: 4 }
-];
-
-const DEFAULT_PRODUCTS: Product[] = [
-  {
-    id: 'prod-1',
-    name: 'Empanadas (4 uds)',
-    description: 'Crujientes empanadas rellenas de carne, pollo o queso con ají casero',
-    price: 12000,
-    category: 'Entradas',
-    available: true,
-    featured: true,
-    image: null,
-    stock: 50,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'prod-2',
-    name: 'Guacamole con Totopos',
-    description: 'Aguacate fresco con tortilla chips crujientes y pico de gallo',
-    price: 15000,
-    category: 'Entradas',
-    available: true,
-    featured: false,
-    image: null,
-    stock: 30,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'prod-3',
-    name: 'Bandeja Paisa',
-    description: 'El clásico colombiano: frijoles, arroz, carne molida, chicharrón, huevo, aguacate, plátano y arepa',
-    price: 35000,
-    category: 'Platos Principales',
-    available: true,
-    featured: true,
-    image: null,
-    stock: 25,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
-];
-
-async function ensureDataDir(): Promise<void> {
+export async function GET(request: NextRequest): Promise<NextResponse<ProductsResponse>> {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch {
-    // Directory already exists
-  }
-}
+    const { searchParams } = new URL(request.url);
+    const businessId = searchParams.get('businessId');
 
-async function readProductsData(): Promise<ProductsData> {
-  try {
-    await ensureDataDir();
-    const data = await fs.readFile(PRODUCTS_FILE, 'utf-8');
-    return JSON.parse(data) as ProductsData;
-  } catch {
-    // File doesn't exist, return default and create it
-    const defaultData: ProductsData = {
-      products: DEFAULT_PRODUCTS,
-      categories: DEFAULT_CATEGORIES,
-      updatedAt: new Date().toISOString()
-    };
-    await writeProductsData(defaultData);
-    return defaultData;
-  }
-}
+    if (!businessId) {
+      return NextResponse.json({
+        success: false,
+        error: 'El businessId es requerido para listar productos'
+      }, { status: 400 });
+    }
 
-async function writeProductsData(data: ProductsData): Promise<void> {
-  await ensureDataDir();
-  data.updatedAt = new Date().toISOString();
-  await fs.writeFile(PRODUCTS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-}
+    // Fetch categories from DB
+    const dbCategories = await db.category.findMany({
+      where: { businessId },
+      orderBy: { order: 'asc' }
+    });
 
-// ============================================================================
-// GET - Obtener todos los productos
-// ============================================================================
+    // Fetch products from DB
+    const dbProducts = await db.product.findMany({
+      where: { businessId },
+      include: { category: true },
+      orderBy: { createdAt: 'desc' }
+    });
 
-export async function GET(): Promise<NextResponse<ProductsResponse>> {
-  try {
-    const data = await readProductsData();
-    
-    console.log('[Products API] GET products:', data.products.length, 'products');
-    
+    console.log(`[Products API] GET from DB for business ${businessId}: ${dbProducts.length} products`);
+
+    const products: Product[] = dbProducts.map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      price: p.price,
+      category: p.category.name,
+      categoryId: p.categoryId,
+      available: p.isAvailable,
+      featured: p.isFeatured,
+      image: p.image,
+      stock: 0, // No hay campo stock en el esquema actual de Prisma product
+      createdAt: p.createdAt.toISOString(),
+      updatedAt: p.updatedAt.toISOString()
+    }));
+
+    const categories: Category[] = dbCategories.map(c => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon || '🍴',
+      order: c.order
+    }));
+
     return NextResponse.json({
       success: true,
-      data: data
+      data: {
+        products,
+        categories,
+        updatedAt: new Date().toISOString()
+      }
     });
 
   } catch (error) {
     console.error('[Products API] Error reading products:', error);
-    
+
     return NextResponse.json({
       success: false,
-      error: 'Error al leer los productos'
+      error: 'Error al leer los productos de la base de datos'
     }, { status: 500 });
   }
 }
@@ -199,78 +161,83 @@ export async function GET(): Promise<NextResponse<ProductsResponse>> {
 export async function POST(request: NextRequest): Promise<NextResponse<ProductsResponse>> {
   try {
     const body: CreateProductRequest = await request.json();
-    
-    console.log('[Products API] POST request:', body.name);
-    
+    const { businessId, name, price, category: categoryName } = body;
+
+    console.log('[Products API] POST request:', name, 'for business:', businessId);
+
     // Validate required fields
-    if (!body.name?.trim()) {
-      return NextResponse.json({
-        success: false,
-        error: 'El nombre del producto es requerido'
-      }, { status: 400 });
+    if (!businessId) {
+      return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
     }
-    
-    if (body.price === undefined || body.price < 0) {
-      return NextResponse.json({
-        success: false,
-        error: 'El precio es requerido y debe ser mayor o igual a 0'
-      }, { status: 400 });
+    if (!name?.trim()) {
+      return NextResponse.json({ success: false, error: 'El nombre del producto es requerido' }, { status: 400 });
     }
-    
-    // Read current data
-    const data = await readProductsData();
-    
-    // Generate unique ID
-    const newProduct: Product = {
-      id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      name: body.name.trim(),
-      description: body.description?.trim() || '',
-      price: Number(body.price),
-      category: body.category || 'Entradas',
-      available: body.available ?? true,
-      featured: body.featured ?? false,
-      image: body.image || null,
-      stock: body.stock ?? 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      // Campos de Oferta
-      onSale: body.onSale ?? false,
-      salePrice: body.salePrice,
-      saleStartDate: body.saleStartDate,
-      saleEndDate: body.saleEndDate
-    };
-    
-    // Add product
-    data.products.push(newProduct);
-    
-    // Check if category exists, if not add it
-    const categoryExists = data.categories.some(c => c.name === newProduct.category);
-    if (!categoryExists && newProduct.category) {
-      data.categories.push({
-        id: `cat-${Date.now()}`,
-        name: newProduct.category,
-        icon: '🍴',
-        order: data.categories.length + 1
+    if (price === undefined || price < 0) {
+      return NextResponse.json({ success: false, error: 'El precio es requerido' }, { status: 400 });
+    }
+
+    // 1. Get or create category
+    let category = await db.category.findFirst({
+      where: {
+        businessId,
+        name: categoryName || 'Entradas'
+      }
+    });
+
+    if (!category) {
+      category = await db.category.create({
+        data: {
+          businessId,
+          name: categoryName || 'Entradas',
+          icon: '🍴',
+          order: 0
+        }
       });
     }
-    
-    // Save
-    await writeProductsData(data);
-    
-    console.log('[Products API] Product created:', newProduct.id, newProduct.name);
-    
+
+    // 2. Create product
+    const dbProduct = await db.product.create({
+      data: {
+        businessId,
+        categoryId: category.id,
+        name: name.trim(),
+        description: body.description?.trim() || '',
+        price: Number(price),
+        currency: Currency.COP,
+        isAvailable: body.available ?? true,
+        isFeatured: body.featured ?? false,
+        image: body.image || null,
+      },
+      include: {
+        category: true
+      }
+    });
+
+    const product: Product = {
+      id: dbProduct.id,
+      name: dbProduct.name,
+      description: dbProduct.description || '',
+      price: dbProduct.price,
+      category: dbProduct.category.name,
+      categoryId: dbProduct.categoryId,
+      available: dbProduct.isAvailable,
+      featured: dbProduct.isFeatured,
+      image: dbProduct.image,
+      stock: 0,
+      createdAt: dbProduct.createdAt.toISOString(),
+      updatedAt: dbProduct.updatedAt.toISOString()
+    };
+
+    console.log('[Products API] Product created in DB:', product.id);
+
     return NextResponse.json({
       success: true,
-      product: newProduct
+      product
     });
 
   } catch (error) {
     console.error('[Products API] Error creating product:', error);
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Error al crear el producto'
-    }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Error al crear el producto' }, { status: 500 });
   }
 }
 
@@ -281,81 +248,77 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProductsR
 export async function PUT(request: NextRequest): Promise<NextResponse<ProductsResponse>> {
   try {
     const body: UpdateProductRequest = await request.json();
-    
-    console.log('[Products API] PUT request for product:', body.id);
-    
-    if (!body.id) {
-      return NextResponse.json({
-        success: false,
-        error: 'El ID del producto es requerido'
-      }, { status: 400 });
+    const { id, businessId } = body;
+
+    console.log('[Products API] PUT request for product:', id);
+
+    if (!id || !businessId) {
+      return NextResponse.json({ success: false, error: 'ID y businessId son requeridos' }, { status: 400 });
     }
-    
-    // Read current data
-    const data = await readProductsData();
-    
-    // Find product index
-    const productIndex = data.products.findIndex(p => p.id === body.id);
-    
-    if (productIndex === -1) {
-      return NextResponse.json({
-        success: false,
-        error: 'Producto no encontrado'
-      }, { status: 404 });
-    }
-    
-    // Update product
-    const currentProduct = data.products[productIndex];
-    const updatedProduct: Product = {
-      ...currentProduct,
-      ...(body.name !== undefined && { name: body.name.trim() }),
-      ...(body.description !== undefined && { description: body.description.trim() }),
-      ...(body.price !== undefined && { price: Number(body.price) }),
-      ...(body.category !== undefined && { category: body.category }),
-      ...(body.available !== undefined && { available: body.available }),
-      ...(body.featured !== undefined && { featured: body.featured }),
-      ...(body.image !== undefined && { image: body.image }),
-      ...(body.stock !== undefined && { stock: Number(body.stock) }),
-      // Campos de Oferta
-      ...(body.onSale !== undefined && { onSale: body.onSale }),
-      ...(body.salePrice !== undefined && { salePrice: body.salePrice }),
-      ...(body.saleStartDate !== undefined && { saleStartDate: body.saleStartDate }),
-      ...(body.saleEndDate !== undefined && { saleEndDate: body.saleEndDate }),
-      updatedAt: new Date().toISOString()
-    };
-    
-    data.products[productIndex] = updatedProduct;
-    
-    // Check if category exists, if not add it
+
+    // 1. If category name is provided, ensure it exists
+    let categoryId = undefined;
     if (body.category) {
-      const categoryExists = data.categories.some(c => c.name === body.category);
-      if (!categoryExists) {
-        data.categories.push({
-          id: `cat-${Date.now()}`,
-          name: body.category,
-          icon: '🍴',
-          order: data.categories.length + 1
+      let category = await db.category.findFirst({
+        where: { businessId, name: body.category }
+      });
+
+      if (!category) {
+        category = await db.category.create({
+          data: {
+            businessId,
+            name: body.category,
+            icon: '🍴',
+            order: 0
+          }
         });
       }
+      categoryId = category.id;
     }
-    
-    // Save
-    await writeProductsData(data);
-    
-    console.log('[Products API] Product updated:', updatedProduct.id, updatedProduct.name);
-    
+
+    // 2. Update product
+    const dbProduct = await db.product.update({
+      where: {
+        id,
+        businessId // Strict filtering for security
+      },
+      data: {
+        ...(body.name !== undefined && { name: body.name.trim() }),
+        ...(body.description !== undefined && { description: body.description.trim() }),
+        ...(body.price !== undefined && { price: Number(body.price) }),
+        ...(categoryId !== undefined && { categoryId }),
+        ...(body.available !== undefined && { isAvailable: body.available }),
+        ...(body.featured !== undefined && { isFeatured: body.featured }),
+        ...(body.image !== undefined && { image: body.image }),
+      },
+      include: {
+        category: true
+      }
+    });
+
+    const product: Product = {
+      id: dbProduct.id,
+      name: dbProduct.name,
+      description: dbProduct.description || '',
+      price: dbProduct.price,
+      category: dbProduct.category.name,
+      categoryId: dbProduct.categoryId,
+      available: dbProduct.isAvailable,
+      featured: dbProduct.isFeatured,
+      image: dbProduct.image,
+      stock: 0,
+      createdAt: dbProduct.createdAt.toISOString(),
+      updatedAt: dbProduct.updatedAt.toISOString()
+    };
+
     return NextResponse.json({
       success: true,
-      product: updatedProduct
+      product
     });
 
   } catch (error) {
     console.error('[Products API] Error updating product:', error);
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Error al actualizar el producto'
-    }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Error al actualizar el producto' }, { status: 500 });
   }
 }
 
@@ -367,47 +330,26 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Product
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    
-    console.log('[Products API] DELETE request for product:', id);
-    
-    if (!id) {
-      return NextResponse.json({
-        success: false,
-        error: 'El ID del producto es requerido'
-      }, { status: 400 });
+    const businessId = searchParams.get('businessId');
+
+    if (!id || !businessId) {
+      return NextResponse.json({ success: false, error: 'ID y businessId son requeridos' }, { status: 400 });
     }
-    
-    // Read current data
-    const data = await readProductsData();
-    
-    // Find and remove product
-    const productIndex = data.products.findIndex(p => p.id === id);
-    
-    if (productIndex === -1) {
-      return NextResponse.json({
-        success: false,
-        error: 'Producto no encontrado'
-      }, { status: 404 });
-    }
-    
-    const deletedProduct = data.products.splice(productIndex, 1)[0];
-    
-    // Save
-    await writeProductsData(data);
-    
-    console.log('[Products API] Product deleted:', deletedProduct.id, deletedProduct.name);
-    
+
+    const deletedProduct = await db.product.delete({
+      where: {
+        id,
+        businessId // Strict filtering for security
+      }
+    });
+
     return NextResponse.json({
       success: true,
-      product: deletedProduct
+      message: 'Producto eliminado correctamente'
     });
 
   } catch (error) {
     console.error('[Products API] Error deleting product:', error);
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Error al eliminar el producto'
-    }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Error al eliminar el producto' }, { status: 500 });
   }
 }

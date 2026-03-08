@@ -1,14 +1,13 @@
 // ============================================================================
-// Settings Profile API - v3.0 (Shared Store with File Persistence)
-// Uses shared business store for data persistence across API routes
+// Settings Profile API - v4.0 (Aislamiento SaaS Total - DB + Store Aislado)
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { 
-  getBusinessProfileAsync, 
+import { db } from '@/lib/db';
+import {
+  getBusinessProfileAsync,
   updateBusinessProfileAsync,
-  type PaymentMethodConfig,
-  type BusinessProfile 
+  type BusinessProfile
 } from '@/lib/business-store';
 
 // ============================================================================
@@ -22,6 +21,7 @@ interface ProfileResponse {
 }
 
 interface UpdateProfileRequest {
+  businessId: string;
   name?: string;
   phone?: string;
   address?: string;
@@ -33,36 +33,65 @@ interface UpdateProfileRequest {
   valorEmpaqueUnitario?: number;
   domicilio?: number;
   impoconsumo?: number;
-  // Imágenes del negocio
   avatar?: string | null;
   banner?: string | null;
   bannerEnabled?: boolean;
-  // Franja Hero Sutil
   heroImageUrl?: string | null;
   showHeroBanner?: boolean;
-  // Favicon (Icono de Favoritos)
   favicon?: string | null;
-  // Propina Voluntaria
   tipEnabled?: boolean;
   tipPercentageDefault?: number;
   tipOnlyOnPremise?: boolean;
-  // Métodos de Pago
-  paymentMethods?: PaymentMethodConfig[];
+  paymentMethods?: any[];
 }
 
 // ============================================================================
-// GET - Obtener perfil del negocio
+// GET - Obtener perfil del negocio autenticado
 // ============================================================================
 
-export async function GET(): Promise<NextResponse<ProfileResponse>> {
-  const profile = await getBusinessProfileAsync();
-  console.log('[Settings Profile API v3.0] GET profile:', profile.name);
-  console.log('[Settings Profile API v3.0] Payment methods:', profile.paymentMethods?.filter(m => m.enabled).map(m => m.name).join(', '));
-  
-  return NextResponse.json({
-    success: true,
-    data: profile
-  });
+export async function GET(request: NextRequest): Promise<NextResponse<ProfileResponse>> {
+  try {
+    const { searchParams } = new URL(request.url);
+    const businessId = searchParams.get('businessId');
+
+    if (!businessId) {
+      return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
+    }
+
+    // 1. Get core data from DB
+    const business = await db.business.findUnique({
+      where: { id: businessId }
+    });
+
+    if (!business) {
+      return NextResponse.json({ success: false, error: 'Negocio no encontrado' }, { status: 404 });
+    }
+
+    // 2. Get advanced data from isolated store
+    const advancedProfile = await getBusinessProfileAsync(businessId);
+
+    // 3. Merge data
+    const finalProfile: BusinessProfile = {
+      ...advancedProfile,
+      id: business.id,
+      name: business.name,
+      slug: business.slug,
+      phone: business.phone || advancedProfile.phone,
+      address: business.address || advancedProfile.address,
+      primaryColor: business.primaryColor || advancedProfile.primaryColor,
+      secondaryColor: business.secondaryColor || advancedProfile.secondaryColor,
+      logo: business.logo || advancedProfile.logo,
+    };
+
+    return NextResponse.json({
+      success: true,
+      data: finalProfile
+    });
+
+  } catch (error) {
+    console.error('[Settings Profile API] Error reading profile:', error);
+    return NextResponse.json({ success: false, error: 'Error al obtener el perfil' }, { status: 500 });
+  }
 }
 
 // ============================================================================
@@ -72,49 +101,35 @@ export async function GET(): Promise<NextResponse<ProfileResponse>> {
 export async function PUT(request: NextRequest): Promise<NextResponse<ProfileResponse>> {
   try {
     const body: UpdateProfileRequest = await request.json();
-    
-    console.log('[Settings Profile API] PUT request:', body);
-    
-    // Validate required fields
-    if (body.name !== undefined && !body.name.trim()) {
-      return NextResponse.json({
-        success: false,
-        error: 'El nombre del negocio es requerido'
-      }, { status: 400 });
+    const { businessId } = body;
+
+    if (!businessId) {
+      return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
     }
-    
-    // Update profile using shared store (async for file persistence)
-    const updatedProfile = await updateBusinessProfileAsync({
+
+    console.log('[Settings Profile API] PUT request for business:', businessId);
+
+    // 1. Update core fields in DB if provided
+    const dbUpdate = {
       ...(body.name !== undefined && { name: body.name }),
       ...(body.phone !== undefined && { phone: body.phone }),
       ...(body.address !== undefined && { address: body.address }),
       ...(body.primaryColor !== undefined && { primaryColor: body.primaryColor }),
       ...(body.secondaryColor !== undefined && { secondaryColor: body.secondaryColor }),
       ...(body.logo !== undefined && { logo: body.logo }),
-      ...(body.iva !== undefined && { iva: body.iva }),
-      ...(body.empaque !== undefined && { empaque: body.empaque }),
-      ...(body.valorEmpaqueUnitario !== undefined && { valorEmpaqueUnitario: body.valorEmpaqueUnitario }),
-      ...(body.domicilio !== undefined && { domicilio: body.domicilio }),
-      ...(body.impoconsumo !== undefined && { impoconsumo: body.impoconsumo }),
-      // Imágenes del negocio
-      ...(body.avatar !== undefined && { avatar: body.avatar }),
-      ...(body.banner !== undefined && { banner: body.banner }),
-      ...(body.bannerEnabled !== undefined && { bannerEnabled: body.bannerEnabled }),
-      // Franja Hero Sutil
-      ...(body.heroImageUrl !== undefined && { heroImageUrl: body.heroImageUrl }),
-      ...(body.showHeroBanner !== undefined && { showHeroBanner: body.showHeroBanner }),
-      // Favicon (Icono de Favoritos)
-      ...(body.favicon !== undefined && { favicon: body.favicon }),
-      // Propina Voluntaria
-      ...(body.tipEnabled !== undefined && { tipEnabled: body.tipEnabled }),
-      ...(body.tipPercentageDefault !== undefined && { tipPercentageDefault: body.tipPercentageDefault }),
-      ...(body.tipOnlyOnPremise !== undefined && { tipOnlyOnPremise: body.tipOnlyOnPremise }),
-      // Métodos de Pago
-      ...(body.paymentMethods !== undefined && { paymentMethods: body.paymentMethods }),
-    });
+    };
 
-    console.log('[Settings Profile API v3.0] Profile updated successfully:', updatedProfile.name);
-    console.log('[Settings Profile API v3.0] Active payment methods:', updatedProfile.paymentMethods?.filter(m => m.enabled).map(m => m.name).join(', '));
+    if (Object.keys(dbUpdate).length > 0) {
+      await db.business.update({
+        where: { id: businessId },
+        data: dbUpdate
+      });
+    }
+
+    // 2. Update all fields in isolated store
+    const updatedProfile = await updateBusinessProfileAsync(businessId, body);
+
+    console.log('[Settings Profile API] Profile updated successfully for:', businessId);
 
     return NextResponse.json({
       success: true,
@@ -123,10 +138,6 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
 
   } catch (error) {
     console.error('[Settings Profile API] Error updating profile:', error);
-    
-    return NextResponse.json({
-      success: false,
-      error: 'Error al actualizar el perfil'
-    }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Error al actualizar el perfil' }, { status: 500 });
   }
 }
