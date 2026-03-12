@@ -51,6 +51,8 @@ export async function GET(
     const { slug } = await params;
 
     console.log('[Menu API v4.1] GET menu for slug:', slug);
+    console.log('[Menu API] Supabase URL configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+    console.log('[Menu API] Service Role Key configured:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     // 1. Get business from Supabase by slug
     const { data: business, error: businessError } = await supabaseAdmin
@@ -59,7 +61,15 @@ export async function GET(
       .eq('slug', slug)
       .maybeSingle();
 
-    if (businessError || !business) {
+    if (businessError) {
+      console.error('[Menu API] Business query error:', businessError);
+      return NextResponse.json({
+        success: false,
+        error: 'Error al buscar el establecimiento'
+      }, { status: 500 });
+    }
+
+    if (!business) {
       console.log('[Menu API] Business not found for slug:', slug);
       return NextResponse.json({
         success: false,
@@ -67,21 +77,35 @@ export async function GET(
       }, { status: 404 });
     }
 
+    console.log('[Menu API] Business found:', business.name);
+
     // 2. Get categories from Supabase
-    const { data: dbCategories } = await supabaseAdmin
+    const { data: dbCategories, error: categoriesError } = await supabaseAdmin
       .from('categories')
       .select('*')
       .eq('businessId', business.id)
       .eq('isActive', true)
       .order('order', { ascending: true });
 
+    if (categoriesError) {
+      console.error('[Menu API] Categories query error:', categoriesError);
+    }
+
+    console.log('[Menu API] Categories loaded:', dbCategories?.length || 0);
+
     // 3. Get products from Supabase
-    const { data: dbProducts } = await supabaseAdmin
+    const { data: dbProducts, error: productsError } = await supabaseAdmin
       .from('products')
       .select('*, categories:category(name)')
       .eq('businessId', business.id)
       .eq('isAvailable', true)
       .order('order', { ascending: true });
+
+    if (productsError) {
+      console.error('[Menu API] Products query error:', productsError);
+    }
+
+    console.log('[Menu API] Products loaded:', dbProducts?.length || 0);
 
     const categories: Category[] = (dbCategories || []).map(c => ({
       id: c.id,
