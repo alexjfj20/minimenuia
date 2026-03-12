@@ -74,10 +74,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProductsRe
 
     console.log('[Products API] Categories found:', dbCategories?.length || 0);
 
-    // Fetch products from Supabase (simple query without relations)
+    // Fetch products from Supabase (simple query without relations to avoid FK issues)
     const { data: dbProducts, error: productsError } = await supabaseAdmin
       .from('products')
-      .select('*')
+      .select('id, name, description, price, categoryId, isAvailable, isFeatured, image, stock, createdAt, updatedAt, order')
       .eq('businessId', businessId)
       .order('createdAt', { ascending: false });
 
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProductsRe
 
     console.log(`[Products API] GET from DB for business ${businessId}: ${dbProducts?.length || 0} products`);
 
-    // Get category names separately to avoid relation issues
+    // Get category names from the category map (not from relations)
     const categoryMap = new Map(dbCategories?.map(c => [c.id, c.name]) || []);
 
     const products: Product[] = (dbProducts || []).map(p => ({

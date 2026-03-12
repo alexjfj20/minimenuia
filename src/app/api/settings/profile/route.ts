@@ -61,7 +61,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
       return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
     }
 
-    // 1. Get core data from Supabase
+    // Get all data from Supabase (no file-based storage in production)
     const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
       .select('*')
@@ -77,21 +77,32 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
       return NextResponse.json({ success: false, error: 'Negocio no encontrado' }, { status: 404 });
     }
 
-    // 2. Get advanced data from isolated store
-    const advancedProfile = await getBusinessProfileAsync(businessId);
-
-    // 3. Merge data
+    // Build profile from Supabase data only (no file-based storage)
     const finalProfile: BusinessProfile = {
-      ...advancedProfile,
       id: business.id,
       name: business.name,
       slug: business.slug,
-      phone: business.phone || advancedProfile.phone,
-      address: business.address || advancedProfile.address,
-      primaryColor: business.primaryColor || advancedProfile.primaryColor,
-      secondaryColor: business.secondaryColor || advancedProfile.secondaryColor,
-      logo: business.logo || advancedProfile.logo,
+      phone: business.phone || '',
+      address: business.address || '',
+      primaryColor: business.primaryColor || '#8b5cf6',
+      secondaryColor: business.secondaryColor || '#ffffff',
+      logo: business.logo || null,
+      avatar: business.avatar || null,
+      banner: business.banner || null,
+      bannerEnabled: business.bannerEnabled ?? true,
+      heroImageUrl: business.heroImageUrl || null,
+      showHeroBanner: business.showHeroBanner ?? false,
+      favicon: business.favicon || null,
+      impoconsumo: business.impoconsumo ?? 8,
+      valorEmpaqueUnitario: business.valorEmpaqueUnitario ?? 0,
+      tipEnabled: business.tipEnabled ?? true,
+      tipPercentageDefault: business.tipPercentageDefault ?? 10,
+      tipOnlyOnPremise: business.tipOnlyOnPremise ?? true,
+      paymentMethods: business.paymentMethods ?? [],
+      updatedAt: business.updatedAt || new Date().toISOString(),
     };
+
+    console.log('[Settings Profile API] Profile loaded successfully');
 
     return NextResponse.json({
       success: true,
@@ -113,37 +124,87 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
     const body: UpdateProfileRequest = await request.json();
     const { businessId } = body;
 
+    console.log('[Settings Profile API] PUT request for businessId:', businessId);
+
     if (!businessId) {
       return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
     }
 
-    console.log('[Settings Profile API] PUT request for business:', businessId);
+    // Build update object with all possible fields
+    const updateData: any = {};
+    
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.phone !== undefined) updateData.phone = body.phone;
+    if (body.address !== undefined) updateData.address = body.address;
+    if (body.primaryColor !== undefined) updateData.primaryColor = body.primaryColor;
+    if (body.secondaryColor !== undefined) updateData.secondaryColor = body.secondaryColor;
+    if (body.logo !== undefined) updateData.logo = body.logo;
+    if (body.avatar !== undefined) updateData.avatar = body.avatar;
+    if (body.banner !== undefined) updateData.banner = body.banner;
+    if (body.bannerEnabled !== undefined) updateData.bannerEnabled = body.bannerEnabled;
+    if (body.heroImageUrl !== undefined) updateData.heroImageUrl = body.heroImageUrl;
+    if (body.showHeroBanner !== undefined) updateData.showHeroBanner = body.showHeroBanner;
+    if (body.favicon !== undefined) updateData.favicon = body.favicon;
+    if (body.impoconsumo !== undefined) updateData.impoconsumo = body.impoconsumo;
+    if (body.valorEmpaqueUnitario !== undefined) updateData.valorEmpaqueUnitario = body.valorEmpaqueUnitario;
+    if (body.tipEnabled !== undefined) updateData.tipEnabled = body.tipEnabled;
+    if (body.tipPercentageDefault !== undefined) updateData.tipPercentageDefault = body.tipPercentageDefault;
+    if (body.tipOnlyOnPremise !== undefined) updateData.tipOnlyOnPremise = body.tipOnlyOnPremise;
+    if (body.paymentMethods !== undefined) updateData.paymentMethods = body.paymentMethods;
 
-    // 1. Update core fields in Supabase if provided
-    const dbUpdate = {
-      ...(body.name !== undefined && { name: body.name }),
-      ...(body.phone !== undefined && { phone: body.phone }),
-      ...(body.address !== undefined && { address: body.address }),
-      ...(body.primaryColor !== undefined && { primaryColor: body.primaryColor }),
-      ...(body.secondaryColor !== undefined && { secondaryColor: body.secondaryColor }),
-      ...(body.logo !== undefined && { logo: body.logo }),
-    };
+    console.log('[Settings Profile API] Updating fields:', Object.keys(updateData));
 
-    if (Object.keys(dbUpdate).length > 0) {
-      await supabaseAdmin
-        .from('businesses')
-        .update(dbUpdate)
-        .eq('id', businessId);
+    // Update in Supabase (no file-based storage)
+    const { error: updateError } = await supabaseAdmin
+      .from('businesses')
+      .update(updateData)
+      .eq('id', businessId);
+
+    if (updateError) {
+      console.error('[Settings Profile API] Update error:', updateError);
+      return NextResponse.json({ success: false, error: 'Error al actualizar el perfil: ' + updateError.message }, { status: 500 });
     }
 
-    // 2. Update all fields in isolated store
-    const updatedProfile = await updateBusinessProfileAsync(businessId, body);
+    // Fetch updated profile
+    const { data: updatedBusiness } = await supabaseAdmin
+      .from('businesses')
+      .select('*')
+      .eq('id', businessId)
+      .maybeSingle();
 
-    console.log('[Settings Profile API] Profile updated successfully for:', businessId);
+    if (!updatedBusiness) {
+      return NextResponse.json({ success: false, error: 'Negocio no encontrado después de actualizar' }, { status: 404 });
+    }
+
+    const finalProfile: BusinessProfile = {
+      id: updatedBusiness.id,
+      name: updatedBusiness.name,
+      slug: updatedBusiness.slug,
+      phone: updatedBusiness.phone || '',
+      address: updatedBusiness.address || '',
+      primaryColor: updatedBusiness.primaryColor || '#8b5cf6',
+      secondaryColor: updatedBusiness.secondaryColor || '#ffffff',
+      logo: updatedBusiness.logo || null,
+      avatar: updatedBusiness.avatar || null,
+      banner: updatedBusiness.banner || null,
+      bannerEnabled: updatedBusiness.bannerEnabled ?? true,
+      heroImageUrl: updatedBusiness.heroImageUrl || null,
+      showHeroBanner: updatedBusiness.showHeroBanner ?? false,
+      favicon: updatedBusiness.favicon || null,
+      impoconsumo: updatedBusiness.impoconsumo ?? 8,
+      valorEmpaqueUnitario: updatedBusiness.valorEmpaqueUnitario ?? 0,
+      tipEnabled: updatedBusiness.tipEnabled ?? true,
+      tipPercentageDefault: updatedBusiness.tipPercentageDefault ?? 10,
+      tipOnlyOnPremise: updatedBusiness.tipOnlyOnPremise ?? true,
+      paymentMethods: updatedBusiness.paymentMethods ?? [],
+      updatedAt: updatedBusiness.updatedAt || new Date().toISOString(),
+    };
+
+    console.log('[Settings Profile API] Profile updated successfully');
 
     return NextResponse.json({
       success: true,
-      data: updatedProfile
+      data: finalProfile
     });
 
   } catch (error) {
