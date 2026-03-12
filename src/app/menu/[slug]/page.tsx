@@ -412,10 +412,6 @@ function CartSidebar({
     const selectedPaymentMethod = paymentMethods.find(p => p.id === selectedPayment);
     const paymentMethodName = selectedPaymentMethod?.name || 'Efectivo';
 
-    // Generate order number for display
-    const now = new Date();
-    const orderNumber = `REST-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Date.now()).slice(-6)}`;
-
     // Save order to database FIRST
     try {
       const orderData = {
@@ -450,9 +446,14 @@ function CartSidebar({
 
       const result = await response.json();
 
-      if (result.success) {
-        console.log('[Pedido Restaurante] Guardado en BD:', result.data?.id);
+      let orderNumber = 'N/A';
+      if (result.success && result.data?.orderNumber) {
+        orderNumber = result.data.orderNumber;
+        console.log('[Pedido Restaurante] Guardado en BD:', result.data.id, 'Order Number:', orderNumber);
       } else {
+        // Fallback: generate a simple order number for display only
+        const now = new Date();
+        orderNumber = `REST-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}-${String(Date.now()).slice(-4)}`;
         console.error('[Pedido Restaurante] Error guardando:', result.error);
       }
     } catch (error) {
@@ -503,7 +504,7 @@ function CartSidebar({
   // WhatsApp order for delivery - also saves to database
   const handleDeliveryOrder = async () => {
     if (items.length === 0) return;
-    
+
     // Validate required fields
     if (!deliveryForm.name || !deliveryForm.phone || !deliveryForm.address || !deliveryForm.city || !deliveryForm.department) {
       alert('Por favor complete todos los campos obligatorios');
@@ -513,14 +514,12 @@ function CartSidebar({
     const selectedPaymentMethod = paymentMethods.find(p => p.id === selectedPayment);
     const paymentMethodName = selectedPaymentMethod?.name || 'Efectivo';
 
-    // Generate invoice number
     const now = new Date();
-    const invoiceNumber = `DOM-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(Date.now()).slice(-6)}`;
 
     // Calculate estimated delivery (45 minutes from now)
     const estimatedDelivery = new Date(now.getTime() + 45 * 60000).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 
-    // Save order to database FIRST
+    // Save order to database FIRST - API will generate orderNumber (ORD-0001)
     try {
       const orderData = {
         businessId: restaurant.id,
@@ -536,7 +535,7 @@ function CartSidebar({
         paymentMethod: paymentMethodName,
         neighborhood: deliveryForm.city,
         estimatedDelivery: estimatedDelivery,
-        invoiceNumber: invoiceNumber,
+        // Don't send invoiceNumber - let API generate orderNumber
         notes: deliveryForm.notes || undefined,
         items: items.map(item => ({
           productId: item.id,
@@ -557,10 +556,14 @@ function CartSidebar({
       });
 
       const result = await response.json();
-      
-      if (result.success) {
-        console.log('[Pedido Domicilio] Guardado en BD:', result.data?.id);
+
+      let orderNumber = 'N/A';
+      if (result.success && result.data?.orderNumber) {
+        orderNumber = result.data.orderNumber;
+        console.log('[Pedido Domicilio] Guardado en BD:', result.data.id, 'Order Number:', orderNumber);
       } else {
+        // Fallback: generate a simple order number for display only
+        orderNumber = `DOM-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}-${String(Date.now()).slice(-4)}`;
         console.error('[Pedido Domicilio] Error guardando:', result.error);
       }
     } catch (error) {

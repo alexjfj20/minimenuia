@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { OrderType, PaymentStatus, OrderStatus, Currency } from '@prisma/client';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
+import { OrderType, PaymentStatus, OrderStatus, Currency } from '@/types/database';
+import { generateNextOrderNumber } from '@/lib/order-utils';
 
 // Invoice type definition
 interface InvoiceItem {
@@ -41,27 +42,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all RESTAURANT orders from database for this specific business
-    const restaurantOrders = await db.order.findMany({
-      where: {
-        businessId: businessId,
-        orderType: 'RESTAURANT'
-      },
-      include: {
-        items: true
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
+    const { data: restaurantOrders, error } = await supabase
+      .from('orders')
+      .select('*, items:order_items(*)')
+      .eq('businessId', businessId)
+      .eq('orderType', 'RESTAURANT')
+      .order('createdAt', { ascending: false });
+
+    if (error) {
+      console.error('[Restaurant Invoice API] Supabase error:', error);
+      throw new Error(error.message);
+    }
 
     // Convert database orders to invoice format
-    const invoices: RestaurantInvoiceType[] = restaurantOrders.map(order => ({
+    const invoices: RestaurantInvoiceType[] = (restaurantOrders || []).map(order => ({
       id: order.id,
       businessId: order.businessId,
       invoiceNumber: order.orderNumber || order.invoiceNumber || `ORD-${order.id.slice(-6)}`,
       customerName: order.customerName,
       customerPhone: order.customerPhone || undefined,
-      items: order.items.map(item => ({
+      items: (order.items || []).map((item: any) => ({
         productId: item.productId,
         name: item.productName,
         price: item.unitPrice,
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
           order.paymentMethod?.toLowerCase() === 'transferencia' || order.paymentMethod?.toLowerCase() === 'transfer' ? 'transfer' : 'cash') as 'cash' | 'card' | 'transfer',
       status: order.paymentStatus === 'PAID' ? 'paid' :
         order.paymentStatus === 'REFUNDED' || order.status === 'CANCELLED' ? 'cancelled' : 'pending',
-      createdAt: order.createdAt.toISOString(),
+      createdAt: new Date(order.createdAt).toISOString(),
       notes: order.notes || undefined,
       source: order.invoiceNumber ? 'tpv' : 'cart'
     }));
@@ -86,10 +86,10 @@ export async function GET(request: NextRequest) {
       success: true,
       invoices: invoices
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[Restaurant Invoice API] Error fetching invoices:', error);
     return NextResponse.json(
-      { success: false, error: 'Error al obtener facturas de la base de datos' },
+      { success: false, error: 'Error al obtener facturas de la base de datos: ' + error.message },
       { status: 500 }
     );
   }
@@ -106,12 +106,17 @@ export async function POST(request: NextRequest) {
 
     console.log('[Restaurant Invoice API] Creating invoice in DB:', body.invoiceNumber, 'for business:', body.businessId);
 
-    // Create a new order to represent this invoice
-    const newOrder = await db.order.create({
-      data: {
+    // Generate unique order number for this invoice (separate from invoice number)
+    const orderNumber = await generateNextOrderNumber(body.businessId);
+    console.log('[Restaurant Invoice API] Generated order number:', orderNumber);
+
+    // 1. Create a new order to represent this invoice
+    const { data: newOrder, error: orderError } = await supabase
+      .from('orders')
+      .insert({
         businessId: body.businessId,
-        orderNumber: body.invoiceNumber || `TPV-${Date.now()}`,
-        invoiceNumber: body.invoiceNumber,
+        orderNumber,  // Unique order number (ORD-0001, ORD-0002, etc.)
+        invoiceNumber: body.invoiceNumber,  // Invoice number (FAC-0001, FAC-0002, etc.)
         customerName: body.customerName || 'Cliente General',
         customerPhone: body.customerPhone || null,
         subtotal: body.subtotal,
@@ -124,25 +129,40 @@ export async function POST(request: NextRequest) {
         paymentMethod: body.paymentMethod === 'cash' ? 'Efectivo' :
           body.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia',
         notes: body.notes || null,
-        items: {
-          create: body.items.map(item => ({
-            productId: item.productId,
-            productName: item.name,
-            quantity: item.quantity,
-            unitPrice: item.price,
-            totalPrice: item.price * item.quantity,
-          }))
-        }
-      },
-      include: {
-        items: true
-      }
-    });
+      })
+      .select()
+      .single();
+
+    if (orderError) {
+      console.error('[Restaurant Invoice API] Error creating order in Supabase:', orderError);
+      throw new Error(orderError.message);
+    }
+
+    // 2. Create items
+    const itemsToInsert = body.items.map(item => ({
+      orderId: newOrder.id,
+      productId: item.productId,
+      productName: item.name,
+      quantity: item.quantity,
+      unitPrice: item.price,
+      totalPrice: item.price * item.quantity,
+    }));
+
+    const { data: items, error: itemsError } = await supabase
+      .from('order_items')
+      .insert(itemsToInsert)
+      .select();
+
+    if (itemsError) {
+      console.error('[Restaurant Invoice API] Error creating items in Supabase:', itemsError);
+      await supabase.from('orders').delete().eq('id', newOrder.id);
+      throw new Error(itemsError.message);
+    }
 
     const responseInvoice: RestaurantInvoiceType = {
       ...body,
       id: newOrder.id,
-      createdAt: newOrder.createdAt.toISOString(),
+      createdAt: new Date(newOrder.createdAt).toISOString(),
       source: 'tpv' as const
     };
 
@@ -150,10 +170,10 @@ export async function POST(request: NextRequest) {
       success: true,
       invoice: responseInvoice
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[Restaurant Invoice API] Error creating invoice:', error);
     return NextResponse.json(
-      { success: false, error: 'Error al crear la factura en la base de datos' },
+      { success: false, error: 'Error al crear la factura en la base de datos: ' + error.message },
       { status: 500 }
     );
   }
@@ -176,21 +196,25 @@ export async function DELETE(request: NextRequest) {
     console.log(`[Restaurant Invoice API] Deleting invoice ${id} for business ${businessId}`);
 
     // Strict filtering by businessId for security
-    await db.order.delete({
-      where: {
-        id,
-        businessId
-      }
-    });
+    const { error } = await supabase
+      .from('orders')
+      .delete()
+      .eq('id', id)
+      .eq('businessId', businessId);
+
+    if (error) {
+      console.error('[Restaurant Invoice API] Error deleting invoice in Supabase:', error);
+      throw new Error(error.message);
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Factura eliminada correctamente'
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[Restaurant Invoice API] Error deleting invoice:', error);
     return NextResponse.json(
-      { success: false, error: 'Error al eliminar factura de la base de datos' },
+      { success: false, error: 'Error al eliminar factura de la base de datos: ' + error.message },
       { status: 500 }
     );
   }

@@ -163,6 +163,7 @@ interface Order {
   type?: 'restaurante' | 'domicilio'; // Tipo de pedido
   createdAt?: string; // Para cálculo de temporizador
   paymentStatus?: 'pending' | 'paid' | 'refunded'; // Estado del pago
+  paymentMethod?: 'cash' | 'card' | 'transfer';
 }
 
 // --- Unified Order Interface for 3-column view ---
@@ -339,7 +340,7 @@ interface OrderCardProps {
   onView: () => void;
 }
 
-function OrderCard({ order, timer, onView }: OrderCardProps): JSX.Element {
+function OrderCard({ order, timer, onView }: OrderCardProps) {
   const timerColor = timer !== undefined ? getTimerColor(timer) : '';
   const timerBg = timer !== undefined ? getTimerBackground(timer) : '';
   const showTimer = timer !== undefined && shouldShowTimer(order.status);
@@ -677,16 +678,24 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         const savedProfile = localStorage.getItem('businessProfile');
         if (savedProfile) {
           const parsed = JSON.parse(savedProfile);
-          setProfileId(parsed.id);
-          setProfileForm({
-            businessName: parsed.name || '',
-            phone: parsed.phone || '',
-            address: parsed.address || '',
-            primaryColor: parsed.primaryColor || '#8b5cf6',
-            secondaryColor: parsed.secondaryColor || '#ffffff',
-            impoconsumo: parsed.impoconsumo ?? 8,
-            // Imágenes del negocio
-            avatar: parsed.avatar || null,
+          
+          // IGNORAR IDs estáticos de sesiones anteriores (ej: 'business-1')
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+          if (parsed.id && !uuidRegex.test(parsed.id)) {
+            console.warn('[Profile] Eliminando perfil viejo con ID inválido del localStorage:', parsed.id);
+            localStorage.removeItem('businessProfile');
+            localStorage.removeItem('businessProducts');
+          } else {
+            setProfileId(parsed.id);
+            setProfileForm({
+              businessName: parsed.name || '',
+              phone: parsed.phone || '',
+              address: parsed.address || '',
+              primaryColor: parsed.primaryColor || '#8b5cf6',
+              secondaryColor: parsed.secondaryColor || '#ffffff',
+              impoconsumo: parsed.impoconsumo ?? 8,
+              // Imágenes del negocio
+              avatar: parsed.avatar || null,
             logo: parsed.logo || null,
             banner: parsed.banner || null,
             bannerEnabled: parsed.bannerEnabled ?? true,
@@ -712,10 +721,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           if (parsed.valorEmpaqueUnitario !== undefined) {
             setValorUnitarioEmpaque(parsed.valorEmpaqueUnitario);
           }
+          } // Cierra el else validación UUID
         }
 
         // Then sync with server
-        const response = await fetch('/api/settings/profile');
+        const response = await fetch(`/api/settings/profile?businessId=${user.businessId}`);
         const data = await response.json();
 
         if (data.success && data.data) {
@@ -754,8 +764,19 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           if (data.data.valorEmpaqueUnitario !== undefined) {
             setValorUnitarioEmpaque(data.data.valorEmpaqueUnitario);
           }
-          // Update localStorage
-          localStorage.setItem('businessProfile', JSON.stringify(data.data));
+          // Note: Data is persisted in database. localStorage removed to avoid quota exceeded errors.
+
+          // Load products from Database using the specific profileId
+          try {
+            const productsRes = await fetch(`/api/products?businessId=${data.data.id}`);
+            const productsData = await productsRes.json();
+            if (productsData.success && productsData.data) {
+              setProducts(productsData.data.products || []);
+              console.log('[Catalog] Loaded from DB:', productsData.data.products.length);
+            }
+          } catch (prodErr) {
+            console.error('[Catalog] Error loading products:', prodErr);
+          }
         }
       } catch (error) {
         console.error('[Profile] Error loading profile:', error);
@@ -763,16 +784,25 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         const savedProfile = localStorage.getItem('businessProfile');
         if (savedProfile) {
           const parsed = JSON.parse(savedProfile);
-          setProfileId(parsed.id);
-          setProfileForm({
-            businessName: parsed.name || 'Mi Restaurante',
-            phone: parsed.phone || '+57 300 000 0000',
-            address: parsed.address || 'Dirección del negocio',
-            primaryColor: parsed.primaryColor || '#8b5cf6',
-            secondaryColor: parsed.secondaryColor || '#ffffff',
-            impoconsumo: parsed.impoconsumo ?? 8,
-            // Imágenes del negocio
-            avatar: parsed.avatar || null,
+
+          // IGNORAR IDs estáticos de sesiones anteriores (ej: 'business-1')
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+          if (parsed.id && !uuidRegex.test(parsed.id)) {
+            console.warn('[Profile Fallback] Eliminando perfil viejo con ID inválido del localStorage:', parsed.id);
+            localStorage.removeItem('businessProfile');
+            localStorage.removeItem('businessProducts');
+            // Dejar null, permitiendo que el useEffect reintente crear o manejar el estado vacío
+          } else {
+            setProfileId(parsed.id);
+            setProfileForm({
+              businessName: parsed.name || 'Mi Restaurante',
+              phone: parsed.phone || '+57 300 000 0000',
+              address: parsed.address || 'Dirección del negocio',
+              primaryColor: parsed.primaryColor || '#8b5cf6',
+              secondaryColor: parsed.secondaryColor || '#ffffff',
+              impoconsumo: parsed.impoconsumo ?? 8,
+              // Imágenes del negocio
+              avatar: parsed.avatar || null,
             logo: parsed.logo || null,
             banner: parsed.banner || null,
             bannerEnabled: parsed.bannerEnabled ?? true,
@@ -784,14 +814,25 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             tipPercentageDefault: parsed.tipPercentageDefault ?? 10,
             tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true,
             // Métodos de Pago (Efectivo primero)
-            paymentMethods: parsed.paymentMethods ?? [
+            paymentMethods: parsed.paymentMethods ?? ([
               { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
               { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
               { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
-            ]
-          });
+            ] as PaymentMethodConfig[])
+          } as any);
+
+          // Cargar productos del localStorage
+          const savedProducts = localStorage.getItem('businessProducts');
+          if (savedProducts) {
+            try {
+              setProducts(JSON.parse(savedProducts));
+            } catch (e) {
+              console.error('[Catalog] Error parsing local products');
+            }
+          }
+          } // <- Cierra el else (línea 795) que contiene la carga de perfil
         } else {
           // Set default values if loading fails
           setProfileForm({
@@ -1041,19 +1082,37 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- Product Save Functions ---
   const addProductToList = async (product: Omit<Product, 'id'>): Promise<void> => {
     try {
+      const currentBusinessId = profileId ?? user.businessId;
+      
+      // Validar formato UUID (8-4-4-4-12 hex)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      
+      if (!uuidRegex.test(currentBusinessId || '')) {
+        console.error('[Products] Invalid businessId format detectado en frontend:', currentBusinessId);
+        setToastMessage({ 
+          type: 'error', 
+          message: 'Error de sesión: ID de negocio inválido. Intenta cerrar sesión y volver a entrar.' 
+        });
+        return;
+      }
+
       const response = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...product,
-          businessId: profileId ?? user.businessId // profileId es el ID real del negocio cargado desde la DB
+          businessId: currentBusinessId
         })
       });
 
       const data = await response.json();
 
       if (data.success && data.product) {
-        setProducts(prev => [...prev, data.product as Product]);
+        setProducts(prev => {
+          const newProducts = [...prev, data.product as Product];
+          localStorage.setItem('businessProducts', JSON.stringify(newProducts));
+          return newProducts;
+        });
         console.log('[Products] Added product:', data.product.name);
 
         // Update categories if a new one was added
@@ -1258,7 +1317,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       category: aiGeneratedProduct.category,
       available: true,
       featured: false,
-      image: aiGeneratedProduct.image
+      image: aiGeneratedProduct.image,
+      stock: 0
     });
 
     setShowAITextModal(false);
@@ -1272,13 +1332,27 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
     if (editingProduct) {
       // Update existing product via API
+      const currentBusinessId = profileId ?? user.businessId;
+
+      // Validar formato UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      
+      if (!uuidRegex.test(currentBusinessId || '')) {
+        console.error('[Products] Invalid businessId format detectado en edición:', currentBusinessId);
+        setToastMessage({ 
+          type: 'error', 
+          message: 'Error de sesión: ID de negocio inválido.' 
+        });
+        return;
+      }
+
       try {
         const response = await fetch('/api/products', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: editingProduct.id,
-            businessId: profileId ?? user.businessId, // profileId es el ID real del negocio cargado desde la DB
+            businessId: currentBusinessId,
             ...productForm
           })
         });
@@ -1286,11 +1360,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         const data = await response.json();
 
         if (data.success && data.product) {
-          setProducts(prev => prev.map(p =>
-            p.id === editingProduct.id
-              ? (data.product as Product)
-              : p
-          ));
+          setProducts(prev => {
+            const newProducts = prev.map(p =>
+              p.id === editingProduct.id
+                ? (data.product as Product)
+                : p
+            );
+            localStorage.setItem('businessProducts', JSON.stringify(newProducts));
+            return newProducts;
+          });
           console.log('[Products] Updated product:', data.product.name);
         }
       } catch (error) {
@@ -1359,7 +1437,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       const data = await response.json();
 
       if (data.success) {
-        setProducts(prev => prev.filter(p => p.id !== productToDelete.id));
+        setProducts(prev => {
+          const newProducts = prev.filter(p => p.id !== productToDelete.id);
+          localStorage.setItem('businessProducts', JSON.stringify(newProducts));
+          return newProducts;
+        });
         console.log('[Products] Deleted product:', productToDelete.name);
       }
     } catch (error) {
@@ -1511,11 +1593,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     try {
       const { subtotal, empaqueTotal, total, itemCount } = getDeliveryCartTotals();
       const now = new Date();
-      const invoiceNumber = `FAC-DOM-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(deliveryInvoices.length + 1).padStart(4, '0')}`;
+      
+      // Generate invoice number matching the order number format (ORD-0001, ORD-0002, etc.)
+      // This ensures consistency with the order number shown in Gestión de Pedidos - Domicilio column
+      const nextInvoiceNum = deliveryInvoices.length + 1;
+      const invoiceNumber = `ORD-${String(nextInvoiceNum).padStart(4, '0')}`;
 
       const newInvoice: DeliveryInvoice = {
         id: `DEL-${Date.now()}`,
-        invoiceNumber,
+        invoiceNumber,  // Same as orderNumber (ORD-0001)
+        orderNumber: invoiceNumber,  // Add orderNumber field for consistency
         customerName: deliveryCustomerName,
         customerPhone: deliveryCustomerPhone,
         customerAddress: deliveryCustomerAddress,
@@ -1557,13 +1644,44 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     try {
       // 1. Load from localStorage (created from admin panel)
       const savedInvoices = localStorage.getItem('deliveryInvoices');
-      const localInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
+      let localInvoices: DeliveryInvoice[] = savedInvoices ? JSON.parse(savedInvoices) : [];
+
+      // Fix: Update old invoices with long format to use short ORD-XXXX format
+      let needsUpdate = false;
+      localInvoices = localInvoices.map((invoice, index) => {
+        // Check if invoice has long format (DOM-20260312-XXXXXX or FAC-DOM-*)
+        if (invoice.invoiceNumber.startsWith('DOM-') || invoice.invoiceNumber.startsWith('FAC-DOM-')) {
+          // Generate new short format based on position in list
+          const newInvoiceNumber = `ORD-${String(localInvoices.length - index).padStart(4, '0')}`;
+          needsUpdate = true;
+          return {
+            ...invoice,
+            invoiceNumber: newInvoiceNumber,
+            orderNumber: newInvoiceNumber
+          };
+        }
+        // Ensure orderNumber is set for consistency
+        if (!invoice.orderNumber) {
+          return { ...invoice, orderNumber: invoice.invoiceNumber };
+        }
+        return invoice;
+      });
+
+      // Save updated invoices back to localStorage if changes were made
+      if (needsUpdate) {
+        localStorage.setItem('deliveryInvoices', JSON.stringify(localInvoices));
+        console.log('[DeliveryInvoices] Updated old invoice numbers to short format');
+      }
 
       // 2. Load from database (created from public cart "Tu pedido")
       let dbInvoices: DeliveryInvoice[] = [];
       try {
-        // Use profileId from state or default to 'business-1'
-        const businessId = profileId ?? 'business-1';
+        // Use real business ID from profile or user state
+        const businessId = profileId || user.businessId;
+        if (!businessId) {
+          console.warn('[DeliveryInvoices] No businessId available to load from DB');
+          return;
+        }
         const response = await fetch(`/api/orders?businessId=${businessId}&orderType=DELIVERY`);
         if (response.ok) {
           const data = await response.json();
@@ -1596,7 +1714,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             }): DeliveryInvoice => ({
               id: order.id,
               orderNumber: order.orderNumber, // Número amigable (ORD-0001)
-              invoiceNumber: order.invoiceNumber ?? `PED-${order.id.slice(-6)}`,
+              invoiceNumber: order.orderNumber ?? order.invoiceNumber ?? `PED-${order.id.slice(-6)}`,  // Use orderNumber as invoiceNumber
               customerName: order.customerName,
               customerPhone: order.customerPhone ?? '',
               customerAddress: order.customerAddress ?? '',
@@ -1655,7 +1773,12 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const loadAllOrdersFromDatabase = async (): Promise<void> => {
     setIsLoadingOrders(true);
     try {
-      const businessId = user.businessId || profileId || 'business-1';
+      const businessId = user.businessId || profileId;
+      if (!businessId) {
+        console.warn('[Orders] No businessId available to load from DB');
+        setIsLoadingOrders(false);
+        return;
+      }
 
       // Load restaurant orders
       const restaurantResponse = await fetch(`/api/orders?businessId=${businessId}&orderType=RESTAURANT`);
@@ -1830,15 +1953,27 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   // Create invoice
   const handleCreateInvoice = async (): Promise<void> => {
-    if (cart.length === 0) return;
+    if (cart.length === 0) {
+      setInvoiceToast({ type: 'warning', message: 'El carrito está vacío' });
+      return;
+    }
 
     setIsCreatingInvoice(true);
 
     const totals = getCartTotals();
     const newInvoiceNumber = lastInvoiceNumber + 1;
+    const businessId = profileId || user.businessId;
+
+    if (!businessId) {
+      console.error('[TPV] No businessId available');
+      setInvoiceToast({ type: 'error', message: 'Error: No se pudo identificar el negocio' });
+      setIsCreatingInvoice(false);
+      return;
+    }
 
     const newInvoice: RestaurantInvoice = {
       id: `inv-${Date.now()}`,
+      businessId,
       invoiceNumber: `FAC-${String(newInvoiceNumber).padStart(4, '0')}`,
       customerName: invoiceCustomerName || 'Cliente Mostrador',
       customerPhone: invoiceCustomerPhone,
@@ -1857,21 +1992,29 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     };
 
     try {
+      console.log('[TPV] Creating invoice:', newInvoice);
       const response = await fetch('/api/restaurant-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newInvoice)
       });
 
-      if (response.ok) {
+      const result = await response.json();
+      console.log('[TPV] API response:', result);
+
+      if (response.ok && result.success) {
         setLastInvoiceNumber(newInvoiceNumber);
-        setInvoices(prev => [newInvoice, ...prev]);
+        setInvoices(prev => [result.invoice || newInvoice, ...prev]);
         clearCart();
-        setInvoiceCreated(true);
-        setTimeout(() => setInvoiceCreated(false), 3000);
+        setInvoiceToast({ type: 'success', message: 'Factura creada exitosamente' });
+        setTimeout(() => setInvoiceToast(null), 3000);
+      } else {
+        console.error('[TPV] API error:', result.error);
+        setInvoiceToast({ type: 'error', message: result.error || 'Error al crear la factura' });
       }
     } catch (error) {
       console.error('[TPV] Error creating invoice:', error);
+      setInvoiceToast({ type: 'error', message: 'Error de conexión al crear la factura' });
     } finally {
       setIsCreatingInvoice(false);
     }
@@ -1881,16 +2024,26 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const loadInvoices = useCallback(async (): Promise<void> => {
     setIsLoadingInvoices(true);
     try {
-      const businessId = profileId ?? 'business-1';
+      const businessId = profileId || user.businessId;
+      if (!businessId) {
+        console.warn('[Invoices] No businessId available to load from DB');
+        setIsLoadingInvoices(false);
+        return;
+      }
       const response = await fetch(`/api/restaurant-invoice?businessId=${businessId}`);
       const data = await response.json();
       if (data.success && data.invoices) {
         setInvoices(data.invoices);
-        // Get last invoice number
+        // Get last invoice number - handle both FAC-XXXX and ORD-XXXX formats
         if (data.invoices.length > 0) {
           const lastNum = data.invoices.reduce((max: number, inv: RestaurantInvoice) => {
-            const num = parseInt(inv.invoiceNumber.replace('FAC-', '').replace('ORD-', ''));
-            return num > max ? num : max;
+            // Extract number from FAC-0001 or ORD-0001 format
+            const match = inv.invoiceNumber.match(/^(?:FAC|ORD)-(\d+)$/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              return num > max ? num : max;
+            }
+            return max;
           }, 0);
           setLastInvoiceNumber(lastNum);
         }
@@ -4543,8 +4696,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     if (menuSlugActive && menuSlug) {
       return `${baseUrl}/menu/${menuSlug}`;
     }
-    // Usar el ID del negocio del usuario (simulado)
-    return `${baseUrl}/menu/restaurant-${user.id || 'demo'}`;
+    // Usar el ID del negocio real como fallback
+    return `${baseUrl}/menu/${profileId ?? user.businessId ?? ''}`;
   };
 
   const getQRCodeUrl = (): string => {
@@ -4578,13 +4731,22 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         }
       }
 
-      // Simular guardado - en producción sería una llamada a la API
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await fetch('/api/settings/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          businessId: user.businessId,
+          slug: menuSlugActive && menuSlug ? menuSlug : undefined
+        })
+      });
 
-      setToastMessage({ type: 'success', message: 'Configuración guardada correctamente' });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error);
+
+      setToastMessage({ type: 'success', message: 'Enlace guardado correctamente' });
       setTimeout(() => setToastMessage(null), 3000);
-    } catch {
-      setToastMessage({ type: 'error', message: 'Error al guardar la configuración' });
+    } catch (err: any) {
+      setToastMessage({ type: 'error', message: err.message || 'Error al guardar la URL' });
     } finally {
       setIsSavingShare(false);
     }
@@ -4628,6 +4790,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          businessId: user.businessId,
           name: profileForm.businessName,
           phone: profileForm.phone,
           address: profileForm.address,
@@ -4690,8 +4853,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             { id: 'card', name: 'Tarjeta', icon: '💳', enabled: true }
           ]
         });
-        // Save to localStorage for persistence
-        localStorage.setItem('businessProfile', JSON.stringify(data.data));
+        // Note: Data is persisted in database via API. localStorage removed to avoid quota exceeded errors.
       }
 
       setToastMessage({ type: 'success', message: 'Perfil actualizado correctamente' });
@@ -4721,6 +4883,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          businessId: user.businessId,
           valorEmpaqueUnitario: valorEmpaqueUnitario
         })
       });
@@ -4731,12 +4894,17 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         throw new Error(data.error || 'Error al guardar el valor de empaque');
       }
 
-      // Update localStorage
+      // Update localStorage (lightweight, no images)
       const savedProfile = localStorage.getItem('businessProfile');
       if (savedProfile) {
-        const parsed = JSON.parse(savedProfile);
-        parsed.valorEmpaqueUnitario = valorEmpaqueUnitario;
-        localStorage.setItem('businessProfile', JSON.stringify(parsed));
+        try {
+          const parsed = JSON.parse(savedProfile);
+          parsed.valorEmpaqueUnitario = valorEmpaqueUnitario;
+          localStorage.setItem('businessProfile', JSON.stringify(parsed));
+        } catch (storageError) {
+          // Ignore localStorage errors - data is already saved in database
+          console.warn('[Empaque] localStorage update skipped:', storageError);
+        }
       }
 
       setToastMessage({ type: 'success', message: 'Valor de empaque guardado correctamente' });
@@ -5072,7 +5240,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                       </div>
                       <div className="text-right">
                         <p className="font-medium text-sm">${order.total.toLocaleString()}</p>
-                        <StatusBadge status={order.status} />
+                        <StatusBadge status={order.status as any} />
                       </div>
                     </div>
                   ))}
@@ -7924,6 +8092,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                                           method: 'PUT',
                                           headers: { 'Content-Type': 'application/json' },
                                           body: JSON.stringify({
+                                            businessId: user.businessId,
                                             heroImageUrl,
                                             showHeroBanner: true
                                           })
@@ -10432,7 +10601,7 @@ interface BackupSectionProps {
   onToast: (message: { type: 'success' | 'error'; message: string }) => void;
 }
 
-function BackupSection({ businessName, onToast }: BackupSectionProps): JSX.Element {
+function BackupSection({ businessName, onToast }: BackupSectionProps) {
   // State for backup creation
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
