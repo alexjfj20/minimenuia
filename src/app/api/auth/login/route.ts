@@ -24,9 +24,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Buscar usuario en la base de datos
+    // Especificar la relación !users_businessId_fkey para evitar ambigüedad
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .select('*, business:businesses(id, name, slug)')
+      .select('*, businesses!users_businessId_fkey(id, name, slug)')
       .eq('email', email.toLowerCase())
       .maybeSingle();
 
@@ -37,6 +38,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 401 }
       );
     }
+
+    // Mapear business desde la relación especificada
+    const business = user.businesses;
 
     // Verificar contraseña
     const isValidPassword = await bcrypt.compare(password, user.password);
@@ -55,7 +59,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       name: user.name,
       role: user.role,
       businessId: user.businessId,
-      businessName: user.business?.name ?? null,
+      businessName: business?.name ?? null,
     };
 
     // Respuesta con cookie de sesión
@@ -67,7 +71,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         name: user.name,
         role: user.role,
         businessId: user.businessId,
-        businessName: user.business?.name ?? null,
+        businessName: business?.name ?? null,
       },
       message: 'Inicio de sesión exitoso',
     });
