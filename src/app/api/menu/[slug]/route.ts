@@ -93,19 +93,26 @@ export async function GET(
 
     console.log('[Menu API] Categories loaded:', dbCategories?.length || 0);
 
-    // 3. Get products from Supabase
+    // 3. Get products from Supabase (simple query without relations to avoid issues)
     const { data: dbProducts, error: productsError } = await supabaseAdmin
       .from('products')
-      .select('*, categories:category(name)')
+      .select('*')
       .eq('businessId', business.id)
       .eq('isAvailable', true)
       .order('order', { ascending: true });
 
     if (productsError) {
       console.error('[Menu API] Products query error:', productsError);
+      return NextResponse.json({
+        success: false,
+        error: 'Error al cargar los productos: ' + productsError.message
+      }, { status: 500 });
     }
 
     console.log('[Menu API] Products loaded:', dbProducts?.length || 0);
+
+    // Create category map for quick lookup
+    const categoryMap = new Map(dbCategories?.map(c => [c.id, c.name]) || []);
 
     const categories: Category[] = (dbCategories || []).map(c => ({
       id: c.id,
@@ -119,7 +126,7 @@ export async function GET(
       name: p.name,
       description: p.description || '',
       price: p.price,
-      category: p.categories?.name || 'General',
+      category: categoryMap.get(p.categoryId || '') || 'General',
       available: p.isAvailable,
       featured: p.isFeatured,
       image: p.image,

@@ -293,17 +293,55 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Product
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const businessId = searchParams.get('businessId');
+
+    console.log('[Products API] DELETE request - id:', id, 'businessId:', businessId);
+    console.log('[Products API] Supabase configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'ID del producto es requerido' }, { status: 400 });
     }
 
-    await supabaseAdmin
+    // First verify the product exists and belongs to this business
+    const { data: existingProduct, error: fetchError } = await supabaseAdmin
+      .from('products')
+      .select('id, businessId, name')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error('[Products API] Error fetching product before delete:', fetchError);
+      return NextResponse.json({
+        success: false,
+        error: 'Error al buscar el producto: ' + fetchError.message
+      }, { status: 500 });
+    }
+
+    if (!existingProduct) {
+      console.log('[Products API] Product not found:', id);
+      return NextResponse.json({ success: false, error: 'Producto no encontrado' }, { status: 404 });
+    }
+
+    if (businessId && existingProduct.businessId !== businessId) {
+      console.error('[Products API] Unauthorized delete attempt - product belongs to different business');
+      return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 403 });
+    }
+
+    // Now delete
+    const { error: deleteError } = await supabaseAdmin
       .from('products')
       .delete()
       .eq('id', id);
 
-    console.log('[Products API] Product deleted successfully:', id);
+    if (deleteError) {
+      console.error('[Products API] Error deleting product:', deleteError);
+      return NextResponse.json({
+        success: false,
+        error: 'Error al eliminar el producto: ' + deleteError.message
+      }, { status: 500 });
+    }
+
+    console.log('[Products API] Product deleted successfully:', id, existingProduct.name);
 
     return NextResponse.json({ success: true });
 
