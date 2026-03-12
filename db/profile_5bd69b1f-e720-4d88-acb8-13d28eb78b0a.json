@@ -1,0 +1,47 @@
+{
+  "id": "5bd69b1f-e720-4d88-acb8-13d28eb78b0a",
+  "name": "Mi Negocio",
+  "description": "",
+  "phone": "",
+  "address": "",
+  "primaryColor": "#8b5cf6",
+  "secondaryColor": "#ffffff",
+  "logo": null,
+  "slug": "mi-negocio",
+  "iva": 0,
+  "empaque": 0,
+  "valorEmpaqueUnitario": 0,
+  "domicilio": 0,
+  "impoconsumo": 0,
+  "avatar": null,
+  "banner": null,
+  "bannerEnabled": true,
+  "heroImageUrl": null,
+  "showHeroBanner": false,
+  "favicon": null,
+  "tipEnabled": true,
+  "tipPercentageDefault": 10,
+  "tipOnlyOnPremise": true,
+  "paymentMethods": [
+    {
+      "id": "nequi",
+      "name": "Nequi",
+      "icon": "🟢",
+      "phone": "",
+      "accountHolder": "",
+      "qrImage": null,
+      "enabled": true
+    },
+    {
+      "id": "cash",
+      "name": "Efectivo",
+      "icon": "💵",
+      "phone": "",
+      "accountHolder": "",
+      "qrImage": null,
+      "enabled": true
+    }
+  ],
+  "updatedAt": "2026-03-08T01:56:41.966Z",
+  "businessId": "5bd69b1f-e720-4d88-acb8-13d28eb78b0a"
+}
