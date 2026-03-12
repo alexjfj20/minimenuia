@@ -74,11 +74,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authStore.setUser(null);
   }, []);
 
-  // Initialize from localStorage on mount
+  // Initialize from server session on mount (NOT from localStorage)
+  // This prevents automatic login from stale localStorage data
   React.useEffect(() => {
+    // Don't restore from localStorage - let the server session cookie handle auth
+    // This is more secure and prevents unauthorized access
     const storedUser = authService.getCurrentUser();
     if (storedUser) {
-      authStore.setUser(storedUser);
+      // Clear any stale localStorage data
+      authStore.setUser(null);
+      localStorage.removeItem('minimenu_user');
     }
   }, []);
 
