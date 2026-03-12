@@ -3,7 +3,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import bcrypt from 'bcryptjs';
 
 interface LoginRequest {
@@ -24,20 +24,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Buscar usuario en la base de datos
-    const user = await db.user.findUnique({
-      where: { email: email.toLowerCase() },
-      include: {
-        business: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('*, business:businesses(id, name, slug)')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
 
-    if (!user) {
+    if (userError || !user) {
+      console.error('[Login] User query error:', userError);
       return NextResponse.json(
         { success: false, error: 'Credenciales inválidas' },
         { status: 401 }

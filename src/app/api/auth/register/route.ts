@@ -3,7 +3,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import bcrypt from 'bcryptjs';
 
 interface RegisterRequest {
@@ -14,25 +14,14 @@ interface RegisterRequest {
   phone: string;
 }
 
-interface ErrorDetails {
-  message: string;
-  code?: string;
-  meta?: unknown;
-}
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
   console.log('[Register API] Starting registration process...');
-  
+
   try {
     const body: RegisterRequest = await request.json();
     const { email, password, name, businessName, phone } = body;
 
-    console.log('[Register API] Received data:', { 
-      email, 
-      name, 
-      businessName, 
-      phone: phone ? 'provided' : 'not provided' 
-    });
+    console.log('[Register API] Received data:', { email, name, businessName, phone: phone ? 'provided' : 'not provided' });
 
     // Validate required fields
     if (!email || !password || !name || !businessName) {
@@ -62,42 +51,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Check database connection first
-    console.log('[Register API] Checking database connection...');
-    try {
-      await db.$queryRaw`SELECT 1`;
-      console.log('[Register API] Database connection OK');
-    } catch (dbError) {
-      console.error('[Register API] Database connection failed:', dbError);
-      const errorDetails: ErrorDetails = {
-        message: 'Error de conexión a la base de datos',
-        code: dbError instanceof Error ? 'CONNECTION_ERROR' : 'UNKNOWN',
-        meta: dbError instanceof Error ? dbError.message : String(dbError)
-      };
-      return NextResponse.json(
-        { success: false, error: 'Error de conexión a la base de datos. Por favor contacte al administrador.', details: errorDetails },
-        { status: 500 }
-      );
-    }
-
     // Check if user already exists
     console.log('[Register API] Checking if user exists...');
-    let existingUser;
-    try {
-      existingUser = await db.user.findUnique({
-        where: { email: email.toLowerCase() },
-      });
-    } catch (findError) {
-      console.error('[Register API] Error checking user:', findError);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Error al verificar usuario existente',
-          details: findError instanceof Error ? findError.message : 'Unknown error'
-        },
-        { status: 500 }
-      );
-    }
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
 
     if (existingUser) {
       console.log('[Register API] User already exists:', email);
@@ -109,58 +69,46 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Get or create default plan (free plan)
     console.log('[Register API] Getting default plan...');
-    let defaultPlan;
-    try {
-      defaultPlan = await db.plan.findFirst({
-        where: { slug: 'gratis' },
-      });
-    } catch (planFindError) {
-      console.error('[Register API] Error finding plan:', planFindError);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Error al buscar plan disponible',
-          details: planFindError instanceof Error ? planFindError.message : 'Unknown error'
-        },
-        { status: 500 }
-      );
-    }
+    let { data: defaultPlan } = await supabaseAdmin
+      .from('plans')
+      .select('id')
+      .eq('slug', 'gratis')
+      .maybeSingle();
 
     if (!defaultPlan) {
       console.log('[Register API] Creating default plan...');
-      try {
-        defaultPlan = await db.plan.create({
-          data: {
-            name: 'Gratis',
-            slug: 'gratis',
-            description: 'Plan gratuito para comenzar',
-            price: 0,
-            currency: 'COP',
-            period: 'MONTHLY',
-            features: 'Hasta 50 productos,1 usuario,Soporte por email',
-            isActive: true,
-            isPublic: true,
-            isPopular: false,
-            order: 0,
-            icon: 'zap',
-            color: '#8b5cf6',
-            maxUsers: 1,
-            maxProducts: 50,
-            maxCategories: 5,
-          },
-        });
-        console.log('[Register API] Default plan created:', defaultPlan.id);
-      } catch (planCreateError) {
-        console.error('[Register API] Error creating plan:', planCreateError);
+      const { data: newPlan, error: planError } = await supabaseAdmin
+        .from('plans')
+        .insert({
+          name: 'Gratis',
+          slug: 'gratis',
+          description: 'Plan gratuito para comenzar',
+          price: 0,
+          currency: 'COP',
+          period: 'MONTHLY',
+          features: 'Hasta 50 productos,1 usuario,Soporte por email',
+          isActive: true,
+          isPublic: true,
+          isPopular: false,
+          order: 0,
+          icon: 'zap',
+          color: '#8b5cf6',
+          maxUsers: 1,
+          maxProducts: 50,
+          maxCategories: 5,
+        })
+        .select()
+        .single();
+
+      if (planError) {
+        console.error('[Register API] Error creating plan:', planError);
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Error al crear plan gratuito',
-            details: planCreateError instanceof Error ? planCreateError.message : 'Unknown error'
-          },
+          { success: false, error: 'Error al crear plan gratuito' },
           { status: 500 }
         );
       }
+      defaultPlan = newPlan;
+      console.log('[Register API] Default plan created:', defaultPlan.id);
     } else {
       console.log('[Register API] Found existing plan:', defaultPlan.id);
     }
@@ -177,21 +125,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     let slug = baseSlug;
     let slugCounter = 1;
 
-    try {
-      while (await db.business.findUnique({ where: { slug } })) {
-        slug = `${baseSlug}-${slugCounter}`;
-        slugCounter++;
-      }
-    } catch (slugError) {
-      console.error('[Register API] Error checking slug:', slugError);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Error al generar slug del negocio',
-          details: slugError instanceof Error ? slugError.message : 'Unknown error'
-        },
-        { status: 500 }
-      );
+    // Check slug uniqueness
+    while (true) {
+      const { data: existingBusiness } = await supabaseAdmin
+        .from('businesses')
+        .select('id')
+        .eq('slug', slug)
+        .maybeSingle();
+      
+      if (!existingBusiness) break;
+      slug = `${baseSlug}-${slugCounter}`;
+      slugCounter++;
     }
     console.log('[Register API] Generated slug:', slug);
 
@@ -199,91 +143,89 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.log('[Register API] Hashing password...');
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create business and user in a transaction
+    // Create business and user
     console.log('[Register API] Creating business and user...');
-    let result;
-    try {
-      result = await db.$transaction(async (tx) => {
-        // Create business first
-        const business = await tx.business.create({
-          data: {
-            name: businessName,
-            slug,
-            ownerId: 'temp',
-            ownerName: name,
-            ownerEmail: email.toLowerCase(),
-            phone: phone || '',
-            address: '',
-            planId: defaultPlan!.id,
-            status: 'ACTIVE',
-            primaryColor: '#8b5cf6',
-            secondaryColor: '#ffffff',
-          },
-        });
-        console.log('[Register API] Business created:', business.id);
+    
+    // Create business first
+    const { data: business, error: businessError } = await supabaseAdmin
+      .from('businesses')
+      .insert({
+        name: businessName,
+        slug,
+        ownerId: 'temp',
+        ownerName: name,
+        ownerEmail: email.toLowerCase(),
+        phone: phone || '',
+        address: '',
+        planId: defaultPlan.id,
+        status: 'ACTIVE',
+        primaryColor: '#8b5cf6',
+        secondaryColor: '#ffffff',
+      })
+      .select()
+      .single();
 
-        // Create user
-        const user = await tx.user.create({
-          data: {
-            email: email.toLowerCase(),
-            name,
-            password: hashedPassword,
-            role: 'BUSINESS_ADMIN',
-            businessId: business.id,
-          },
-        });
-        console.log('[Register API] User created:', user.id);
-
-        // Update business with correct ownerId
-        await tx.business.update({
-          where: { id: business.id },
-          data: { ownerId: user.id },
-        });
-
-        return { user, business };
-      });
-    } catch (txError) {
-      console.error('[Register API] Transaction error:', txError);
-      
-      // Check if it's a Prisma error with more details
-      const prismaError = txError as { code?: string; meta?: unknown; message?: string };
-      
+    if (businessError) {
+      console.error('[Register API] Error creating business:', businessError);
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Error al crear la cuenta en la base de datos',
-          details: {
-            code: prismaError.code || 'UNKNOWN',
-            message: prismaError.message || 'Unknown transaction error',
-            meta: prismaError.meta || null
-          }
-        },
+        { success: false, error: 'Error al crear el negocio' },
         { status: 500 }
       );
     }
+    console.log('[Register API] Business created:', business.id);
+
+    // Create user
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .insert({
+        email: email.toLowerCase(),
+        name,
+        password: hashedPassword,
+        role: 'BUSINESS_ADMIN',
+        businessId: business.id,
+      })
+      .select()
+      .single();
+
+    if (userError) {
+      console.error('[Register API] Error creating user:', userError);
+      // Rollback: delete business
+      await supabaseAdmin.from('businesses').delete().eq('id', business.id);
+      return NextResponse.json(
+        { success: false, error: 'Error al crear el usuario' },
+        { status: 500 }
+      );
+    }
+    console.log('[Register API] User created:', user.id);
+
+    // Update business with correct ownerId
+    await supabaseAdmin
+      .from('businesses')
+      .update({ ownerId: user.id })
+      .eq('id', business.id);
 
     console.log('[Register API] Registration successful for:', email);
 
     // Create session
     const sessionData = {
-      userId: result.user.id,
-      email: result.user.email,
-      name: result.user.name,
-      role: result.user.role,
-      businessId: result.user.businessId,
-      businessName: result.business.name,
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      businessId: user.businessId,
+      businessName: business.name,
     };
 
     // Response with cookie
     const response = NextResponse.json({
       success: true,
       data: {
-        id: result.user.id,
-        email: result.user.email,
-        name: result.user.name,
-        role: result.user.role,
-        businessId: result.user.businessId,
-        businessName: result.business.name,
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        businessId: user.businessId,
+        businessName: business.name,
       },
       message: 'Cuenta creada exitosamente',
     });
@@ -300,18 +242,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return response;
   } catch (error) {
     console.error('[Register API] Unhandled error:', error);
-    
-    const errorDetails: ErrorDetails = {
-      message: error instanceof Error ? error.message : 'Error desconocido',
-      code: 'UNHANDLED_ERROR'
-    };
-    
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Error al crear la cuenta. Por favor intente nuevamente.',
-        details: errorDetails
-      },
+      { success: false, error: 'Error al crear la cuenta. Por favor intente nuevamente.' },
       { status: 500 }
     );
   }

@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   getBusinessProfileAsync,
   updateBusinessProfileAsync,
@@ -58,12 +58,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
       return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
     }
 
-    // 1. Get core data from DB
-    const business = await db.business.findUnique({
-      where: { id: businessId }
-    });
+    // 1. Get core data from Supabase
+    const { data: business, error: businessError } = await supabaseAdmin
+      .from('businesses')
+      .select('*')
+      .eq('id', businessId)
+      .maybeSingle();
 
-    if (!business) {
+    if (businessError || !business) {
       return NextResponse.json({ success: false, error: 'Negocio no encontrado' }, { status: 404 });
     }
 
@@ -109,7 +111,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
 
     console.log('[Settings Profile API] PUT request for business:', businessId);
 
-    // 1. Update core fields in DB if provided
+    // 1. Update core fields in Supabase if provided
     const dbUpdate = {
       ...(body.name !== undefined && { name: body.name }),
       ...(body.phone !== undefined && { phone: body.phone }),
@@ -120,10 +122,10 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
     };
 
     if (Object.keys(dbUpdate).length > 0) {
-      await db.business.update({
-        where: { id: businessId },
-        data: dbUpdate
-      });
+      await supabaseAdmin
+        .from('businesses')
+        .update(dbUpdate)
+        .eq('id', businessId);
     }
 
     // 2. Update all fields in isolated store
