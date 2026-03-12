@@ -1107,25 +1107,27 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
       const data = await response.json();
 
-      if (data.success && data.product) {
+      if (data.success && data.data && data.data.products && data.data.products.length > 0) {
+        const newProduct = data.data.products[0];
         setProducts(prev => {
-          const newProducts = [...prev, data.product as Product];
+          const newProducts = [...prev, newProduct as Product];
           localStorage.setItem('businessProducts', JSON.stringify(newProducts));
           return newProducts;
         });
-        console.log('[Products] Added product:', data.product.name);
+        console.log('[Products] Added product:', newProduct.name);
 
         // Update categories if a new one was added
-        if (data.product.category && !categories.find(c => c.name === data.product.category)) {
+        if (newProduct.category && !categories.find(c => c.name === newProduct.category)) {
           setCategories(prev => [...prev, {
             id: `cat-${Date.now()}`,
-            name: data.product.category,
+            name: newProduct.category,
             icon: '🍴',
             order: prev.length + 1
           }]);
         }
       } else {
-        console.error('[Products] Failed to add product:', data.error);
+        console.error('[Products] Failed to add product:', data.error || 'Error desconocido');
+        setToastMessage({ type: 'error', message: data.error || 'Error al crear el producto' });
       }
     } catch (error) {
       console.error('[Products] Error adding product:', error);
