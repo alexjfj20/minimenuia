@@ -3,12 +3,8 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getBusinessProfileAsync } from '@/lib/business-store';
-
-// ============================================================================
-// INTERFACES
-// ============================================================================
 
 interface Product {
   id: string;
@@ -32,7 +28,7 @@ interface Category {
 }
 
 interface MenuData {
-  business: any; // Flexible structure for compatibility
+  business: any;
   categories: Category[];
   products: Product[];
 }
@@ -56,12 +52,14 @@ export async function GET(
 
     console.log('[Menu API v4.1] GET menu for slug:', slug);
 
-    // 1. Get business from DB by slug
-    const business = await db.business.findUnique({
-      where: { slug }
-    });
+    // 1. Get business from Supabase by slug
+    const { data: business, error: businessError } = await supabaseAdmin
+      .from('businesses')
+      .select('*')
+      .eq('slug', slug)
+      .maybeSingle();
 
-    if (!business) {
+    if (businessError || !business) {
       console.log('[Menu API] Business not found for slug:', slug);
       return NextResponse.json({
         success: false,
@@ -69,75 +67,66 @@ export async function GET(
       }, { status: 404 });
     }
 
-    // 2. Get categories from DB
-    const dbCategories = await db.category.findMany({
-      where: {
-        businessId: business.id,
-        isActive: true
-      },
-      orderBy: { order: 'asc' }
-    });
+    // 2. Get categories from Supabase
+    const { data: dbCategories } = await supabaseAdmin
+      .from('categories')
+      .select('*')
+      .eq('businessId', business.id)
+      .eq('isActive', true)
+      .order('order', { ascending: true });
 
-    // 3. Get products from DB
-    const dbProducts = await db.product.findMany({
-      where: {
-        businessId: business.id,
-        isAvailable: true
-      },
-      include: { category: true },
-      orderBy: { order: 'asc' }
-    });
+    // 3. Get products from Supabase
+    const { data: dbProducts } = await supabaseAdmin
+      .from('products')
+      .select('*, categories:category(name)')
+      .eq('businessId', business.id)
+      .eq('isAvailable', true)
+      .order('order', { ascending: true });
 
-    // 4. Get advanced settings from isolated store
-    const advancedSettings = await getBusinessProfileAsync(business.id);
+    const categories: Category[] = (dbCategories || []).map(c => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon || '🍴',
+      order: c.order
+    }));
 
-    // 5. Build response mapping (Database values Override store values for core fields)
-    const menuData: MenuData = {
-      business: {
-        ...advancedSettings, // Features like IVA, payment methods, etc.
-        id: business.id,
-        name: business.name,
-        slug: business.slug,
-        phone: business.phone || advancedSettings.phone,
-        address: business.address || advancedSettings.address,
-        primaryColor: business.primaryColor || advancedSettings.primaryColor,
-        secondaryColor: business.secondaryColor || advancedSettings.secondaryColor,
-        logo: business.logo || advancedSettings.logo,
-      },
-      categories: dbCategories.map(c => ({
-        id: c.id,
-        name: c.name,
-        icon: c.icon || '🍴',
-        order: c.order
-      })),
-      products: dbProducts.map(p => ({
-        id: p.id,
-        name: p.name,
-        description: p.description || '',
-        price: p.price,
-        category: p.category.name,
-        available: p.isAvailable,
-        featured: p.isFeatured,
-        image: p.image,
-        stock: 0,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString()
-      }))
-    };
+    const products: Product[] = (dbProducts || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description || '',
+      price: p.price,
+      category: p.categories?.name || 'General',
+      available: p.isAvailable,
+      featured: p.isFeatured,
+      image: p.image,
+      stock: p.stock || 0,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt
+    }));
 
-    console.log('[Menu API] Returning isolated menu with', menuData.products.length, 'products');
+    console.log(`[Menu API] Menu loaded: ${products.length} products, ${categories.length} categories`);
 
     return NextResponse.json({
       success: true,
-      data: menuData
+      data: {
+        business: {
+          id: business.id,
+          name: business.name,
+          slug: business.slug,
+          logo: business.logo,
+          primaryColor: business.primaryColor,
+          secondaryColor: business.secondaryColor
+        },
+        categories,
+        products
+      }
     });
 
   } catch (error) {
     console.error('[Menu API] Error loading menu:', error);
-
     return NextResponse.json({
       success: false,
-      error: 'Error al cargar el menú desde el sistema multi-tenant'
+      error: 'Error al cargar el menú'
     }, { status: 500 });
   }
 }

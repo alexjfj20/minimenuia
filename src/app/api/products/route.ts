@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { Currency } from '@prisma/client';
-
-// ============================================================================
-// INTERFACES
-// ============================================================================
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export interface Product {
   id: string;
@@ -19,11 +14,6 @@ export interface Product {
   stock: number;
   createdAt: string;
   updatedAt: string;
-  // Campos de Oferta
-  onSale?: boolean;
-  salePrice?: number;
-  saleStartDate?: string;
-  saleEndDate?: string;
 }
 
 interface Category {
@@ -33,17 +23,9 @@ interface Category {
   order: number;
 }
 
-interface ProductsData {
-  products: Product[];
-  categories: Category[];
-  updatedAt: string;
-}
-
 interface ProductsResponse {
   success: boolean;
-  data?: ProductsData;
-  products?: Product[];
-  product?: Product;
+  data?: { products: Product[]; categories: Category[]; updatedAt: string };
   error?: string;
 }
 
@@ -53,33 +35,11 @@ interface CreateProductRequest {
   description: string;
   price: number;
   category: string;
+  categoryId?: string;
   available?: boolean;
   featured?: boolean;
   image?: string | null;
   stock?: number;
-  // Campos de Oferta
-  onSale?: boolean;
-  salePrice?: number;
-  saleStartDate?: string;
-  saleEndDate?: string;
-}
-
-interface UpdateProductRequest {
-  id: string;
-  businessId: string;
-  name?: string;
-  description?: string;
-  price?: number;
-  category?: string;
-  available?: boolean;
-  featured?: boolean;
-  image?: string | null;
-  stock?: number;
-  // Campos de Oferta
-  onSale?: boolean;
-  salePrice?: number;
-  saleStartDate?: string;
-  saleEndDate?: string;
 }
 
 // ============================================================================
@@ -98,37 +58,50 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProductsRe
       }, { status: 400 });
     }
 
-    // Fetch categories from DB
-    const dbCategories = await db.category.findMany({
-      where: { businessId },
-      orderBy: { order: 'asc' }
-    });
+    // Fetch categories from Supabase
+    const { data: dbCategories, error: categoriesError } = await supabaseAdmin
+      .from('categories')
+      .select('*')
+      .eq('businessId', businessId)
+      .order('order', { ascending: true });
 
-    // Fetch products from DB
-    const dbProducts = await db.product.findMany({
-      where: { businessId },
-      include: { category: true },
-      orderBy: { createdAt: 'desc' }
-    });
+    if (categoriesError) {
+      console.error('[Products API] Error fetching categories:', categoriesError);
+    }
 
-    console.log(`[Products API] GET from DB for business ${businessId}: ${dbProducts.length} products`);
+    // Fetch products from Supabase
+    const { data: dbProducts, error: productsError } = await supabaseAdmin
+      .from('products')
+      .select('*, categories:category(*)')
+      .eq('businessId', businessId)
+      .order('createdAt', { ascending: false });
 
-    const products: Product[] = dbProducts.map(p => ({
+    if (productsError) {
+      console.error('[Products API] Error fetching products:', productsError);
+      return NextResponse.json({
+        success: false,
+        error: 'Error al leer los productos de la base de datos'
+      }, { status: 500 });
+    }
+
+    console.log(`[Products API] GET from DB for business ${businessId}: ${dbProducts?.length || 0} products`);
+
+    const products: Product[] = (dbProducts || []).map(p => ({
       id: p.id,
       name: p.name,
       description: p.description || '',
       price: p.price,
-      category: p.category.name,
+      category: p.categories?.name || 'General',
       categoryId: p.categoryId,
       available: p.isAvailable,
       featured: p.isFeatured,
       image: p.image,
-      stock: 0, // No hay campo stock en el esquema actual de Prisma product
-      createdAt: p.createdAt.toISOString(),
-      updatedAt: p.updatedAt.toISOString()
+      stock: p.stock || 0,
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt
     }));
 
-    const categories: Category[] = dbCategories.map(c => ({
+    const categories: Category[] = (dbCategories || []).map(c => ({
       id: c.id,
       name: c.name,
       icon: c.icon || '🍴',
@@ -161,11 +134,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProductsRe
 export async function POST(request: NextRequest): Promise<NextResponse<ProductsResponse>> {
   try {
     const body: CreateProductRequest = await request.json();
-    const { businessId, name, price, category: categoryName } = body;
+    const { businessId, name, price, category: categoryName, categoryId } = body;
 
     console.log('[Products API] POST request:', name, 'for business:', businessId);
 
-    // Validate required fields
     if (!businessId) {
       return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
     }
@@ -177,148 +149,131 @@ export async function POST(request: NextRequest): Promise<NextResponse<ProductsR
     }
 
     // 1. Get or create category
-    let category = await db.category.findFirst({
-      where: {
-        businessId,
-        name: categoryName || 'Entradas'
-      }
-    });
+    let categoryIdToUse = categoryId;
+    
+    if (!categoryIdToUse && categoryName) {
+      const { data: existingCategory } = await supabaseAdmin
+        .from('categories')
+        .select('id')
+        .eq('businessId', businessId)
+        .eq('name', categoryName)
+        .maybeSingle();
 
-    if (!category) {
-      category = await db.category.create({
-        data: {
-          businessId,
-          name: categoryName || 'Entradas',
-          icon: '🍴',
-          order: 0
-        }
-      });
+      if (existingCategory) {
+        categoryIdToUse = existingCategory.id;
+      } else {
+        const { data: newCategory } = await supabaseAdmin
+          .from('categories')
+          .insert({
+            businessId,
+            name: categoryName,
+            icon: '🍴',
+            order: 0
+          })
+          .select()
+          .single();
+        
+        categoryIdToUse = newCategory?.id;
+      }
     }
 
     // 2. Create product
-    const dbProduct = await db.product.create({
-      data: {
+    const { data: newProduct, error: productError } = await supabaseAdmin
+      .from('products')
+      .insert({
         businessId,
-        categoryId: category.id,
-        name: name.trim(),
-        description: body.description?.trim() || '',
-        price: Number(price),
-        currency: Currency.COP,
+        name,
+        description: body.description || '',
+        price,
+        categoryId: categoryIdToUse,
         isAvailable: body.available ?? true,
         isFeatured: body.featured ?? false,
         image: body.image || null,
-      },
-      include: {
-        category: true
-      }
-    });
+        stock: body.stock ?? 0,
+        order: 0
+      })
+      .select()
+      .single();
 
-    const product: Product = {
-      id: dbProduct.id,
-      name: dbProduct.name,
-      description: dbProduct.description || '',
-      price: dbProduct.price,
-      category: dbProduct.category.name,
-      categoryId: dbProduct.categoryId,
-      available: dbProduct.isAvailable,
-      featured: dbProduct.isFeatured,
-      image: dbProduct.image,
-      stock: 0,
-      createdAt: dbProduct.createdAt.toISOString(),
-      updatedAt: dbProduct.updatedAt.toISOString()
-    };
+    if (productError) {
+      console.error('[Products API] Error creating product:', productError);
+      return NextResponse.json({
+        success: false,
+        error: 'Error al crear el producto'
+      }, { status: 500 });
+    }
 
-    console.log('[Products API] Product created in DB:', product.id);
+    console.log('[Products API] Product created successfully:', newProduct.id);
 
     return NextResponse.json({
       success: true,
-      product
+      data: {
+        products: [{
+          id: newProduct.id,
+          name: newProduct.name,
+          description: newProduct.description || '',
+          price: newProduct.price,
+          category: categoryName || 'General',
+          categoryId: categoryIdToUse,
+          available: newProduct.isAvailable,
+          featured: newProduct.isFeatured,
+          image: newProduct.image,
+          stock: newProduct.stock || 0,
+          createdAt: newProduct.createdAt,
+          updatedAt: newProduct.updatedAt
+        }],
+        categories: [],
+        updatedAt: new Date().toISOString()
+      }
     });
 
   } catch (error) {
     console.error('[Products API] Error creating product:', error);
-    return NextResponse.json({ success: false, error: 'Error al crear el producto' }, { status: 500 });
+    return NextResponse.json({
+      success: false,
+      error: 'Error al crear el producto'
+    }, { status: 500 });
   }
 }
 
 // ============================================================================
-// PUT - Actualizar producto existente
+// PUT - Actualizar producto
 // ============================================================================
 
 export async function PUT(request: NextRequest): Promise<NextResponse<ProductsResponse>> {
   try {
-    const body: UpdateProductRequest = await request.json();
+    const body: CreateProductRequest & { id: string } = await request.json();
     const { id, businessId } = body;
-
-    console.log('[Products API] PUT request for product:', id);
 
     if (!id || !businessId) {
       return NextResponse.json({ success: false, error: 'ID y businessId son requeridos' }, { status: 400 });
     }
 
-    // 1. If category name is provided, ensure it exists
-    let categoryId = undefined;
-    if (body.category) {
-      let category = await db.category.findFirst({
-        where: { businessId, name: body.category }
-      });
+    const updateData: any = {};
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.description !== undefined) updateData.description = body.description;
+    if (body.price !== undefined) updateData.price = body.price;
+    if (body.available !== undefined) updateData.isAvailable = body.available;
+    if (body.featured !== undefined) updateData.isFeatured = body.featured;
+    if (body.image !== undefined) updateData.image = body.image;
+    if (body.stock !== undefined) updateData.stock = body.stock;
 
-      if (!category) {
-        category = await db.category.create({
-          data: {
-            businessId,
-            name: body.category,
-            icon: '🍴',
-            order: 0
-          }
-        });
-      }
-      categoryId = category.id;
-    }
+    await supabaseAdmin
+      .from('products')
+      .update(updateData)
+      .eq('id', id)
+      .eq('businessId', businessId);
 
-    // 2. Update product
-    const dbProduct = await db.product.update({
-      where: {
-        id,
-        businessId // Strict filtering for security
-      },
-      data: {
-        ...(body.name !== undefined && { name: body.name.trim() }),
-        ...(body.description !== undefined && { description: body.description.trim() }),
-        ...(body.price !== undefined && { price: Number(body.price) }),
-        ...(categoryId !== undefined && { categoryId }),
-        ...(body.available !== undefined && { isAvailable: body.available }),
-        ...(body.featured !== undefined && { isFeatured: body.featured }),
-        ...(body.image !== undefined && { image: body.image }),
-      },
-      include: {
-        category: true
-      }
-    });
+    console.log('[Products API] Product updated successfully:', id);
 
-    const product: Product = {
-      id: dbProduct.id,
-      name: dbProduct.name,
-      description: dbProduct.description || '',
-      price: dbProduct.price,
-      category: dbProduct.category.name,
-      categoryId: dbProduct.categoryId,
-      available: dbProduct.isAvailable,
-      featured: dbProduct.isFeatured,
-      image: dbProduct.image,
-      stock: 0,
-      createdAt: dbProduct.createdAt.toISOString(),
-      updatedAt: dbProduct.updatedAt.toISOString()
-    };
-
-    return NextResponse.json({
-      success: true,
-      product
-    });
+    return NextResponse.json({ success: true });
 
   } catch (error) {
     console.error('[Products API] Error updating product:', error);
-    return NextResponse.json({ success: false, error: 'Error al actualizar el producto' }, { status: 500 });
+    return NextResponse.json({
+      success: false,
+      error: 'Error al actualizar el producto'
+    }, { status: 500 });
   }
 }
 
@@ -330,26 +285,25 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<Product
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    const businessId = searchParams.get('businessId');
 
-    if (!id || !businessId) {
-      return NextResponse.json({ success: false, error: 'ID y businessId son requeridos' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'ID del producto es requerido' }, { status: 400 });
     }
 
-    const deletedProduct = await db.product.delete({
-      where: {
-        id,
-        businessId // Strict filtering for security
-      }
-    });
+    await supabaseAdmin
+      .from('products')
+      .delete()
+      .eq('id', id);
 
-    return NextResponse.json({
-      success: true,
-      message: 'Producto eliminado correctamente'
-    });
+    console.log('[Products API] Product deleted successfully:', id);
+
+    return NextResponse.json({ success: true });
 
   } catch (error) {
     console.error('[Products API] Error deleting product:', error);
-    return NextResponse.json({ success: false, error: 'Error al eliminar el producto' }, { status: 500 });
+    return NextResponse.json({
+      success: false,
+      error: 'Error al eliminar el producto'
+    }, { status: 500 });
   }
 }

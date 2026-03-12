@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 // ============================================================================
 // INTERFACES
@@ -15,7 +15,6 @@ interface BusinessProfile {
   logo: string | null;
   slug: string;
   updatedAt: string;
-  // Campos adicionales para compatibilidad
   description?: string;
   avatar?: string | null;
   banner?: string | null;
@@ -61,11 +60,13 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
       }, { status: 400 });
     }
 
-    const business = await db.business.findUnique({
-      where: { id: businessId }
-    });
+    const { data: business, error } = await supabaseAdmin
+      .from('businesses')
+      .select('*')
+      .eq('id', businessId)
+      .maybeSingle();
 
-    if (!business) {
+    if (error || !business) {
       return NextResponse.json({
         success: false,
         error: 'Negocio no encontrado'
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
       bannerEnabled: business.bannerEnabled ?? true,
       heroImageUrl: business.heroImageUrl || null,
       showHeroBanner: business.showHeroBanner ?? false,
-      updatedAt: business.updatedAt.toISOString()
+      updatedAt: business.updatedAt || new Date().toISOString()
     };
 
     return NextResponse.json({
@@ -120,23 +121,37 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
       }, { status: 400 });
     }
 
-    // Update business in DB
-    const updatedBusiness = await db.business.update({
-      where: { id: businessId },
-      data: {
-        ...(body.name !== undefined && { name: body.name }),
-        ...(body.phone !== undefined && { phone: body.phone }),
-        ...(body.address !== undefined && { address: body.address }),
-        ...(body.primaryColor !== undefined && { primaryColor: body.primaryColor }),
-        ...(body.secondaryColor !== undefined && { secondaryColor: body.secondaryColor }),
-        ...(body.logo !== undefined && { logo: body.logo }),
-        ...(body.description !== undefined && { description: body.description }),
-        ...(body.avatar !== undefined && { avatar: body.avatar }),
-        ...(body.banner !== undefined && { banner: body.banner }),
-        ...(body.bannerEnabled !== undefined && { bannerEnabled: body.bannerEnabled }),
-        ...(body.slug !== undefined && { slug: body.slug }),
-      }
-    });
+    const updateData: any = {
+      ...(body.name !== undefined && { name: body.name }),
+      ...(body.phone !== undefined && { phone: body.phone }),
+      ...(body.address !== undefined && { address: body.address }),
+      ...(body.primaryColor !== undefined && { primaryColor: body.primaryColor }),
+      ...(body.secondaryColor !== undefined && { secondaryColor: body.secondaryColor }),
+      ...(body.logo !== undefined && { logo: body.logo }),
+      ...(body.description !== undefined && { description: body.description }),
+      ...(body.avatar !== undefined && { avatar: body.avatar }),
+      ...(body.banner !== undefined && { banner: body.banner }),
+      ...(body.bannerEnabled !== undefined && { bannerEnabled: body.bannerEnabled }),
+      ...(body.slug !== undefined && { slug: body.slug }),
+    };
+
+    await supabaseAdmin
+      .from('businesses')
+      .update(updateData)
+      .eq('id', businessId);
+
+    const { data: updatedBusiness } = await supabaseAdmin
+      .from('businesses')
+      .select('*')
+      .eq('id', businessId)
+      .maybeSingle();
+
+    if (!updatedBusiness) {
+      return NextResponse.json({
+        success: false,
+        error: 'Negocio no encontrado después de actualizar'
+      }, { status: 404 });
+    }
 
     const profile: BusinessProfile = {
       id: updatedBusiness.id,
@@ -151,7 +166,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
       avatar: updatedBusiness.avatar || null,
       banner: updatedBusiness.banner || null,
       bannerEnabled: updatedBusiness.bannerEnabled ?? true,
-      updatedAt: updatedBusiness.updatedAt.toISOString()
+      updatedAt: updatedBusiness.updatedAt || new Date().toISOString()
     };
 
     console.log('[Profile API] Profile updated in DB successfully:', profile.name);
