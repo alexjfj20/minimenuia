@@ -747,8 +747,6 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             // Franja Hero Sutil
             heroImageUrl: data.data.heroImageUrl || null,
             showHeroBanner: data.data.showHeroBanner ?? false,
-            // Favicon (Icono de Favoritos)
-            favicon: data.data.favicon || null,
             // Propina Voluntaria
             tipEnabled: data.data.tipEnabled ?? true,
             tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
@@ -4810,8 +4808,6 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           // Franja Hero Sutil
           heroImageUrl: profileForm.heroImageUrl,
           showHeroBanner: profileForm.showHeroBanner,
-          // Favicon (Icono de Favoritos)
-          favicon: profileForm.favicon,
           // Propina Voluntaria
           tipEnabled: profileForm.tipEnabled,
           tipPercentageDefault: profileForm.tipPercentageDefault,
@@ -4846,8 +4842,6 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           // Franja Hero Sutil
           heroImageUrl: data.data.heroImageUrl || null,
           showHeroBanner: data.data.showHeroBanner ?? false,
-          // Favicon (Icono de Favoritos)
-          favicon: data.data.favicon || null,
           // Propina Voluntaria
           tipEnabled: data.data.tipEnabled ?? true,
           tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
