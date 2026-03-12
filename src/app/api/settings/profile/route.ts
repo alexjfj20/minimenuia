@@ -54,6 +54,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
     const { searchParams } = new URL(request.url);
     const businessId = searchParams.get('businessId');
 
+    console.log('[Settings Profile API] GET request for businessId:', businessId);
+    console.log('[Settings Profile API] Supabase configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+
     if (!businessId) {
       return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
     }
@@ -65,7 +68,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
       .eq('id', businessId)
       .maybeSingle();
 
-    if (businessError || !business) {
+    if (businessError) {
+      console.error('[Settings Profile API] Business query error:', businessError);
+      return NextResponse.json({ success: false, error: 'Error al obtener el perfil: ' + businessError.message }, { status: 500 });
+    }
+
+    if (!business) {
       return NextResponse.json({ success: false, error: 'Negocio no encontrado' }, { status: 404 });
     }
 

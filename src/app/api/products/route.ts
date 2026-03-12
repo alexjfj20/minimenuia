@@ -51,6 +51,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProductsRe
     const { searchParams } = new URL(request.url);
     const businessId = searchParams.get('businessId');
 
+    console.log('[Products API] GET request for businessId:', businessId);
+    console.log('[Products API] Supabase configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+
     if (!businessId) {
       return NextResponse.json({
         success: false,
@@ -58,7 +61,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProductsRe
       }, { status: 400 });
     }
 
-    // Fetch categories from Supabase
+    // Fetch categories from Supabase (without relations to avoid issues)
     const { data: dbCategories, error: categoriesError } = await supabaseAdmin
       .from('categories')
       .select('*')
@@ -66,32 +69,37 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProductsRe
       .order('order', { ascending: true });
 
     if (categoriesError) {
-      console.error('[Products API] Error fetching categories:', categoriesError);
+      console.error('[Products API] Categories error:', categoriesError);
     }
 
-    // Fetch products from Supabase
+    console.log('[Products API] Categories found:', dbCategories?.length || 0);
+
+    // Fetch products from Supabase (simple query without relations)
     const { data: dbProducts, error: productsError } = await supabaseAdmin
       .from('products')
-      .select('*, categories:category(*)')
+      .select('*')
       .eq('businessId', businessId)
       .order('createdAt', { ascending: false });
 
     if (productsError) {
-      console.error('[Products API] Error fetching products:', productsError);
+      console.error('[Products API] Products error:', productsError);
       return NextResponse.json({
         success: false,
-        error: 'Error al leer los productos de la base de datos'
+        error: 'Error al leer los productos de la base de datos: ' + productsError.message
       }, { status: 500 });
     }
 
     console.log(`[Products API] GET from DB for business ${businessId}: ${dbProducts?.length || 0} products`);
+
+    // Get category names separately to avoid relation issues
+    const categoryMap = new Map(dbCategories?.map(c => [c.id, c.name]) || []);
 
     const products: Product[] = (dbProducts || []).map(p => ({
       id: p.id,
       name: p.name,
       description: p.description || '',
       price: p.price,
-      category: p.categories?.name || 'General',
+      category: categoryMap.get(p.categoryId || '') || 'General',
       categoryId: p.categoryId,
       available: p.isAvailable,
       featured: p.isFeatured,
