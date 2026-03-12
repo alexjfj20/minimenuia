@@ -514,6 +514,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   // --- Profile Form States ---
   const [profileForm, setProfileForm] = useState({
     businessName: '',
+    slug: '',
     phone: '',
     address: '',
     primaryColor: '#8b5cf6',
@@ -689,6 +690,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             setProfileId(parsed.id);
             setProfileForm({
               businessName: parsed.name || '',
+              slug: parsed.slug || '',
               phone: parsed.phone || '',
               address: parsed.address || '',
               primaryColor: parsed.primaryColor || '#8b5cf6',
@@ -4794,6 +4796,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         body: JSON.stringify({
           businessId: user.businessId,
           name: profileForm.businessName,
+          slug: profileForm.slug,
           phone: profileForm.phone,
           address: profileForm.address,
           primaryColor: profileForm.primaryColor,
@@ -4829,6 +4832,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         setProfileId(data.data.id);
         setProfileForm({
           businessName: data.data.name || '',
+          slug: data.data.slug || '',
           phone: data.data.phone || '',
           address: data.data.address || '',
           primaryColor: data.data.primaryColor || '#8b5cf6',
@@ -7922,12 +7926,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         />
                       </div>
                       <div>
-                        <Label>Teléfono</Label>
+                        <Label>Slug (URL pública)</Label>
                         <Input
-                          placeholder="Teléfono"
-                          value={profileForm.phone}
-                          onChange={(e) => setProfileForm(prev => ({ ...prev, phone: e.target.value }))}
+                          placeholder="minimenuia"
+                          value={profileForm.slug || ''}
+                          onChange={(e) => setProfileForm(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
                         />
+                        <p className="text-xs text-gray-500 mt-1">
+                          URL de tu menú público: /menu/{profileForm.slug || 'tu-slug'}
+                        </p>
                       </div>
                     </div>
                     <div>
