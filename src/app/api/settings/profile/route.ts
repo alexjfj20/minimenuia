@@ -132,8 +132,9 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
 
     // Build update object with all possible fields
     const updateData: any = {};
-    
+
     if (body.name !== undefined) updateData.name = body.name;
+    if (body.slug !== undefined) updateData.slug = body.slug;
     if (body.phone !== undefined) updateData.phone = body.phone;
     if (body.address !== undefined) updateData.address = body.address;
     if (body.primaryColor !== undefined) updateData.primaryColor = body.primaryColor;
