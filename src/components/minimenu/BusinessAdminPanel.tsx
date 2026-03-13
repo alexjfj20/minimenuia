@@ -908,6 +908,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     { id: 'pedidos', label: 'Gestión de Pedidos', icon: <ShoppingCart className="w-5 h-5" /> },
     { id: 'tpv', label: 'Factura Restaurante', icon: <FileText className="w-5 h-5" /> },
     { id: 'domicilios', label: 'Facturación Domicilio', icon: <Truck className="w-5 h-5" /> },
+    { id: 'configuracion-domicilio', label: 'Configuración Domicilio', icon: <Truck className="w-5 h-5" /> },
     { id: 'impresoras', label: 'Impresoras', icon: <Printer className="w-5 h-5" /> },
     { id: 'empaque', label: 'Empaque', icon: <Package className="w-5 h-5" /> },
     { id: 'backup', label: 'Backup', icon: <HardDrive className="w-5 h-5" /> },
@@ -7297,6 +7298,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               </DialogFooter>
             </DialogContent>
           </Dialog>
+        )}
+
+        {/* Configuracion Domicilio Tab */}
+        {activeTab === 'configuracion-domicilio' && (
+          <iframe
+            src="/dashboard/configuracion-domicilio"
+            className="w-full h-[calc(100vh-200px)] border-0"
+            title="Configuración de Domicilio"
+          />
         )}
 
         {/* Impresoras Tab */}
