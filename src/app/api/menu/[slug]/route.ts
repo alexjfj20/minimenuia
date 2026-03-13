@@ -93,6 +93,34 @@ export async function GET(
     console.log('[Menu API] Business phone field:', business.phone);
     console.log('[Menu API] All business fields:', Object.keys(business));
 
+    // Prepare business data for response
+    const businessData = {
+      id: business.id,
+      name: business.name,
+      slug: business.slug,
+      description: business.description || '',
+      logo: business.logo,
+      primaryColor: business.primaryColor || '#8b5cf6',
+      secondaryColor: business.secondaryColor || '#ffffff',
+      phone: business.phone,
+      address: business.address || '',
+      iva: business.iva ?? 19,
+      empaque: business.empaque ?? 3000,
+      impoconsumo: business.impoconsumo ?? 8,
+      valorEmpaqueUnitario: business.valorEmpaqueUnitario,
+      domicilio: business.domicilio,
+      banner: business.banner,
+      bannerEnabled: business.bannerEnabled,
+      heroImageUrl: business.heroImageUrl,
+      showHeroBanner: business.showHeroBanner,
+      tipEnabled: business.tipEnabled,
+      tipPercentageDefault: business.tipPercentageDefault,
+      tipOnlyOnPremise: business.tipOnlyOnPremise,
+      paymentMethods: business.paymentMethods
+    };
+
+    console.log('[Menu API] Sending business data with phone:', businessData.phone);
+
     // 2. Get categories from Supabase
     const { data: dbCategories, error: categoriesError } = await supabaseAdmin
       .from('categories')
@@ -154,14 +182,7 @@ export async function GET(
     return NextResponse.json({
       success: true,
       data: {
-        business: {
-          id: business.id,
-          name: business.name,
-          slug: business.slug,
-          logo: business.logo,
-          primaryColor: business.primaryColor,
-          secondaryColor: business.secondaryColor
-        },
+        business: businessData,
         categories,
         products
       }

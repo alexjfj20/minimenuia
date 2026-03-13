@@ -1166,15 +1166,17 @@ export default function PublicMenuPage() {
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      
+
       try {
-        const response = await fetch(`/api/menu/${slug}`);
+        // Add cache-busting to force fresh data
+        const response = await fetch(`/api/menu/${slug}?t=${Date.now()}`);
         const data = await response.json();
-        
+
         if (data.success && data.data) {
           // Map business data
           console.log('[Menu Page] Business data received:', data.data.business);
           console.log('[Menu Page] Phone from API:', data.data.business.phone);
+          console.log('[Menu Page] All business fields:', Object.keys(data.data.business));
           
           const phoneValue = data.data.business.phone || '';
           const whatsappValue = phoneValue.replace(/[^0-9]/g, '');
