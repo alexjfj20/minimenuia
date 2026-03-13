@@ -43,6 +43,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const business = user.businesses;
 
     // Verificar contraseña
+    console.log('[Login] User found:', user.id, 'email:', user.email);
+    console.log('[Login] Password type:', typeof user.password, 'value:', user.password);
+    
+    if (!user.password || typeof user.password !== 'string') {
+      console.error('[Login] Invalid password format in database');
+      return NextResponse.json(
+        { success: false, error: 'Error de configuración de usuario' },
+        { status: 500 }
+      );
+    }
+
     const isValidPassword = await bcrypt.compare(password, user.password);
 
     if (!isValidPassword) {
