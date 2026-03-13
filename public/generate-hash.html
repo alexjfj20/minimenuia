@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Hash - MINIMENU</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #555; }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #8b5cf6;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        button:hover { background: #7c3aed; }
+        .result {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .result h3 { margin-top: 0; color: #333; }
+        .hash {
+            background: #fff;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        .sql {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .info {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 12px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔐 Generador de Hash - MINIMENU</h1>
+        
+        <div class="info">
+            <strong>Instrucciones:</strong>
+            <ol>
+                <li>Ingresa tu contraseña</li>
+                <li>Haz clic en "Generar Hash"</li>
+                <li>Copia el SQL generado</li>
+                <li>Ejecútalo en Supabase SQL Editor</li>
+            </ol>
+        </div>
+
+        <label for="email">Email del Super Admin:</label>
+        <input type="text" id="email" value="auditsemseo@gmail.com" />
+
+        <label for="password">Contraseña:</label>
+        <input type="password" id="password" placeholder="Ingresa tu contraseña" />
+
+        <button onclick="generateHash()">🔑 Generar Hash y SQL</button>
+
+        <div id="result" class="result" style="display: none;">
+            <h3>Hash Generado:</h3>
+            <div class="hash" id="hash"></div>
+
+            <h3>SQL para Supabase:</h3>
+            <div class="sql" id="sql"></div>
+        </div>
+    </div>
+
+    <script>
+        async function generateHash() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if (!password) {
+                alert('Por favor ingresa una contraseña');
+                return;
+            }
+
+            // Generate hash with bcrypt (salt rounds: 10)
+            const hash = dcodeIO.bcrypt.hashSync(password, 10);
+
+            // Display results
+            document.getElementById('hash').textContent = hash;
+            document.getElementById('sql').textContent = `-- Actualizar contraseña para ${email}
+UPDATE users 
+SET password = '${hash}'
+WHERE email = '${email}' 
+  AND role = 'SUPER_ADMIN';
+
+-- Verificar
+SELECT id, email, name, role FROM users WHERE email = '${email}';`;
+
+            document.getElementById('result').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
