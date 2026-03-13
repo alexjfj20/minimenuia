@@ -744,15 +744,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             logo: data.data.logo || null,
             banner: data.data.banner || null,
             bannerEnabled: data.data.bannerEnabled ?? true,
-            // Franja Hero Sutil
-            heroImageUrl: data.data.heroImageUrl || null,
-            showHeroBanner: data.data.showHeroBanner ?? false,
-            // Propina Voluntaria
-            tipEnabled: data.data.tipEnabled ?? true,
-            tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
-            tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true,
-            // Métodos de Pago (Efectivo primero)
-            paymentMethods: data.data.paymentMethods ?? [
+            // Franja Hero Sutil (defaults, not in DB)
+            heroImageUrl: null,
+            showHeroBanner: false,
+            // Propina Voluntaria (defaults, not in DB)
+            tipEnabled: true,
+            tipPercentageDefault: 10,
+            tipOnlyOnPremise: true,
+            // Métodos de Pago (defaults, not in DB)
+            paymentMethods: [
               { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
@@ -4804,16 +4804,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           avatar: profileForm.avatar,
           logo: profileForm.logo,
           banner: profileForm.banner,
-          bannerEnabled: profileForm.bannerEnabled,
-          // Franja Hero Sutil
-          heroImageUrl: profileForm.heroImageUrl,
-          showHeroBanner: profileForm.showHeroBanner,
-          // Propina Voluntaria
-          tipEnabled: profileForm.tipEnabled,
-          tipPercentageDefault: profileForm.tipPercentageDefault,
-          tipOnlyOnPremise: profileForm.tipOnlyOnPremise,
-          // Métodos de Pago
-          paymentMethods: profileForm.paymentMethods
+          bannerEnabled: profileForm.bannerEnabled
         })
       });
 
@@ -4839,15 +4830,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           logo: data.data.logo || null,
           banner: data.data.banner || null,
           bannerEnabled: data.data.bannerEnabled ?? true,
-          // Franja Hero Sutil
-          heroImageUrl: data.data.heroImageUrl || null,
-          showHeroBanner: data.data.showHeroBanner ?? false,
-          // Propina Voluntaria
-          tipEnabled: data.data.tipEnabled ?? true,
-          tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
-          tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true,
-          // Métodos de Pago
-          paymentMethods: data.data.paymentMethods ?? [
+          // Franja Hero Sutil (defaults, not in DB)
+          heroImageUrl: null,
+          showHeroBanner: false,
+          // Propina Voluntaria (defaults, not in DB)
+          tipEnabled: true,
+          tipPercentageDefault: 10,
+          tipOnlyOnPremise: true,
+          // Métodos de Pago (defaults, not in DB)
+          paymentMethods: [
             { id: 'cash', name: 'Efectivo', icon: '💵', enabled: true },
             { id: 'transfer', name: 'Transferencia', icon: '🏦', enabled: true },
             { id: 'card', name: 'Tarjeta', icon: '💳', enabled: true }
