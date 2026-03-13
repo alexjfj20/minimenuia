@@ -258,6 +258,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       throw new Error(itemsError.message);
     }
 
+    // 3. Update product stock - deduct quantities from this order
+    console.log('[Orders API] Updating product stock...');
+    const stockUpdates = body.items.map(async (item: OrderItemInput) => {
+      if (!item.productId) return;
+      
+      // Get current product stock
+      const { data: product } = await supabase
+        .from('products')
+        .select('stock')
+        .eq('id', item.productId)
+        .maybeSingle();
+
+      if (product) {
+        const newStock = Math.max(0, (product.stock || 0) - item.quantity);
+        
+        await supabase
+          .from('products')
+          .update({ stock: newStock })
+          .eq('id', item.productId);
+        
+        console.log(`[Orders API] Product ${item.productName}: ${product.stock} → ${newStock} (-${item.quantity})`);
+      }
+    });
+
+    // Wait for all stock updates to complete
+    await Promise.all(stockUpdates);
+    console.log('[Orders API] Stock updated successfully');
+
     const completeOrder = { ...fullOrder, items };
 
     console.log(`[Orders API] Created order ${fullOrder.id} (${orderNumber}) for business ${body.businessId}`);
