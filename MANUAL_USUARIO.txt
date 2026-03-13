@@ -1,0 +1,346 @@
+# 📘 MANUAL DE USUARIO - MINIMENU SaaS
+## Sistema de Gestión para Restaurantes
+
+================================================================================
+## ÍNDICE
+
+1. Introducción
+2. Primeros Pasos
+3. Panel de Administración
+4. Gestión de Productos
+5. Gestión de Pedidos
+6. Configuración del Negocio
+7. Menú Público
+8. Preguntas Frecuentes
+9. Soporte Técnico
+
+================================================================================
+
+## 1. INTRODUCCIÓN
+
+¿Qué es MINIMENU?
+
+MINIMENU es un sistema de gestión para restaurantes que te permite:
+   • Crear tu menú digital con código QR
+   • Recibir pedidos por WhatsApp
+   • Gestionar pedidos en restaurante y a domicilio
+   • Controlar tu inventario
+   • Configurar impresoras térmicas
+   • Generar reportes de ventas
+
+¿Para quién es MINIMENU?
+   • Restaurantes
+   • Cafeterías
+   • Bares
+   • Food trucks
+   • Servicios de delivery
+   • Fantasmas kitchens
+
+================================================================================
+
+## 2. PRIMEROS PASOS
+
+### 2.1 Registro
+
+1. Ve a: https://minimenuia.vercel.app
+2. Haz clic en "Registrarse"
+3. Completa el formulario:
+   • Nombre completo
+   • Email
+   • Contraseña (mínimo 6 caracteres)
+   • Nombre del negocio
+   • Teléfono del negocio
+
+4. Haz clic en "Crear Cuenta"
+
+### 2.2 Inicio de Sesión
+
+1. Ve a: https://minimenuia.vercel.app
+2. Ingresa tu email y contraseña
+3. Haz clic en "Iniciar Sesión"
+
+### 2.3 Primer Acceso
+
+Después de registrarte, serás redirigido automáticamente a tu Panel de Administración.
+
+================================================================================
+
+## 3. PANEL DE ADMINISTRACIÓN
+
+### 3.1 Navegación
+
+El panel tiene un menú lateral con las siguientes opciones:
+
+   📊 Dashboard      - Vista general de tu negocio
+   📦 Catálogo       - Gestión de productos
+   🛒 Gestión de Pedidos - Ver y gestionar pedidos
+   🧾 Factura Restaurante - Pedidos en mesa
+   🚚 Facturación Domicilio - Pedidos a domicilio
+   🖨️ Impresoras     - Configurar impresoras
+   📦 Empaque        - Configurar valor de empaque
+   💾 Backup         - Respaldar datos
+   📤 Compartir Menú - Obtener QR y enlace
+   💳 Suscripción    - Plan y pagos
+   ⚙️ Mi Perfil      - Configuración del negocio
+
+### 3.2 Dashboard
+
+El Dashboard muestra:
+   • Total de pedidos (hoy, semana, mes)
+   • Ingresos totales
+   • Productos más vendidos
+   • Pedidos recientes
+   • Estado de pedidos activos
+
+================================================================================
+
+## 4. GESTIÓN DE PRODUCTOS
+
+### 4.1 Ver Productos
+
+1. Ve a "Catálogo" en el menú lateral
+2. Verás la lista de productos con:
+   • Nombre
+   • Precio
+   • Categoría
+   • Stock
+   • Estado (Activo/Inactivo)
+
+### 4.2 Crear Producto
+
+1. En "Catálogo", haz clic en "Nuevo Producto"
+2. Completa el formulario:
+   • Nombre del producto
+   • Descripción
+   • Precio
+   • Categoría (o crea una nueva)
+   • Imagen (opcional)
+   • Stock inicial
+   • ¿Requiere empaque? (Sí/No)
+
+3. Haz clic en "Guardar"
+
+### 4.3 Editar Producto
+
+1. En la lista de productos, busca el producto
+2. Haz clic en el botón "Editar" (✏️)
+3. Modifica los campos necesarios
+4. Haz clic en "Guardar"
+
+### 4.4 Eliminar Producto
+
+1. En la lista de productos, busca el producto
+2. Haz clic en el botón "Eliminar" (🗑️)
+3. Confirma la eliminación
+
+### 4.5 Gestionar Categorías
+
+1. En "Catálogo", ve a la pestaña "Categorías"
+2. Haz clic en "Nueva Categoría"
+3. Ingresa:
+   • Nombre de la categoría
+   • Icono (emoji)
+   • Orden de visualización
+
+4. Haz clic en "Guardar"
+
+### 4.6 Control de Stock
+
+El stock se descuenta automáticamente cuando:
+   • Un cliente hace un pedido desde el menú público
+   • Creas un pedido manual desde el panel
+
+Para verificar el stock:
+1. Ve a "Catálogo"
+2. Revisa la columna "Stock" de cada producto
+
+================================================================================
+
+## 5. GESTIÓN DE PEDIDOS
+
+### 5.1 Ver Pedidos
+
+1. Ve a "Gestión de Pedidos" en el menú lateral
+2. Verás dos columnas:
+   • Restaurante - Pedidos para consumir en el local
+   • Domicilio - Pedidos para entregar
+
+### 5.2 Estados de Pedido
+
+   ⏳ Pendiente     - Pedido recién recibido
+   ✅ Confirmado    - Pedido confirmado al cliente
+   🍳 Preparando    - En preparación
+   🍽️ Listo        - Listo para entregar/recoger
+   🚚 En camino     - Salió a domicilio
+   ✓ Entregado     - Pedido completado
+   ❌ Cancelado     - Pedido cancelado
+
+### 5.3 Actualizar Estado
+
+1. Haz clic en el pedido
+2. Selecciona el nuevo estado
+3. Haz clic en "Actualizar"
+
+### 5.4 Ver Detalles del Pedido
+
+Al hacer clic en un pedido verás:
+   • Número de pedido
+   • Nombre del cliente
+   • Teléfono
+   • Dirección (domicilio)
+   • Productos pedidos
+   • Total
+   • Método de pago
+   • Estado actual
+
+### 5.5 Pedidos en Restaurante (Factura)
+
+1. Ve a "Factura Restaurante"
+2. Opciones disponibles:
+   • Crear Factura - Nuevo pedido en mesa
+   • Ver Facturas - Historial de pedidos
+
+### 5.6 Pedidos a Domicilio (Facturación)
+
+1. Ve a "Facturación Domicilio"
+2. Opciones disponibles:
+   • Crear Factura - Nuevo pedido a domicilio
+   • Ver Facturas - Historial de domicilios
+
+================================================================================
+
+## 6. CONFIGURACIÓN DEL NEGOCIO
+
+### 6.1 Mi Perfil
+
+1. Ve a "Mi Perfil" en el menú lateral
+2. Configura:
+   • Nombre del negocio
+   • Slug (URL personalizada)
+   • Teléfono
+   • Dirección
+   • Colores (primario y secundario)
+   • Logo
+   • Banner
+   • Impoconsumo (%)
+   • Valor del empaque unitario
+
+3. Haz clic en "Guardar Cambios"
+
+### 6.2 Configuración de Domicilio
+
+1. Ve a "Configuración Domicilio"
+2. Configura:
+   • Habilitar/Deshabilitar servicio a domicilio
+   • Costo de envío ($)
+   • Pedido mínimo ($)
+   • Tiempo estimado de entrega
+   • Radio de cobertura (km)
+
+3. Haz clic en "Guardar Configuración"
+
+### 6.3 Impresoras
+
+1. Ve a "Impresoras"
+2. Haz clic en "Agregar Impresora"
+3. Configura:
+   • Nombre de la impresora
+   • Tipo de conexión
+   • Dirección IP (si es de red)
+
+4. Haz clic en "Guardar"
+
+### 6.4 Empaque
+
+1. Ve a "Empaque"
+2. Ingresa el valor unitario del empaque
+3. Haz clic en "Guardar Configuración"
+
+================================================================================
+
+## 7. MENÚ PÚBLICO
+
+### 7.1 Acceder al Menú
+
+Tu menú público está en:
+   https://minimenuia.vercel.app/menu/TU-SLUG
+
+Ejemplo:
+   https://minimenuia.vercel.app/menu/mi-restaurante
+
+### 7.2 Compartir el Menú
+
+1. Ve a "Compartir Menú" en el panel
+2. Opciones disponibles:
+   • Copiar enlace
+   • Descargar código QR
+   • Compartir por WhatsApp
+
+### 7.3 Cómo Funciona para el Cliente
+
+1. El cliente escanea el QR o abre el enlace
+2. Ve el menú con productos y precios
+3. Agrega productos al carrito
+4. Selecciona: "Pedir en Restaurante" o "Pedir Domicilio"
+5. Completa sus datos
+6. El pedido llega por WhatsApp al restaurante
+7. El pedido también queda guardado en el panel
+
+================================================================================
+
+## 8. PREGUNTAS FRECUENTES
+
+### ¿Puedo cambiar mi slug (URL)?
+Sí, ve a "Mi Perfil" y edita el campo "Slug".
+
+### ¿Los pedidos se descuentan del inventario?
+Sí, automáticamente se descuenta el stock cuando entra un pedido.
+
+### ¿Puedo tener múltiples usuarios?
+Depende de tu plan. El plan GRATIS incluye 1 usuario.
+
+### ¿Puedo cambiar los colores de mi menú?
+Sí, ve a "Mi Perfil" y configura "Color Primario" y "Color Secundario".
+
+### ¿Qué pasa si se va el internet?
+Necesitas internet para recibir pedidos. Los pedidos se guardan en la nube.
+
+### ¿Puedo usar mi propio dominio?
+Sí, en planes superiores puedes configurar tu propio dominio.
+
+### ¿Cómo imprimo los pedidos?
+Configura una impresora térmica en "Impresoras" y los pedidos se imprimirán automáticamente.
+
+================================================================================
+
+## 9. SOPORTE TÉCNICO
+
+### Canales de Atención
+
+   📧 Email: soporte@minimenuia.com
+   📱 WhatsApp: +57 XXX XXX XXXX
+   🌐 Web: https://minimenuia.vercel.app
+
+### Horario de Atención
+
+   Lunes a Viernes: 8:00 AM - 6:00 PM
+   Sábados: 9:00 AM - 1:00 PM
+
+### Antes de Contactar Soporte
+
+1. ✅ Verifica tu conexión a internet
+2. ✅ Limpia el caché del navegador
+3. ✅ Prueba en otro navegador
+4. ✅ Revisa este manual
+
+================================================================================
+
+## ACTUALIZACIONES
+
+Este manual se actualiza con cada nueva versión de MINIMENU.
+Última actualización: Marzo 2026
+Versión del manual: 1.0
+
+================================================================================
+
+¡Gracias por usar MINIMENU!

@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,74 +19,88 @@ interface LandingPageProps {
   onRegister: () => void;
 }
 
-const features = [
-  {
-    icon: <Utensils className="w-6 h-6 text-purple-600" />,
-    title: 'Menú Digital',
-    description: 'Crea un menú digital interactivo y actualizable en tiempo real.'
-  },
-  {
-    icon: <QrCode className="w-6 h-6 text-purple-600" />,
-    title: 'Código QR',
-    description: 'Genera códigos QR personalizados para tu negocio.'
-  },
-  {
-    icon: <ShoppingCart className="w-6 h-6 text-purple-600" />,
-    title: 'Pedidos Online',
-    description: 'Recibe pedidos directamente desde el menú digital.'
-  },
-  {
-    icon: <BarChart3 className="w-6 h-6 text-purple-600" />,
-    title: 'Análisis',
-    description: 'Métricas y reportes para tomar mejores decisiones.'
-  }
-];
-
-const plans = [
-  {
-    name: 'Básico',
-    price: '$49.900',
-    period: '/mes',
-    description: 'Perfecto para pequeños negocios',
-    features: [
-      'Menú digital ilimitado',
-      'Hasta 50 productos',
-      'Código QR incluido',
-      'Soporte por email'
-    ],
-    popular: false
-  },
-  {
-    name: 'Profesional',
-    price: '$99.900',
-    period: '/mes',
-    description: 'Ideal para negocios en crecimiento',
-    features: [
-      'Todo del plan Básico',
-      'Hasta 200 productos',
-      'Pedidos online',
-      'Sistema de reservas',
-      'Soporte prioritario'
-    ],
-    popular: true
-  },
-  {
-    name: 'Empresarial',
-    price: '$199.900',
-    period: '/mes',
-    description: 'Para negocios grandes',
-    features: [
-      'Todo del plan Profesional',
-      'Productos ilimitados',
-      'Programa de lealtad',
-      'API personalizada',
-      'Soporte 24/7'
-    ],
-    popular: false
-  }
-];
+interface Plan {
+  name: string;
+  price: number;
+  period: string;
+  description: string;
+  features: string;
+  isPopular: boolean;
+}
 
 export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch plans from API on mount
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch('/api/public/plans');
+        const data = await response.json();
+
+        if (data.success && data.data && data.data.length > 0) {
+          setPlans(data.data);
+        } else {
+          // Fallback to default plans if API fails or returns empty
+          setPlans(getDefaultPlans());
+          console.warn('[LandingPage] Using fallback plans');
+        }
+      } catch (err) {
+        console.error('[LandingPage] Error fetching plans:', err);
+        setError('No se pudieron cargar los planes');
+        setPlans(getDefaultPlans());
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPlans();
+  }, []);
+
+  // Default plans as fallback
+  const getDefaultPlans = (): Plan[] => [
+    {
+      name: 'Gratis',
+      price: 0,
+      period: 'mes',
+      description: 'Para comenzar',
+      features: '1 Usuario,50 Productos,5 Categorías,Menú digital con QR,Pedidos por WhatsApp',
+      isPopular: false
+    },
+    {
+      name: 'Básico',
+      price: 29000,
+      period: 'mes',
+      description: 'Para pequeños negocios',
+      features: '3 Usuarios,200 Productos,15 Categorías,Branding personalizado,Soporte prioritario',
+      isPopular: false
+    },
+    {
+      name: 'Profesional',
+      price: 59000,
+      period: 'mes',
+      description: 'Para negocios en crecimiento',
+      features: '10 Usuarios,Productos ilimitados,Múltiples sedes,Analíticas avanzadas,Soporte 24/7',
+      isPopular: true
+    }
+  ];
+
+  // Format price for display
+  const formatPrice = (price: number, period: string): string => {
+    if (price === 0) return 'Gratis';
+    return `$${price.toLocaleString('es-CO')}/${period === 'MONTHLY' ? 'mes' : 'año'}`;
+  };
+
+  // Parse features string to array
+  const parseFeatures = (features: string): string[] => {
+    if (!features) return [];
+    return features.split(',').map(f => f.trim()).filter(f => f.length > 0);
+  };
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Header */}
@@ -234,53 +249,64 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {plans.map((plan, idx) => (
-              <Card 
-                key={idx} 
-                className={`relative hover:shadow-lg transition-shadow ${
-                  plan.popular ? 'ring-2 ring-purple-500 scale-105' : ''
-                }`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-purple-600">
-                      <Star className="w-3 h-3 mr-1" />
-                      Más Popular
-                    </Badge>
-                  </div>
-                )}
-                <CardHeader className="text-center pb-2">
-                  <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                  <CardDescription>{plan.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="text-center">
-                  <div className="mb-6">
-                    <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                    <span className="text-gray-500">{plan.period}</span>
-                  </div>
-                  <ul className="space-y-3 mb-6 text-left">
-                    {plan.features.map((feature, fidx) => (
-                      <li key={fidx} className="flex items-center gap-2">
-                        <Check className="w-5 h-5 text-green-500" />
-                        <span className="text-gray-700">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button 
-                    className={`w-full ${
-                      plan.popular 
-                        ? 'bg-purple-600 hover:bg-purple-700' 
-                        : 'bg-gray-900 hover:bg-gray-800'
-                    }`}
-                    onClick={onRegister}
-                  >
-                    Regístrate
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Cargando planes...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <p className="text-red-600 mb-4">{error}</p>
+              <Button onClick={() => window.location.reload()}>Reintentar</Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {plans.map((plan, idx) => (
+                <Card
+                  key={plan.id || idx}
+                  className={`relative hover:shadow-lg transition-shadow ${
+                    plan.isPopular ? 'ring-2 ring-purple-500 scale-105' : ''
+                  }`}
+                >
+                  {plan.isPopular && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-purple-600">
+                        <Star className="w-3 h-3 mr-1" />
+                        Más Popular
+                      </Badge>
+                    </div>
+                  )}
+                  <CardHeader className="text-center pb-2">
+                    <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                    <CardDescription>{plan.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="text-center">
+                    <div className="mb-6">
+                      <span className="text-4xl font-bold text-gray-900">{formatPrice(plan.price, plan.period)}</span>
+                    </div>
+                    <ul className="space-y-3 mb-6 text-left">
+                      {parseFeatures(plan.features).map((feature, fidx) => (
+                        <li key={fidx} className="flex items-center gap-2">
+                          <Check className="w-5 h-5 text-green-500" />
+                          <span className="text-gray-700">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      className={`w-full ${
+                        plan.isPopular
+                          ? 'bg-purple-600 hover:bg-purple-700'
+                          : 'bg-gray-900 hover:bg-gray-800'
+                      }`}
+                      onClick={onRegister}
+                    >
+                      Regístrate
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

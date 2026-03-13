@@ -1,0 +1,156 @@
+# 📋 PLANES DE SUSCRIPCIÓN - MINIMENU SaaS
+
+================================================================================
+
+## Plan 1: GRATIS - Para empezar
+💰 Precio: $0 COP/mes
+
+✅ INCLUYE:
+   • 1 Usuario (Administrador)
+   • Hasta 50 productos
+   • Hasta 5 categorías
+   • Menú público con QR
+   • Pedidos por WhatsApp
+   • Pedidos en restaurante
+   • Pedidos a domicilio
+   • Gestión básica de inventario
+   • 1 Impresora configurada
+   • Soporte por email
+   • Dominio: minimenuia.vercel.app/menu/tu-negocio
+
+❌ NO INCLUYE:
+   • Sin dominio personalizado
+   • Sin branding personalizado
+   • Sin analíticas avanzadas
+   • Sin múltiples usuarios
+   • Sin API access
+
+================================================================================
+
+## Plan 2: BÁSICO - Para pequeños negocios
+💰 Precio: $29.000 COP/mes
+
+✅ INCLUYE TODO LO DEL PLAN GRATIS, MÁS:
+   • 3 Usuarios
+   • Hasta 200 productos
+   • Hasta 15 categorías
+   • 3 Impresoras configuradas
+   • Branding personalizado (colores, logo)
+   • Dominio personalizado (tu-restaurante.com)
+   • Soporte prioritario por WhatsApp
+   • Backup semanal automático
+   • Estadísticas básicas de ventas
+
+🎯 IDEAL PARA:
+   • Pequeños restaurantes
+   • Cafeterías
+   • Food trucks
+   • Emprendimientos de comida
+
+================================================================================
+
+## Plan 3: PROFESIONAL - Para negocios en crecimiento ⭐ MÁS POPULAR
+💰 Precio: $59.000 COP/mes
+
+✅ INCLUYE TODO LO DEL PLAN BÁSICO, MÁS:
+   • 10 Usuarios
+   • Productos ilimitados
+   • Categorías ilimitadas
+   • Impresoras ilimitadas
+   • Múltiples sedes/ubicaciones
+   • Configuración avanzada de domicilios
+   • Integración con pasarelas de pago
+   • Analíticas avanzadas y reportes
+   • Gestión de inventario avanzada
+   • Backup diario automático
+   • API access para integraciones
+   • Soporte 24/7 prioritario
+   • Capacitación inicial (2 horas)
+   • QR personalizado con logo
+
+🎯 IDEAL PARA:
+   • Restaurantes establecidos
+   • Cadenas de restaurantes (hasta 3 sedes)
+   • Servicios de delivery
+   • Fantasmas kitchens
+
+================================================================================
+
+## Plan 4: EMPRESARIAL - Para grandes operaciones
+💰 Precio: $149.000 COP/mes
+
+✅ INCLUYE TODO LO DEL PLAN PROFESIONAL, MÁS:
+   • Usuarios ilimitados
+   • Sedes ilimitadas
+   • Multi-marca (varios restaurantes)
+   • Dashboard corporativo consolidado
+   • Reportes personalizados
+   • Integración con sistemas POS existentes
+   • Integración con Rappi, iFood, UberEats
+   • White-label (tu propia marca)
+   • SLA garantizado (99.9% uptime)
+   • Account manager dedicado
+   • Capacitación ilimitada
+   • Desarrollo de features personalizados*
+   • Migración gratuita desde tu sistema actual
+
+🎯 IDEAL PARA:
+   • Cadenas de restaurantes (4+ sedes)
+   • Grupos gastronómicos
+   • Franquicias
+   • Empresas de delivery multi-marca
+
+================================================================================
+
+## 🔒 SEGURIDAD (Todos los planes)
+
+   • Autenticación segura
+   • Encriptación de datos
+   • Backups automáticos
+   • SSL/HTTPS incluido
+
+================================================================================
+
+## 🔄 ACTUALIZACIONES (Todos los planes)
+
+   • Actualizaciones automáticas
+   • Nuevas features sin costo adicional
+   • Mejoras de seguridad
+
+================================================================================
+
+## 📱 ACCESO (Todos los planes)
+
+   • Web app responsive
+   • Funciona en PC, tablet, móvil
+   • Sin descarga de app necesaria
+   • Acceso 24/7
+
+================================================================================
+
+## 💳 MÉTODOS DE PAGO ACEPTADOS
+
+   • Tarjeta de crédito/débito
+   • Transferencia bancaria
+   • Nequi
+   • Daviplata
+   • Efectivo (con recargo del 5%)
+
+================================================================================
+
+## 📞 GARANTÍA
+
+   ✅ 14 días de prueba gratis (Plan PROFESIONAL)
+   ✅ Cancelación en cualquier momento
+   ✅ Reembolso proporcional
+   ✅ Sin cláusulas de permanencia
+
+================================================================================
+
+¿Necesitas un plan personalizado?
+Contáctanos para cotizar un plan enterprise a tu medida.
+
+================================================================================
+
+Última actualización: Marzo 2026
+MINIMENU SaaS - Sistema de Gestión para Restaurantes
