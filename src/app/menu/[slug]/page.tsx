@@ -1214,6 +1214,12 @@ export default function PublicMenuPage() {
             impoconsumo: data.data.business.impoconsumo ?? 8,
             valorEmpaqueUnitario: data.data.business.valorEmpaqueUnitario,
             domicilio: data.data.business.domicilio,
+            // Configuración de Domicilio
+            deliveryFee: data.data.business.deliveryFee,
+            minimumOrder: data.data.business.minimumOrder,
+            estimatedTime: data.data.business.estimatedTime,
+            deliveryEnabled: data.data.business.deliveryEnabled,
+            deliveryRadius: data.data.business.deliveryRadius,
             // Banner de Cabecera
             banner: data.data.business.banner ?? null,
             bannerEnabled: data.data.business.bannerEnabled ?? true,
