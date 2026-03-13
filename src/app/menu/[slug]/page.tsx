@@ -401,11 +401,21 @@ function CartSidebar({
 
   // WhatsApp order for restaurant - also saves to database
   const handleRestaurantOrder = async () => {
-    if (items.length === 0) return;
+    if (items.length === 0) {
+      alert('El carrito está vacío');
+      return;
+    }
 
     // Validate required fields for restaurant
     if (!restaurantCustomerName || !restaurantCustomerPhone) {
       alert('Por favor complete los campos obligatorios: Nombre y Celular');
+      return;
+    }
+
+    // Validate restaurant whatsapp exists
+    if (!restaurant?.whatsapp) {
+      alert('Error: El restaurante no tiene número de WhatsApp configurado');
+      console.error('[WhatsApp] Restaurant whatsapp not configured');
       return;
     }
 
@@ -497,17 +507,39 @@ function CartSidebar({
       paymentInfo +
       `¡Gracias por su pedido!`;
 
-    const whatsappUrl = `https://wa.me/${restaurant.whatsapp?.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+    const whatsappNumber = restaurant.whatsapp.replace(/[^0-9]/g, '');
+    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
+    
+    console.log('[WhatsApp] Opening URL:', whatsappUrl);
+    console.log('[WhatsApp] Restaurant:', restaurant.name, 'WhatsApp:', restaurant.whatsapp);
+    
+    // Try to open WhatsApp
+    const newWindow = window.open(whatsappUrl, '_blank');
+    
+    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+      // Fallback: try direct location
+      console.warn('[WhatsApp] Popup blocked, trying fallback...');
+      window.location.href = whatsappUrl;
+    }
   };
 
   // WhatsApp order for delivery - also saves to database
   const handleDeliveryOrder = async () => {
-    if (items.length === 0) return;
+    if (items.length === 0) {
+      alert('El carrito está vacío');
+      return;
+    }
 
     // Validate required fields
     if (!deliveryForm.name || !deliveryForm.phone || !deliveryForm.address || !deliveryForm.city || !deliveryForm.department) {
       alert('Por favor complete todos los campos obligatorios');
+      return;
+    }
+
+    // Validate restaurant whatsapp exists
+    if (!restaurant?.whatsapp) {
+      alert('Error: El restaurante no tiene número de WhatsApp configurado');
+      console.error('[WhatsApp] Restaurant whatsapp not configured');
       return;
     }
 
@@ -581,11 +613,11 @@ function CartSidebar({
 
     const empaqueLine = empaqueTotal > 0 ? `Empaque: ${formatPrice(empaqueTotal)}\n` : '';
     const tipLine = tipAmount > 0 ? `Propina Voluntaria: ${formatPrice(tipAmount)}\n` : '';
-    
-    const paymentInfo = paymentPhone || paymentHolder 
+
+    const paymentInfo = paymentPhone || paymentHolder
       ? `💳 *Método de Pago:* ${paymentMethodName}\n${paymentPhone ? `📱 Número: ${paymentPhone}\n` : ''}${paymentHolder ? `👤 Titular: ${paymentHolder}\n` : ''}`
       : `💳 *Método de Pago:* ${paymentMethodName}\n`;
-    
+
     const message = `🛵 *PEDIDO A DOMICILIO*\n\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
       `📍 *DATOS DE ENTREGA*\n` +
@@ -606,9 +638,21 @@ function CartSidebar({
       `*TOTAL: ${formatPrice(total)}*\n\n` +
       paymentInfo +
       `¡Gracias por su pedido!`;
+
+    const whatsappNumber = restaurant.whatsapp.replace(/[^0-9]/g, '');
+    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
     
-    const whatsappUrl = `https://wa.me/${restaurant.whatsapp?.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+    console.log('[WhatsApp] Opening URL:', whatsappUrl);
+    console.log('[WhatsApp] Restaurant:', restaurant.name, 'WhatsApp:', restaurant.whatsapp);
+    
+    // Try to open WhatsApp
+    const newWindow = window.open(whatsappUrl, '_blank');
+    
+    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+      // Fallback: try direct location
+      console.warn('[WhatsApp] Popup blocked, trying fallback...');
+      window.location.href = whatsappUrl;
+    }
   };
 
   // Input change handler
