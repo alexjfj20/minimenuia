@@ -684,7 +684,7 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
       order: plans.length + 1,
       icon: 'zap'
     };
-    
+
     if (editingPlan) {
       const response = await api.planService.update(editingPlan.id, planData);
       if (response.success && response.data) {
@@ -698,6 +698,37 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     }
     setShowPlanModal(false);
     resetPlanForm();
+  };
+
+  const handleSaveAllPlans = async () => {
+    try {
+      console.log('[SuperAdmin] Saving all plans to Supabase...');
+      
+      // Save each plan to the database
+      const savePromises = plans.map(async (plan) => {
+        const planData = {
+          ...plan,
+          features: Array.isArray(plan.features) ? plan.features : plan.features.split('\n').filter(f => f.trim()),
+          isActive: true,
+          isPublic: true
+        };
+        
+        // Update existing plan
+        const response = await api.planService.update(plan.id, planData);
+        if (!response.success) {
+          console.error('[SuperAdmin] Failed to save plan:', plan.name);
+        }
+        return response;
+      });
+
+      await Promise.all(savePromises);
+      
+      console.log('[SuperAdmin] All plans saved successfully');
+      alert('✅ Todos los planes se guardaron correctamente en la base de datos');
+    } catch (error) {
+      console.error('[SuperAdmin] Error saving plans:', error);
+      alert('❌ Error al guardar los planes. Intente nuevamente.');
+    }
   };
 
   const handleDeleteService = async (id: string) => {
@@ -1663,6 +1694,24 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
             {/* Planes Tab */}
             {activeTab === 'planes' && (
               <div className="space-y-6">
+                {/* Header with Save Button */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Planes Fijos</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Crea y edita planes de suscripción
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleSaveAllPlans}
+                    disabled={plans.length === 0}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    Guardar Cambios
+                  </Button>
+                </div>
+
                 {/* Actions */}
                 <Button
                   onClick={() => {
