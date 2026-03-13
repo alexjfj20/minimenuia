@@ -57,7 +57,7 @@ export async function GET(
     // 1. Get business from Supabase by slug
     const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
-      .select('id, name, slug, logo, primaryColor, secondaryColor')
+      .select('id, name, slug, logo, primaryColor, secondaryColor, phone, address')
       .eq('slug', slug)
       .maybeSingle();
 
@@ -71,23 +71,23 @@ export async function GET(
 
     if (!business) {
       console.log('[Menu API] Business not found for slug:', slug);
-      
+
       // Debug: List all available businesses and their slugs
       const { data: allBusinesses } = await supabaseAdmin
         .from('businesses')
         .select('id, name, slug');
-      
+
       console.log('[Menu API] All available businesses:', allBusinesses);
       console.log('[Menu API] Looking for slug:', slug);
       console.log('[Menu API] Available slugs:', allBusinesses?.map(b => b.slug));
-      
+
       return NextResponse.json({
         success: false,
         error: 'Establecimiento no encontrado. Slug disponible: ' + (allBusinesses?.[0]?.slug || 'ninguno')
       }, { status: 404 });
     }
 
-    console.log('[Menu API] Business found:', business.name, 'slug:', business.slug);
+    console.log('[Menu API] Business found:', business.name, 'slug:', business.slug, 'phone:', business.phone);
 
     // 2. Get categories from Supabase
     const { data: dbCategories, error: categoriesError } = await supabaseAdmin
