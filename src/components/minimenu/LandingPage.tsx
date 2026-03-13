@@ -101,6 +101,31 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
     if (!features) return [];
     return features.split(',').map(f => f.trim()).filter(f => f.length > 0);
   };
+
+  // Features data
+  const features = [
+    {
+      icon: <Utensils className="w-6 h-6 text-purple-600" />,
+      title: 'Menú Digital',
+      description: 'Crea un menú digital interactivo y actualizable en tiempo real.'
+    },
+    {
+      icon: <QrCode className="w-6 h-6 text-purple-600" />,
+      title: 'Código QR',
+      description: 'Genera códigos QR personalizados para tu negocio.'
+    },
+    {
+      icon: <ShoppingCart className="w-6 h-6 text-purple-600" />,
+      title: 'Pedidos Online',
+      description: 'Recibe pedidos directamente desde el menú digital.'
+    },
+    {
+      icon: <BarChart3 className="w-6 h-6 text-purple-600" />,
+      title: 'Análisis',
+      description: 'Métricas y reportes para tomar mejores decisiones.'
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Header */}
