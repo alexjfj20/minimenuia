@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
 
 interface DeliveryConfig {
   deliveryFee: number;
@@ -14,10 +13,11 @@ interface DeliveryConfig {
 
 export default function DeliveryConfigPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [businessId, setBusinessId] = useState<string | null>(null);
 
   const [config, setConfig] = useState<DeliveryConfig>({
     deliveryFee: 3000,
@@ -27,24 +27,39 @@ export default function DeliveryConfigPage() {
     deliveryRadius: null
   });
 
-  // Load config on mount
+  // Load auth state and config on mount
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/');
-      return;
-    }
+    const initAuth = async () => {
+      try {
+        // Get session from cookie
+        const response = await fetch('/api/auth/me');
+        const data = await response.json();
 
-    if (isAuthenticated && user?.businessId) {
-      loadConfig();
-    }
-  }, [isAuthenticated, isLoading, user?.businessId]);
+        if (data.success && data.data) {
+          setIsAuthenticated(true);
+          setBusinessId(data.data.businessId);
+          
+          // Load config
+          if (data.data.businessId) {
+            loadConfig(data.data.businessId);
+          }
+        } else {
+          // Not authenticated, redirect to home
+          router.push('/');
+        }
+      } catch (error) {
+        console.error('[Delivery Config] Auth error:', error);
+        router.push('/');
+      }
+    };
 
-  const loadConfig = async () => {
-    if (!user?.businessId) return;
+    initAuth();
+  }, []);
 
+  const loadConfig = async (bid: string) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/delivery-config?businessId=${user.businessId}`);
+      const response = await fetch(`/api/delivery-config?businessId=${bid}`);
       const data = await response.json();
 
       if (data.success && data.data) {
@@ -61,7 +76,7 @@ export default function DeliveryConfigPage() {
   };
 
   const handleSave = async () => {
-    if (!user?.businessId) return;
+    if (!businessId) return;
 
     setSaving(true);
     setMessage(null);
@@ -71,7 +86,7 @@ export default function DeliveryConfigPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          businessId: user.businessId,
+          businessId: businessId,
           deliveryFee: config.deliveryFee,
           minimumOrder: config.minimumOrder,
           estimatedTime: config.estimatedTime,
@@ -96,7 +111,7 @@ export default function DeliveryConfigPage() {
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
