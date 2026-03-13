@@ -54,10 +54,10 @@ export async function GET(
     console.log('[Menu API] Supabase URL configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
     console.log('[Menu API] Service Role Key configured:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-    // 1. Get business from Supabase by slug
+    // 1. Get business from Supabase by slug (include ALL fields to debug)
     const { data: business, error: businessError } = await supabaseAdmin
       .from('businesses')
-      .select('id, name, slug, logo, primaryColor, secondaryColor, phone, address')
+      .select('*')
       .eq('slug', slug)
       .maybeSingle();
 
@@ -75,11 +75,12 @@ export async function GET(
       // Debug: List all available businesses and their slugs
       const { data: allBusinesses } = await supabaseAdmin
         .from('businesses')
-        .select('id, name, slug');
+        .select('id, name, slug, phone');
 
       console.log('[Menu API] All available businesses:', allBusinesses);
       console.log('[Menu API] Looking for slug:', slug);
       console.log('[Menu API] Available slugs:', allBusinesses?.map(b => b.slug));
+      console.log('[Menu API] Available phones:', allBusinesses?.map(b => b.phone));
 
       return NextResponse.json({
         success: false,
@@ -87,7 +88,10 @@ export async function GET(
       }, { status: 404 });
     }
 
-    console.log('[Menu API] Business found:', business.name, 'slug:', business.slug, 'phone:', business.phone);
+    console.log('[Menu API] Business found:', business.name);
+    console.log('[Menu API] Business slug:', business.slug);
+    console.log('[Menu API] Business phone field:', business.phone);
+    console.log('[Menu API] All business fields:', Object.keys(business));
 
     // 2. Get categories from Supabase
     const { data: dbCategories, error: categoriesError } = await supabaseAdmin
