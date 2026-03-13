@@ -738,21 +738,21 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             address: data.data.address || '',
             primaryColor: data.data.primaryColor || '#8b5cf6',
             secondaryColor: data.data.secondaryColor || '#ffffff',
-            impoconsumo: 8, // Default value (not in DB)
+            impoconsumo: data.data.impoconsumo ?? 8,
             // Imágenes del negocio
             avatar: data.data.avatar || null,
             logo: data.data.logo || null,
             banner: data.data.banner || null,
             bannerEnabled: data.data.bannerEnabled ?? true,
-            // Franja Hero Sutil (defaults, not in DB)
-            heroImageUrl: null,
-            showHeroBanner: false,
-            // Propina Voluntaria (defaults, not in DB)
-            tipEnabled: true,
-            tipPercentageDefault: 10,
-            tipOnlyOnPremise: true,
-            // Métodos de Pago (defaults, not in DB)
-            paymentMethods: [
+            // Franja Hero Sutil
+            heroImageUrl: data.data.heroImageUrl || null,
+            showHeroBanner: data.data.showHeroBanner ?? false,
+            // Propina Voluntaria
+            tipEnabled: data.data.tipEnabled ?? true,
+            tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
+            tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true,
+            // Métodos de Pago (Efectivo primero)
+            paymentMethods: data.data.paymentMethods ?? [
               { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
@@ -4799,11 +4799,21 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           address: profileForm.address,
           primaryColor: profileForm.primaryColor,
           secondaryColor: profileForm.secondaryColor,
+          impoconsumo: profileForm.impoconsumo,
           // Imágenes del negocio
           avatar: profileForm.avatar,
           logo: profileForm.logo,
           banner: profileForm.banner,
-          bannerEnabled: profileForm.bannerEnabled
+          bannerEnabled: profileForm.bannerEnabled,
+          // Franja Hero Sutil
+          heroImageUrl: profileForm.heroImageUrl,
+          showHeroBanner: profileForm.showHeroBanner,
+          // Propina Voluntaria
+          tipEnabled: profileForm.tipEnabled,
+          tipPercentageDefault: profileForm.tipPercentageDefault,
+          tipOnlyOnPremise: profileForm.tipOnlyOnPremise,
+          // Métodos de Pago
+          paymentMethods: profileForm.paymentMethods
         })
       });
 
@@ -4823,21 +4833,21 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           address: data.data.address || '',
           primaryColor: data.data.primaryColor || '#8b5cf6',
           secondaryColor: data.data.secondaryColor || '#ffffff',
-          impoconsumo: 8, // Default value (not in DB)
+          impoconsumo: data.data.impoconsumo ?? 8,
           // Imágenes del negocio
           avatar: data.data.avatar || null,
           logo: data.data.logo || null,
           banner: data.data.banner || null,
           bannerEnabled: data.data.bannerEnabled ?? true,
-          // Franja Hero Sutil (defaults, not in DB)
-          heroImageUrl: null,
-          showHeroBanner: false,
-          // Propina Voluntaria (defaults, not in DB)
-          tipEnabled: true,
-          tipPercentageDefault: 10,
-          tipOnlyOnPremise: true,
-          // Métodos de Pago (defaults, not in DB)
-          paymentMethods: [
+          // Franja Hero Sutil
+          heroImageUrl: data.data.heroImageUrl || null,
+          showHeroBanner: data.data.showHeroBanner ?? false,
+          // Propina Voluntaria
+          tipEnabled: data.data.tipEnabled ?? true,
+          tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
+          tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true,
+          // Métodos de Pago
+          paymentMethods: data.data.paymentMethods ?? [
             { id: 'cash', name: 'Efectivo', icon: '💵', enabled: true },
             { id: 'transfer', name: 'Transferencia', icon: '🏦', enabled: true },
             { id: 'card', name: 'Tarjeta', icon: '💳', enabled: true }
