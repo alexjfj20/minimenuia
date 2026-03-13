@@ -109,6 +109,12 @@ export async function GET(
       impoconsumo: business.impoconsumo ?? 8,
       valorEmpaqueUnitario: business.valorEmpaqueUnitario,
       domicilio: business.domicilio,
+      // Configuración de Domicilio
+      deliveryFee: business.deliveryFee,
+      minimumOrder: business.minimumOrder,
+      estimatedTime: business.estimatedTime,
+      deliveryEnabled: business.deliveryEnabled,
+      deliveryRadius: business.deliveryRadius,
       banner: business.banner,
       bannerEnabled: business.bannerEnabled,
       heroImageUrl: business.heroImageUrl,

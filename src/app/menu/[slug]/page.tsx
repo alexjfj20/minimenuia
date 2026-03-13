@@ -99,6 +99,12 @@ interface RestaurantInfo {
   valorEmpaqueUnitario?: number;
   domicilio?: number;
   impoconsumo?: number;
+  // Configuración de Domicilio
+  deliveryFee?: number;
+  minimumOrder?: number;
+  estimatedTime?: string;
+  deliveryEnabled?: boolean;
+  deliveryRadius?: number | null;
   // Banner de Cabecera
   banner?: string | null;
   bannerEnabled?: boolean;
@@ -318,8 +324,11 @@ function CartSidebar({
   
   // Constants from restaurant config
   const VALOR_EMPAQUE_UNITARIO = restaurant.valorEmpaqueUnitario ?? 500;
-  const DOMICILIO_FEE = restaurant.domicilio ?? restaurant.empaque ?? 3000;
+  const DOMICILIO_FEE = restaurant.deliveryFee ?? restaurant.domicilio ?? restaurant.empaque ?? 3000;
   const IMPOCONSUMO_RATE = (restaurant.impoconsumo ?? 8) / 100;
+  const DELIVERY_ENABLED = restaurant.deliveryEnabled ?? true;
+  const MINIMUM_ORDER = restaurant.minimumOrder ?? 0;
+  const ESTIMATED_TIME = restaurant.estimatedTime || '30-45 min';
   
   // Tip configuration
   const TIP_ENABLED = restaurant.tipEnabled ?? false;
@@ -714,18 +723,20 @@ function CartSidebar({
             <Utensils className="w-4 h-4" />
             Restaurante
           </button>
-          <button
-            onClick={() => handleOrderModeChange('delivery')}
-            className={cn(
-              'flex-1 py-3 px-4 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-l',
-              orderMode === 'delivery'
-                ? 'bg-gray-100 text-gray-900 border-b-2 border-orange-500'
-                : 'bg-white text-gray-500 hover:bg-gray-50'
-            )}
-          >
-            <Truck className="w-4 h-4" />
-            Domicilio
-          </button>
+          {DELIVERY_ENABLED && (
+            <button
+              onClick={() => handleOrderModeChange('delivery')}
+              className={cn(
+                'flex-1 py-3 px-4 flex items-center justify-center gap-2 text-sm font-medium transition-colors border-l',
+                orderMode === 'delivery'
+                  ? 'bg-gray-100 text-gray-900 border-b-2 border-orange-500'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              )}
+            >
+              <Truck className="w-4 h-4" />
+              Domicilio
+            </button>
+          )}
         </div>
 
         {/* Scrollable Content Area */}
