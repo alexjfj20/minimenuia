@@ -738,7 +738,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             address: data.data.address || '',
             primaryColor: data.data.primaryColor || '#8b5cf6',
             secondaryColor: data.data.secondaryColor || '#ffffff',
-            impoconsumo: data.data.impoconsumo ?? 8,
+            impoconsumo: 8, // Default value (not in DB)
             // Imágenes del negocio
             avatar: data.data.avatar || null,
             logo: data.data.logo || null,
@@ -4799,7 +4799,6 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           address: profileForm.address,
           primaryColor: profileForm.primaryColor,
           secondaryColor: profileForm.secondaryColor,
-          impoconsumo: profileForm.impoconsumo,
           // Imágenes del negocio
           avatar: profileForm.avatar,
           logo: profileForm.logo,
@@ -4824,7 +4823,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           address: data.data.address || '',
           primaryColor: data.data.primaryColor || '#8b5cf6',
           secondaryColor: data.data.secondaryColor || '#ffffff',
-          impoconsumo: data.data.impoconsumo ?? 8,
+          impoconsumo: 8, // Default value (not in DB)
           // Imágenes del negocio
           avatar: data.data.avatar || null,
           logo: data.data.logo || null,
