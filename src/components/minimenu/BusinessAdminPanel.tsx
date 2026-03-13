@@ -7931,13 +7931,23 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                         </p>
                       </div>
                     </div>
-                    <div>
-                      <Label>Dirección</Label>
-                      <Input
-                        placeholder="Dirección"
-                        value={profileForm.address}
-                        onChange={(e) => setProfileForm(prev => ({ ...prev, address: e.target.value }))}
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Teléfono</Label>
+                        <Input
+                          placeholder="+57 300 000 0000"
+                          value={profileForm.phone}
+                          onChange={(e) => setProfileForm(prev => ({ ...prev, phone: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label>Dirección</Label>
+                        <Input
+                          placeholder="Dirección"
+                          value={profileForm.address}
+                          onChange={(e) => setProfileForm(prev => ({ ...prev, address: e.target.value }))}
+                        />
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
