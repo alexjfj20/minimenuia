@@ -413,9 +413,11 @@ function CartSidebar({
     }
 
     // Validate restaurant whatsapp exists
-    if (!restaurant?.whatsapp) {
-      alert('Error: El restaurante no tiene número de WhatsApp configurado');
+    if (!restaurant?.whatsapp || restaurant.whatsapp.trim() === '') {
+      const errorMsg = `Error: El restaurante no tiene número de WhatsApp configurado.\n\nTeléfono en sistema: "${restaurant?.phone || 'N/A'}"\nWhatsApp procesado: "${restaurant?.whatsapp || 'N/A'}"\n\nPor favor contacta al administrador.`;
+      alert(errorMsg);
       console.error('[WhatsApp] Restaurant whatsapp not configured');
+      console.error('[WhatsApp] Restaurant data:', restaurant);
       return;
     }
 
@@ -537,9 +539,11 @@ function CartSidebar({
     }
 
     // Validate restaurant whatsapp exists
-    if (!restaurant?.whatsapp) {
-      alert('Error: El restaurante no tiene número de WhatsApp configurado');
+    if (!restaurant?.whatsapp || restaurant.whatsapp.trim() === '') {
+      const errorMsg = `Error: El restaurante no tiene número de WhatsApp configurado.\n\nTeléfono en sistema: "${restaurant?.phone || 'N/A'}"\nWhatsApp procesado: "${restaurant?.whatsapp || 'N/A'}"\n\nPor favor contacta al administrador.`;
+      alert(errorMsg);
       console.error('[WhatsApp] Restaurant whatsapp not configured');
+      console.error('[WhatsApp] Restaurant data:', restaurant);
       return;
     }
 
@@ -1169,6 +1173,15 @@ export default function PublicMenuPage() {
         
         if (data.success && data.data) {
           // Map business data
+          console.log('[Menu Page] Business data received:', data.data.business);
+          console.log('[Menu Page] Phone from API:', data.data.business.phone);
+          
+          const phoneValue = data.data.business.phone || '';
+          const whatsappValue = phoneValue.replace(/[^0-9]/g, '');
+          
+          console.log('[Menu Page] Processed phone:', phoneValue);
+          console.log('[Menu Page] Processed whatsapp:', whatsappValue);
+          
           setRestaurant({
             id: data.data.business.id,
             name: data.data.business.name,
@@ -1177,9 +1190,9 @@ export default function PublicMenuPage() {
             logo: data.data.business.logo,
             primaryColor: data.data.business.primaryColor || '#8b5cf6',
             secondaryColor: data.data.business.secondaryColor || '#ffffff',
-            phone: data.data.business.phone,
-            address: data.data.business.address,
-            whatsapp: data.data.business.phone?.replace(/[^0-9]/g, ''),
+            phone: phoneValue,
+            address: data.data.business.address || '',
+            whatsapp: whatsappValue,
             openTime: '11:00',
             closeTime: '22:00',
             isOpen: true,
