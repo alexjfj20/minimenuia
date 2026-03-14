@@ -96,10 +96,20 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
     return `$${price.toLocaleString('es-CO')}/${period === 'MONTHLY' ? 'mes' : 'año'}`;
   };
 
-  // Parse features string to array
+  // Parse features string to array con fix para JSON stringificado
   const parseFeatures = (features: string): string[] => {
     if (!features) return [];
-    return features.split(',').map(f => f.trim()).filter(f => f.length > 0);
+    // Intentar parsear como JSON primero
+    try {
+      const parsed = JSON.parse(features);
+      if (Array.isArray(parsed)) {
+        return parsed.map(String).map(item => item.replace(/^["']+|["']+$/g, '').trim()).filter(Boolean);
+      }
+    } catch {
+      // Si no es JSON, split por coma o newline
+      return features.split(/[,\n]/).map(f => f.trim()).filter(f => f.length > 0);
+    }
+    return [features];
   };
 
   // Features data

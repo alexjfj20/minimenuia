@@ -8,3 +8,4 @@ export { LoginView } from './LoginView';
 export { RegisterView } from './RegisterView';
 export { ForgotPasswordView } from './ForgotPasswordView';
 export { FeaturesPage } from './FeaturesPage';
+export { ChatbotWidget } from './ChatbotWidget';

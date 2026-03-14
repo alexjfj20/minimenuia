@@ -708,11 +708,11 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
       const savePromises = plans.map(async (plan) => {
         const planData = {
           ...plan,
-          features: Array.isArray(plan.features) ? plan.features : plan.features.split('\n').filter(f => f.trim()),
+          features: parseFeatures(plan.features),
           isActive: true,
           isPublic: true
         };
-        
+
         // Update existing plan
         const response = await api.planService.update(plan.id, planData);
         if (!response.success) {
@@ -968,6 +968,26 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     setEditingModule(null);
   };
 
+  // Helper para parsear features (fix robusto para JSON stringificado)
+  const parseFeatures = (features: unknown): string[] => {
+    let arr: string[] = [];
+    if (!features) return [];
+    if (typeof features === 'string') {
+      try { 
+        const parsed = JSON.parse(features);
+        arr = Array.isArray(parsed) ? parsed.map(String) : [features];
+      } catch { 
+        arr = features.split('\n').filter(Boolean);
+      }
+    } else if (Array.isArray(features)) {
+      arr = (features as unknown[]).map(String);
+    } else {
+      return [];
+    }
+    // Limpiar comillas sobrantes de cada item
+    return arr.map(item => item.replace(/^["']+|["']+$/g, '').trim()).filter(Boolean);
+  };
+
   const resetPlanForm = () => {
     setPlanForm({ 
       name: '', slug: '', description: '', price: 0, currency: 'COP', 
@@ -1004,18 +1024,18 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
   const openEditPlan = (plan: LandingPlan) => {
     setEditingPlan(plan);
     setPlanForm({
-      name: plan.name,
-      slug: plan.slug,
-      description: plan.description,
-      price: plan.price,
-      currency: plan.currency,
-      period: plan.period,
-      features: plan.features.join('\n'),
-      maxUsers: plan.maxUsers,
-      maxProducts: plan.maxProducts,
-      maxCategories: plan.maxCategories,
-      isPopular: plan.isPopular,
-      color: plan.color
+      name: plan.name || '',
+      slug: plan.slug || '',
+      description: plan.description || '',
+      price: plan.price ?? 0,
+      currency: plan.currency || 'COP',
+      period: plan.period || 'monthly',
+      features: parseFeatures(plan.features).join('\n'),
+      maxUsers: plan.maxUsers ?? 1,
+      maxProducts: plan.maxProducts ?? 50,
+      maxCategories: plan.maxCategories ?? 5,
+      isPopular: plan.isPopular ?? false,
+      color: plan.color || '#8b5cf6'
     });
     setShowPlanModal(true);
   };
@@ -1765,14 +1785,14 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                         </div>
                         
                         <div className="space-y-2 mb-4">
-                          {plan.features.slice(0, 4).map((feature, idx) => (
+                          {parseFeatures(plan.features).slice(0, 4).map((feature: string, idx: number) => (
                             <div key={idx} className="flex items-center gap-2 text-sm">
                               <Check className="w-4 h-4 text-green-500" />
                               <span>{feature}</span>
                             </div>
                           ))}
-                          {plan.features.length > 4 && (
-                            <p className="text-xs text-gray-500">+{plan.features.length - 4} más</p>
+                          {parseFeatures(plan.features).length > 4 && (
+                            <p className="text-xs text-gray-500">+{parseFeatures(plan.features).length - 4} más</p>
                           )}
                         </div>
 
@@ -2581,11 +2601,23 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
             {/* Chatbot IA Tab */}
             {activeTab === 'chatbot' && (
               <div className="space-y-6">
-                {/* Save Button Header */}
+                {/* Save Button Header with Enable/Disable Toggle */}
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Configuración del Chatbot y Motor de IA</h3>
-                    <p className="text-sm text-gray-500">Gestiona el asistente virtual de la plataforma</p>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Configuración del Chatbot y Motor de IA</h3>
+                      <p className="text-sm text-gray-500">Gestiona el asistente virtual de la plataforma</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={aiConfig?.enabled ?? false}
+                        onCheckedChange={(checked) => updateAiConfig('enabled', checked ? 1 : 0)}
+                        className="data-[state=checked]:bg-green-600"
+                      />
+                      <span className={`text-sm font-medium ${aiConfig?.enabled ? 'text-green-600' : 'text-gray-500'}`}>
+                        {aiConfig?.enabled ? 'Activado' : 'Desactivado'}
+                      </span>
+                    </div>
                   </div>
                   <Button
                     onClick={handleSaveAIConfig}
@@ -2690,80 +2722,44 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                       </Card>
                     </div>
 
-                    {/* Columna Derecha - Métricas, Motor y Librería */}
+                    {/* Columna Derecha - Librería y Motor */}
                     <div className="space-y-6">
-                      {/* Métricas de Interacción */}
+                      {/* Librería de Contenido */}
                       <Card>
                         <CardHeader>
                           <div className="flex items-center gap-2">
-                            <PieChart className="w-5 h-5 text-purple-600" />
-                            <CardTitle className="text-base">Métricas de Interacción</CardTitle>
+                            <FileText className="w-5 h-5 text-purple-600" />
+                            <CardTitle className="text-base">Librería de Contenido</CardTitle>
                           </div>
+                          <p className="text-xs text-gray-500">
+                            Archivos multimedia para el chatbot
+                          </p>
                         </CardHeader>
-                        <CardContent>
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-gray-600">Total Conversaciones</span>
-                              <span className="font-semibold">1,250</span>
+                        <CardContent className="space-y-3">
+                          {libraryItems.map(item => (
+                            <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                {item.type === 'pdf' && <FileText className="w-4 h-4 text-red-500" />}
+                                {item.type === 'video' && <Video className="w-4 h-4 text-blue-500" />}
+                                {item.type === 'image' && <ImageIcon className="w-4 h-4 text-green-500" />}
+                                {item.type === 'document' && <FileText className="w-4 h-4 text-gray-500" />}
+                                <div>
+                                  <p className="text-sm font-medium">{item.name}</p>
+                                  <p className="text-xs text-gray-400">
+                                    {(item.size / 1024 / 1024).toFixed(1)} MB
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteLibraryItem(item.id)}
+                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </div>
-                            <div className="h-32 flex items-end justify-center gap-2">
-                              <div className="flex flex-col items-center gap-1">
-                                <div className="w-8 bg-purple-500 rounded-t" style={{ height: '80px' }}></div>
-                                <span className="text-xs text-gray-500">Ventas</span>
-                              </div>
-                              <div className="flex flex-col items-center gap-1">
-                                <div className="w-8 bg-blue-500 rounded-t" style={{ height: '60px' }}></div>
-                                <span className="text-xs text-gray-500">Soporte</span>
-                              </div>
-                              <div className="flex flex-col items-center gap-1">
-                                <div className="w-8 bg-green-500 rounded-t" style={{ height: '50px' }}></div>
-                                <span className="text-xs text-gray-500">Nuevos</span>
-                              </div>
-                              <div className="flex flex-col items-center gap-1">
-                                <div className="w-8 bg-gray-400 rounded-t" style={{ height: '35px' }}></div>
-                                <span className="text-xs text-gray-500">Otros</span>
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Configuración del Motor */}
-                      <Card>
-                        <CardHeader>
-                          <div className="flex items-center gap-2">
-                            <Cpu className="w-5 h-5 text-purple-600" />
-                            <CardTitle className="text-base">Motor de IA</CardTitle>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div>
-                            <Label className="text-xs text-gray-500">Temperatura (Creatividad)</Label>
-                            <Input
-                              type="range"
-                              min="0"
-                              max="1"
-                              step="0.1"
-                              value={aiConfig.temperature}
-                              onChange={(e) => updateAiConfig('temperature', parseFloat(e.target.value))}
-                              className="mt-1"
-                            />
-                            <div className="flex justify-between text-xs text-gray-400">
-                              <span>Preciso</span>
-                              <span>{aiConfig.temperature}</span>
-                              <span>Creativo</span>
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <Label className="text-xs text-gray-500">Tokens Máximos</Label>
-                            <Input
-                              type="number"
-                              value={aiConfig.maxTokens}
-                              onChange={(e) => updateAiConfig('maxTokens', parseInt(e.target.value) || 0)}
-                              className="mt-1"
-                            />
-                          </div>
+                          ))}
 
                           <Button
                             onClick={() => {

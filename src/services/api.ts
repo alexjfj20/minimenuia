@@ -447,57 +447,245 @@ export const moduleService = {
 
 export const planService = {
   async getAll(): Promise<ApiResponse<LandingPlan[]>> {
-    await delay(300);
-    const plans = storage.getPlans();
-    return { success: true, data: plans, error: null, message: null };
+    try {
+      const { supabase } = await import('@/lib/supabaseClient');
+      const { data, error } = await supabase
+        .from('plans')
+        .select('*')
+        .order('order', { ascending: true });
+
+      if (error) throw error;
+      
+      // If no plans in Supabase, migrate from localStorage
+      if (!data || data.length === 0) {
+        console.log('[PlanService] No plans in Supabase, migrating from localStorage...');
+        const { default: storage } = await import('./storage');
+        const localPlans = storage.getPlans();
+        
+        if (localPlans.length > 0) {
+          // Migrate each plan to Supabase
+          const migratedPlans: LandingPlan[] = [];
+          for (const plan of localPlans) {
+            const { data: createdPlan, error: createError } = await supabase
+              .from('plans')
+              .insert({
+                ...plan,
+                features: Array.isArray(plan.features) ? plan.features : plan.features.split('\n').filter(f => f.trim()),
+                isActive: plan.isActive ?? true,
+                isPublic: plan.isPublic ?? true,
+                order: plan.order ?? 0,
+                icon: plan.icon || 'zap',
+                color: plan.color || '#8b5cf6',
+                maxUsers: plan.maxUsers ?? 1,
+                maxProducts: plan.maxProducts ?? 50,
+                maxCategories: plan.maxCategories ?? 5,
+                hotmartUrl: plan.hotmartUrl || null,
+                createdAt: plan.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              })
+              .select()
+              .single();
+            
+            if (!createError && createdPlan) {
+              migratedPlans.push(createdPlan);
+            }
+          }
+          
+          console.log(`[PlanService] Migrated ${migratedPlans.length} plans to Supabase`);
+          return { success: true, data: migratedPlans, error: null, message: 'Planes migrados' };
+        }
+      }
+      
+      return { success: true, data: data || [], error: null, message: null };
+    } catch (error: any) {
+      console.error('[PlanService] GetAll error:', error);
+      return { success: false, data: [], error: error.message, message: 'Error al obtener planes' };
+    }
   },
 
   async getById(id: string): Promise<ApiResponse<LandingPlan | null>> {
-    await delay(200);
-    const plans = storage.getPlans();
-    const plan = plans.find(p => p.id === id) ?? null;
-    
-    if (!plan) {
-      return { success: false, data: null, error: 'Plan no encontrado', message: null };
+    try {
+      const { supabase } = await import('@/lib/supabaseClient');
+      const { data, error } = await supabase
+        .from('plans')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) {
+        return { success: false, data: null, error: 'Plan no encontrado', message: null };
+      }
+
+      return { success: true, data, error: null, message: null };
+    } catch (error: any) {
+      return { success: false, data: null, error: error.message, message: 'Error al obtener plan' };
     }
-    
-    return { success: true, data: plan, error: null, message: null };
   },
 
   async create(data: CreatePlanData): Promise<ApiResponse<LandingPlan>> {
-    await delay(400);
-    
-    const newPlan: LandingPlan = {
-      ...data,
-      id: storage.generateId('plan'),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    storage.addPlan(newPlan);
-    return { success: true, data: newPlan, error: null, message: 'Plan creado exitosamente' };
+    try {
+      const { supabase } = await import('@/lib/supabaseClient');
+
+      const newPlan: Omit<LandingPlan, 'id' | 'createdAt' | 'updatedAt' | 'hotmartUrl'> = {
+        ...data,
+        features: (() => {
+          const f = data.features;
+          if (Array.isArray(f)) {
+            // Si el primer elemento es un JSON string, parsearlo
+            if (f.length === 1 && typeof f[0] === 'string' && f[0].startsWith('[')) {
+              try { return JSON.parse(f[0]) as string[]; } catch { return f; }
+            }
+            return f;
+          }
+          return String(f).split('\n').filter(Boolean);
+        })(),
+        isActive: data.isActive ?? true,
+        isPublic: data.isPublic ?? true,
+        order: data.order ?? 0,
+        icon: data.icon || 'zap',
+        color: data.color || '#8b5cf6',
+        maxUsers: data.maxUsers ?? 1,
+        maxProducts: data.maxProducts ?? 50,
+        maxCategories: data.maxCategories ?? 5
+        // hotmartUrl eliminado — columna no existe en Supabase
+      };
+
+      // PASO 1: INSERT sin .select().single() — evita PGRST116
+      const { error: insertError } = await supabase
+        .from('plans')
+        .insert(newPlan);
+
+      if (insertError) {
+        console.error('[PlanService] Insert error:', JSON.stringify(insertError, null, 2));
+        throw new Error(insertError.message || insertError.details || 'Error al crear plan');
+      }
+
+      // PASO 2: SELECT separado para obtener el plan creado
+      const { data: createdPlan, error: fetchError } = await supabase
+        .from('plans')
+        .select('*')
+        .eq('slug', newPlan.slug)
+        .single();
+
+      if (fetchError || !createdPlan) {
+        console.warn('[PlanService] Insert OK, fallback local:', fetchError?.message);
+        const fallback = {
+          ...newPlan,
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        } as LandingPlan;
+        return { success: true, data: fallback, error: null, message: 'Plan creado exitosamente' };
+      }
+
+      return { success: true, data: createdPlan, error: null, message: 'Plan creado exitosamente' };
+    } catch (error: any) {
+      console.error('[PlanService] Create error:', error);
+      return { success: false, data: null as any, error: error.message, message: 'Error al crear plan' };
+    }
   },
 
   async update(id: string, updates: UpdatePlanData): Promise<ApiResponse<LandingPlan>> {
-    await delay(300);
-    
-    const plans = storage.getPlans();
-    const plan = plans.find(p => p.id === id);
-    
-    if (!plan) {
-      return { success: false, data: null, error: 'Plan no encontrado', message: null };
+    try {
+      const { supabase } = await import('@/lib/supabaseClient');
+
+      // Build update data with only fields that likely exist in Supabase
+      const updateData: any = {
+        updatedAt: new Date().toISOString()
+      };
+
+      // Add fields one by one with null checks
+      if (updates.name !== undefined) updateData.name = updates.name;
+      if (updates.slug !== undefined) updateData.slug = updates.slug;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.price !== undefined) updateData.price = updates.price;
+      if (updates.currency !== undefined) updateData.currency = updates.currency;
+      if (updates.period !== undefined) updateData.period = updates.period;
+      if (updates.maxUsers !== undefined) updateData.maxUsers = updates.maxUsers;
+      if (updates.maxProducts !== undefined) updateData.maxProducts = updates.maxProducts;
+      if (updates.maxCategories !== undefined) updateData.maxCategories = updates.maxCategories;
+      if (updates.isPopular !== undefined) updateData.isPopular = updates.isPopular;
+      if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
+      if (updates.isPublic !== undefined) updateData.isPublic = updates.isPublic;
+      if (updates.order !== undefined) updateData.order = updates.order;
+      if (updates.icon !== undefined) updateData.icon = updates.icon;
+      if (updates.color !== undefined) updateData.color = updates.color;
+      // hotmartUrl eliminado — columna no existe en Supabase
+
+      // Handle features - convert string to array con fix para JSON stringificado
+      if (updates.features !== undefined) {
+        if (typeof updates.features === 'string') {
+          updateData.features = updates.features.split('\n').filter(Boolean);
+        } else if (Array.isArray(updates.features)) {
+          const f = updates.features;
+          if (f.length === 1 && typeof f[0] === 'string' && f[0].startsWith('[')) {
+            try { updateData.features = JSON.parse(f[0]) as string[]; }
+            catch { updateData.features = f; }
+          } else {
+            updateData.features = f;
+          }
+        }
+      }
+
+      console.log('[PlanService] Updating plan:', id);
+      console.log('[PlanService] Update data:', JSON.stringify(updateData, null, 2));
+
+      // UPDATE separado — sin .select().single() para evitar PGRST116
+      const { error: updateError } = await supabase
+        .from('plans')
+        .update(updateData)
+        .eq('id', id);
+
+      if (updateError) {
+        console.error('[PlanService] Supabase update error:', JSON.stringify(updateError, null, 2));
+        throw new Error(updateError.message || updateError.details || 'Error al actualizar el plan');
+      }
+
+      // SELECT separado para obtener la fila actualizada
+      const { data: updatedPlan, error: fetchError } = await supabase
+        .from('plans')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (fetchError || !updatedPlan) {
+        // Update OK en Supabase, retornamos datos del form como fallback visual
+        console.warn('[PlanService] Update OK, fallback local:', fetchError?.message);
+        const fallback = { 
+          ...updates,
+          id,
+          features: Array.isArray(updates.features) 
+            ? updates.features 
+            : String(updates.features ?? '').split('\n').filter(Boolean),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        } as LandingPlan;
+        return { success: true, data: fallback, error: null, message: 'Plan actualizado' };
+      }
+
+      console.log('[PlanService] Plan updated successfully:', updatedPlan.id);
+      return { success: true, data: updatedPlan, error: null, message: 'Plan actualizado' };
+    } catch (error: any) {
+      console.error('[PlanService] Update error:', error);
+      const errorMessage = error?.message || error?.details || error?.hint || 'Error desconocido al actualizar plan';
+      return { success: false, data: null as any, error: errorMessage, message: 'Error al actualizar plan' };
     }
-    
-    const updatedPlan = { ...plan, ...updates, updatedAt: new Date().toISOString() };
-    storage.updatePlan(id, updates);
-    
-    return { success: true, data: updatedPlan, error: null, message: 'Plan actualizado' };
   },
 
   async delete(id: string): Promise<ApiResponse<null>> {
-    await delay(300);
-    storage.deletePlan(id);
-    return { success: true, data: null, error: null, message: 'Plan eliminado' };
+    try {
+      const { supabase } = await import('@/lib/supabaseClient');
+      const { error } = await supabase
+        .from('plans')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return { success: true, data: null, error: null, message: 'Plan eliminado' };
+    } catch (error: any) {
+      return { success: false, data: null, error: error.message, message: 'Error al eliminar plan' };
+    }
   }
 };
 

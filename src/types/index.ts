@@ -415,6 +415,7 @@ export interface AIConfig {
   maxTokens: number;
   knowledgeSources: string[];
   activeModelId: string | null;
+  enabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
