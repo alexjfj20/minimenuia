@@ -845,34 +845,7 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     const response = await api.systemService.toggleStatus(id);
     if (response.success && response.data) {
       setServices(prev => prev.map(s => s.id === id ? response.data! : s));
-      
-      // Si el servicio se activó, asignarlo a todos los negocios activos
-      if (response.data.status === 'active') {
-        try {
-          const businesses = await api.businessService.getAll();
-          if (businesses.success && businesses.data) {
-            const activeBusinesses = businesses.data.filter(b => b.status === 'active');
-
-            for (const business of activeBusinesses) {
-              await fetch('/api/business-services', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  businessId: business.id,
-                  serviceId: id,
-                  status: 'active',
-                  aiCreditsUsed: 0,
-                  aiCreditsResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-                })
-              });
-            }
-
-            console.log(`[Service] ${response.data.name} activated for ${activeBusinesses.length} businesses`);
-          }
-        } catch (error) {
-          console.error('[Service] Error activating for all businesses:', error);
-        }
-      }
+      console.log(`[Service] ${response.data.name} status changed to ${response.data.status} (global status only)`);
     }
   };
 
@@ -894,34 +867,10 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
       if (response.success && response.data) {
         const newService = response.data!;
         setServices(prev => [...prev, newService]);
-        
-        // Si "Activar para todos" está ON, asignar a todos los negocios activos
-        if (serviceForm.activateForAll) {
-          try {
-            const businesses = await api.businessService.getAll();
-            if (businesses.success && businesses.data) {
-              const activeBusinesses = businesses.data.filter(b => b.status === 'active');
-              
-              for (const business of activeBusinesses) {
-                await fetch('/api/business-services', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    businessId: business.id,
-                    serviceId: newService.id,
-                    status: 'active',
-                    aiCreditsUsed: 0,
-                    aiCreditsResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-                  })
-                });
-              }
-              
-              console.log(`[Service] Activated for ${activeBusinesses.length} businesses`);
-            }
-          } catch (error) {
-            console.error('[Service] Error activating for all businesses:', error);
-          }
-        }
+
+        // NOTA: NO asignar automáticamente a todos los negocios
+        // La asignación se hace manualmente en el modal "Gestionar Negocio"
+        console.log(`[Service] Created ${newService.name} - asignar manualmente desde Gestionar Negocio`);
       }
     }
     setShowServiceModal(false);
@@ -1141,34 +1090,40 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
 
   const openManageBusiness = async (business: Business) => {
     setSelectedBusiness(business);
-    
+
     // Inicializar módulos core (siempre asignados)
     setAssignedModules(modules.filter(m => m.type === 'core').map(m => m.id));
-    
-    // Cargar servicios asignados desde business_services
+
+    // Cargar TODOS los servicios asignados desde business_services (activos e inactivos) PARA ESTE NEGOCIO
     try {
+      console.log('[Modal Debug] Loading services for business_id:', business.id, business.name);
+
       const { data: businessServices } = await supabase
         .from('business_services')
-        .select('service_id')
-        .eq('business_id', business.id)
-        .eq('status', 'active');
+        .select('service_id, status')
+        .eq('business_id', business.id);
 
-      const assignedServiceIds = businessServices?.map(s => s.service_id) || [];
+      console.log('[Modal Debug] Loaded business_services:', businessServices);
+
+      const assignedServiceIds = businessServices
+        ?.filter(bs => bs.status === 'active')
+        .map(bs => bs.service_id) || [];
+
       setAssignedServices(assignedServiceIds);
-      
+
       console.log('[SuperAdmin] Loaded services for business:', assignedServiceIds.length);
     } catch (error) {
       console.error('[SuperAdmin] Error loading services:', error);
       setAssignedServices([]);
     }
-    
+
     setShowManageModal(true);
   };
 
   const handleSaveManageBusiness = async () => {
     try {
       console.log('[SuperAdmin] Saving business:', selectedBusiness.id);
-      console.log('[SuperAdmin] Assigned services:', assignedServices);
+      console.log('[SuperAdmin] Assigned services (active):', assignedServices);
 
       // Actualizar estado del negocio (sin updated_at porque no existe en la tabla)
       const { error: businessError } = await supabase
@@ -1195,63 +1150,58 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
 
       console.log('[SuperAdmin] Updated business:', updatedBusiness);
 
-      // Guardar servicios asignados en business_services
-      // Primero, obtener servicios actuales del negocio
-      const { data: currentServices, error: currentServicesError } = await supabase
-        .from('business_services')
-        .select('service_id')
-        .eq('business_id', selectedBusiness.id);
+      // Guardar servicios asignados en business_services usando UPSERT
+      // UPSERT inserta si no existe, actualiza si ya existe
+      const servicesToUpsert = assignedServices.map(serviceId => ({
+        business_id: selectedBusiness.id,
+        service_id: serviceId,
+        status: 'active',
+        ai_credits_used: 0,
+        ai_credits_reset_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date().toISOString()
+      }));
 
-      if (currentServicesError) {
-        console.error('[SuperAdmin] Error getting current services:', currentServicesError);
-      }
+      console.log('[SuperAdmin] Services to upsert (activate):', servicesToUpsert);
 
-      const currentServiceIds = currentServices?.map(s => s.service_id) || [];
-
-      console.log('[SuperAdmin] Current services:', currentServiceIds);
-      console.log('[SuperAdmin] Services to insert:', assignedServices.filter(id => !currentServiceIds.includes(id)));
-      console.log('[SuperAdmin] Services to delete:', currentServiceIds.filter(id => !assignedServices.includes(id)));
-
-      // Servicios a insertar (nuevos)
-      const servicesToInsert = assignedServices.filter(id => !currentServiceIds.includes(id));
-      
-      // Servicios a eliminar (ya no asignados)
-      const servicesToDelete = currentServiceIds.filter(id => !assignedServices.includes(id));
-
-      // Insertar nuevos servicios
-      if (servicesToInsert.length > 0) {
-        const { error: insertError } = await supabase
+      if (servicesToUpsert.length > 0) {
+        const { error: upsertError } = await supabase
           .from('business_services')
-          .insert(
-            servicesToInsert.map(serviceId => ({
-              business_id: selectedBusiness.id,
-              service_id: serviceId,
-              status: 'active',
-              ai_credits_used: 0,
-              ai_credits_reset_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-              created_at: new Date().toISOString()
-            }))
-          );
+          .upsert(servicesToUpsert, {
+            onConflict: 'business_id,service_id'
+          });
 
-        if (insertError) {
-          console.error('[SuperAdmin] Error inserting services:', JSON.stringify(insertError, null, 2));
+        if (upsertError) {
+          console.error('[SuperAdmin] Error upserting services:', JSON.stringify(upsertError, null, 2));
         } else {
-          console.log('[SuperAdmin] Services inserted:', servicesToInsert.length);
+          console.log('[SuperAdmin] Services upserted (activated):', servicesToUpsert.length);
         }
       }
 
-      // Eliminar servicios no asignados
-      if (servicesToDelete.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('business_services')
-          .delete()
-          .eq('business_id', selectedBusiness.id)
-          .in('service_id', servicesToDelete);
+      // Desactivar servicios que NO están en assignedServices
+      // Obtener servicios actuales que NO están seleccionados
+      const { data: currentInactiveServices } = await supabase
+        .from('business_services')
+        .select('service_id')
+        .eq('business_id', selectedBusiness.id)
+        .not('service_id', 'in', `(${assignedServices.join(',')})`);
 
-        if (deleteError) {
-          console.error('[SuperAdmin] Error deleting services:', JSON.stringify(deleteError, null, 2));
+      if (currentInactiveServices && currentInactiveServices.length > 0) {
+        const servicesToDeactivate = currentInactiveServices.map(s => s.service_id);
+        console.log('[SuperAdmin] Services to deactivate:', servicesToDeactivate);
+
+        const { error: updateError } = await supabase
+          .from('business_services')
+          .update({
+            status: 'inactive',
+            updated_at: new Date().toISOString()
+          })
+          .eq('business_id', selectedBusiness.id)
+          .in('service_id', servicesToDeactivate);
+
+        if (updateError) {
+          console.error('[SuperAdmin] Error deactivating services:', JSON.stringify(updateError, null, 2));
         } else {
-          console.log('[SuperAdmin] Services deleted:', servicesToDelete.length);
+          console.log('[SuperAdmin] Services deactivated:', servicesToDeactivate.length);
         }
       }
 
@@ -1809,6 +1759,7 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                             <th className="text-left px-6 py-4 font-medium text-gray-600">Plan</th>
                             <th className="text-left px-6 py-4 font-medium text-gray-600">Estado</th>
                             <th className="text-left px-6 py-4 font-medium text-gray-600">Teléfono</th>
+                            <th className="text-left px-6 py-4 font-medium text-gray-600">Servicios Activos</th>
                             <th className="text-right px-6 py-4 font-medium text-gray-600">Acciones</th>
                           </tr>
                         </thead>
@@ -1833,6 +1784,14 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                                 <StatusBadge status={business.status} />
                               </td>
                               <td className="px-6 py-4 text-gray-600">{business.phone}</td>
+                              <td className="px-6 py-4">
+                                <BusinessServicesToggles
+                                  businessId={business.id}
+                                  businessName={business.name}
+                                  availableServices={services}
+                                  servicesKey={services.length}
+                                />
+                              </td>
                               <td className="px-6 py-4">
                                 <div className="flex items-center justify-end gap-2">
                                   <Button 
@@ -4985,6 +4944,162 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+// ============================================================================
+// COMPONENTE ADICIONAL: BusinessServicesToggles
+// Muestra toggles de servicios activos por negocio
+// ============================================================================
+
+interface BusinessServicesTogglesProps {
+  businessId: string;
+  businessName: string;
+  availableServices: SystemService[];
+  servicesKey?: number;
+}
+
+function BusinessServicesToggles({ businessId, businessName, availableServices, servicesKey }: BusinessServicesTogglesProps) {
+  const [assignedServices, setAssignedServices] = useState<Map<string, string>>(new Map()); // service_id -> status
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Cargar servicios asignados al negocio - se recarga cuando cambia servicesKey
+  useEffect(() => {
+    const loadAssignedServices = async () => {
+      try {
+        console.log('[BusinessServicesToggles] Loading for business:', businessId);
+        console.log('[BusinessServicesToggles] Available services:', availableServices.length);
+        console.log('[BusinessServicesToggles] Active services:', availableServices.filter(s => s.status === 'active').length);
+
+        const { data: businessServices, error } = await supabase
+          .from('business_services')
+          .select('service_id, status')
+          .eq('business_id', businessId);
+
+        console.log('[BusinessServicesToggles] Query result:', {
+          businessServices,
+          error,
+          count: businessServices?.length
+        });
+
+        if (error) {
+          console.error('[BusinessServicesToggles] Error loading:', error);
+        } else {
+          // Crear un Map con service_id -> status para cada servicio
+          const serviceMap = new Map<string, string>();
+          businessServices?.forEach(bs => {
+            serviceMap.set(bs.service_id, bs.status);
+          });
+          setAssignedServices(serviceMap);
+          console.log('[BusinessServicesToggles] Assigned services (with status):', Object.fromEntries(serviceMap));
+        }
+      } catch (error) {
+        console.error('[BusinessServicesToggles] Exception:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAssignedServices();
+  }, [businessId, servicesKey]);
+
+  // Manejar toggle de servicio individual
+  const handleToggleServiceForBusiness = async (serviceId: string, serviceName: string) => {
+    const currentStatus = assignedServices.get(serviceId);
+    const isActive = currentStatus === 'active';
+
+    try {
+      if (isActive) {
+        // Desactivar servicio para este negocio (cambiar status a inactive)
+        const { error } = await supabase
+          .from('business_services')
+          .update({ status: 'inactive', updated_at: new Date().toISOString() })
+          .eq('business_id', businessId)
+          .eq('service_id', serviceId);
+
+        if (error) throw error;
+
+        setAssignedServices(prev => {
+          const newMap = new Map(prev);
+          newMap.set(serviceId, 'inactive');
+          return newMap;
+        });
+
+        console.log(`[SuperAdmin] Desactivado "${serviceName}" para ${businessName}`);
+      } else {
+        // Activar servicio para este negocio (insertar o actualizar a active)
+        const { error } = await supabase
+          .from('business_services')
+          .upsert({
+            business_id: businessId,
+            service_id: serviceId,
+            status: 'active',
+            ai_credits_used: 0,
+            ai_credits_reset_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          }, {
+            onConflict: 'business_id,service_id'
+          });
+
+        if (error) throw error;
+
+        setAssignedServices(prev => {
+          const newMap = new Map(prev);
+          newMap.set(serviceId, 'active');
+          return newMap;
+        });
+
+        console.log(`[SuperAdmin] Activado "${serviceName}" para ${businessName}`);
+      }
+    } catch (error) {
+      console.error('[SuperAdmin] Error toggling service:', error);
+      alert(`Error al ${isActive ? 'desactivar' : 'activar'} el servicio: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+    }
+  };
+
+  if (isLoading) {
+    console.log('[BusinessServicesToggles] Still loading...');
+    return <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-3 h-3 animate-spin" /> Cargando...</div>;
+  }
+
+  if (availableServices.length === 0) {
+    console.log('[BusinessServicesToggles] No available services');
+    return <div className="text-sm text-gray-500">Sin servicios disponibles</div>;
+  }
+
+  console.log('[BusinessServicesToggles] Rendering toggles');
+  console.log('[BusinessServicesToggles] Assigned services map:', Object.fromEntries(assignedServices));
+
+  return (
+    <div className="flex flex-col gap-2">
+      {availableServices
+        .filter(s => s.status === 'active')
+        .map(service => {
+          const serviceStatus = assignedServices.get(service.id);
+          const isActive = serviceStatus === 'active';
+          console.log(`[BusinessServicesToggles] Rendering service "${service.name}":`, {
+            serviceId: service.id,
+            serviceStatus,
+            isActive,
+            globalStatus: service.status
+          });
+          return (
+            <div key={service.id} className="flex items-center gap-2">
+              <Switch
+                checked={isActive}
+                onCheckedChange={() => handleToggleServiceForBusiness(service.id, service.name)}
+                className={isActive ? 'data-[state=checked]:bg-green-600' : 'data-[state=unchecked]:bg-gray-400'}
+              />
+              <span className={`text-xs ${isActive ? 'text-green-700 font-medium' : 'text-gray-500'}`}>
+                {service.name} {isActive ? '✅' : '❌'}
+              </span>
+            </div>
+          );
+        })
+      }
+      {availableServices.filter(s => s.status === 'active').length === 0 && (
+        <div className="text-xs text-gray-400">No hay servicios activos</div>
+      )}
     </div>
   );
 }

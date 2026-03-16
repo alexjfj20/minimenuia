@@ -151,50 +151,14 @@ WHERE status = 'active'
 ORDER BY created_at DESC;
 
 -- ============================================================
--- PASO 5: ASIGNAR SERVICIOS A TODOS LOS NEGOCIOS ACTIVOS
+-- PASO 5: NO ASIGNAR SERVICIOS AUTOMÁTICAMENTE
+-- ============================================================
+-- NOTA: Los servicios se asignan manualmente desde el Super Admin Panel
+-- Super Admin → Negocios → Gestionar Negocio → Activar servicios específicos
+-- Esto permite control granular por negocio
 -- ============================================================
 
--- Asignar servicio "IA para Catálogo" a todos los negocios activos
-INSERT INTO public.business_services (business_id, service_id, status, ai_credits_used, ai_credits_reset_date)
-SELECT 
-  b.id,
-  '00000000-0000-0000-0000-000000000001', -- IA para Catálogo
-  'active',
-  0,
-  (NOW() + INTERVAL '30 days')::date
-FROM public.businesses b
-WHERE b.status = 'active'
-ON CONFLICT (business_id, service_id) DO UPDATE SET
-  status = 'active',
-  updated_at = NOW();
-
--- Asignar servicio "Reseñas y Fidelización" a todos los negocios activos
-INSERT INTO public.business_services (business_id, service_id, status)
-SELECT 
-  b.id,
-  '00000000-0000-0000-0000-000000000002', -- Reseñas y Fidelización
-  'active'
-FROM public.businesses b
-WHERE b.status = 'active'
-ON CONFLICT (business_id, service_id) DO UPDATE SET
-  status = 'active',
-  updated_at = NOW();
-
--- Asignar servicio "Chatbot WhatsApp" a todos los negocios activos
-INSERT INTO public.business_services (business_id, service_id, status, ai_credits_used, ai_credits_reset_date)
-SELECT 
-  b.id,
-  '00000000-0000-0000-0000-000000000003', -- Chatbot WhatsApp
-  'active',
-  0,
-  (NOW() + INTERVAL '30 days')::date
-FROM public.businesses b
-WHERE b.status = 'active'
-ON CONFLICT (business_id, service_id) DO UPDATE SET
-  status = 'active',
-  updated_at = NOW();
-
-RAISE NOTICE 'Servicios asignados a todos los negocios activos';
+RAISE NOTICE 'Servicios NO asignados automáticamente - usar Super Admin Panel para asignar por negocio';
 
 -- ============================================================
 -- PASO 6: CONFIGURAR POLÍTICAS RLS (ROW LEVEL SECURITY)
@@ -239,36 +203,31 @@ CREATE POLICY "Negocios pueden ver sus propios servicios"
 RAISE NOTICE 'Políticas RLS configuradas';
 
 -- ============================================================
--- PASO 7: VERIFICAR RESULTADO
+-- PASO 7: VERIFICAR SERVICIOS DISPONIBLES
 -- ============================================================
 
--- Mostrar todos los vínculos business_services
-RAISE NOTICE 'Vínculos business_services creados:';
+-- Mostrar servicios disponibles (sin asignar)
+RAISE NOTICE 'Servicios disponibles para asignar:';
 SELECT 
-  bs.id,
-  b.name as business_name,
-  s.name as service_name,
-  bs.status,
-  bs.ai_credits_used,
-  bs.ai_credits_limit,
-  bs.ai_credits_reset_date,
-  bs.created_at
-FROM public.business_services bs
-JOIN public.businesses b ON bs.business_id = b.id
-JOIN public.services s ON bs.service_id = s.id
-ORDER BY b.name, s.name;
-
--- Resumen por servicio
-RAISE NOTICE 'Resumen de servicios por negocio:';
-SELECT 
-  s.name as servicio,
-  COUNT(bs.id) as total_negocios,
-  COUNT(CASE WHEN bs.status = 'active' THEN 1 END) as activos,
-  COUNT(CASE WHEN bs.status = 'inactive' THEN 1 END) as inactivos
-FROM public.business_services bs
-JOIN public.services s ON bs.service_id = s.id
-GROUP BY s.name
+  s.id,
+  s.name,
+  s.description,
+  s.status,
+  s.price,
+  s.currency
+FROM public.services s
 ORDER BY s.name;
+
+-- Mostrar negocios que pueden recibir servicios
+RAISE NOTICE 'Negocios activos disponibles:';
+SELECT 
+  b.id,
+  b.name,
+  b.status,
+  b.created_at
+FROM public.businesses b
+WHERE b.status = 'active'
+ORDER BY b.created_at DESC;
 
 -- ============================================================
 -- PASO 8: MENSAJE FINAL
@@ -277,24 +236,21 @@ ORDER BY s.name;
 DO $$
 DECLARE
   total_negocios INTEGER;
-  total_vinculos INTEGER;
+  total_servicios INTEGER;
 BEGIN
   SELECT COUNT(*) INTO total_negocios FROM public.businesses WHERE status = 'active';
-  SELECT COUNT(DISTINCT business_id) INTO total_vinculos FROM public.business_services;
+  SELECT COUNT(*) INTO total_servicios FROM public.services WHERE status = 'active';
   
   RAISE NOTICE '============================================';
-  RAISE NOTICE 'RESUMEN DE ACTIVACIÓN';
+  RAISE NOTICE 'RESUMEN DE CONFIGURACIÓN';
   RAISE NOTICE '============================================';
   RAISE NOTICE 'Total negocios activos: %', total_negocios;
-  RAISE NOTICE 'Negocios con servicios: %', total_vinculos;
+  RAISE NOTICE 'Total servicios disponibles: %', total_servicios;
   RAISE NOTICE '============================================';
-  
-  IF total_negocios = total_vinculos THEN
-    RAISE NOTICE '✅ ÉXITO: Todos los negocios tienen servicios asignados';
-  ELSE
-    RAISE NOTICE '⚠️ ATENCIÓN: Hay % negocios sin servicios asignados', (total_negocios - total_vinculos);
-  END IF;
-  
+  RAISE NOTICE 'PARA ASIGNAR SERVICIOS:';
+  RAISE NOTICE '1. Inicia sesión como Super Admin';
+  RAISE NOTICE '2. Ve a Negocios → Gestionar (negocio específico)';
+  RAISE NOTICE '3. Activa los servicios deseados para ESE negocio';
   RAISE NOTICE '============================================';
 END $$;
 

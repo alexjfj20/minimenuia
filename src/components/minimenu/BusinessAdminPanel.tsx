@@ -651,15 +651,21 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       try {
         const businessId = profileId ?? user.businessId;
 
-        console.log('[Reviews Service] Checking reviews service for business:', businessId);
+        console.log('============================================');
+        console.log('[Reviews Service] Starting check...');
+        console.log('[Reviews Service] profileId:', profileId);
+        console.log('[Reviews Service] user.businessId:', user.businessId);
+        console.log('[Reviews Service] businessId resolved:', businessId);
+        console.log('[Reviews Service] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
 
         if (!businessId) {
-          console.warn('[Reviews Service] No businessId available');
+          console.warn('[Reviews Service] No businessId available - cannot check services');
           setHasReviews(false);
           return;
         }
 
         // Query business_services table - get all active services for this business
+        console.log('[Reviews Service] Querying business_services for business_id:', businessId);
         const { data: businessServices, error: bsError } = await supabase
           .from('business_services')
           .select('service_id, status')
@@ -668,26 +674,30 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
         console.log('[Reviews Service] business_services query result:', {
           data: businessServices,
-          error: bsError
+          error: bsError,
+          dataLength: businessServices?.length,
+          errorMessage: bsError?.message
         });
 
         if (bsError) {
-          console.error('[Reviews Service] Error checking business_services:', bsError.message || bsError);
+          console.error('[Reviews Service] RLS Error or table issue:', bsError.message || bsError);
           setHasReviews(false);
           return;
         }
 
         if (!businessServices || businessServices.length === 0) {
-          console.log('[Reviews Service] No active services found for business');
+          console.log('[Reviews Service] No active services found for business - table is EMPTY for this business');
+          console.log('[Reviews Service] DID YOU activate the service in Super Admin → Negocios → Servicios Activos?');
           setHasReviews(false);
           return;
         }
 
         // Get service IDs
         const serviceIds = businessServices.map(bs => bs.service_id);
-        console.log('[Reviews Service] Service IDs:', serviceIds);
+        console.log('[Reviews Service] Service IDs found:', serviceIds);
 
         // Query services table to find "Reseñas y Fidelización"
+        console.log('[Reviews Service] Querying services table with IDs:', serviceIds);
         const { data: services, error: svcError } = await supabase
           .from('services')
           .select('id, name')
@@ -695,7 +705,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
         console.log('[Reviews Service] services query result:', {
           data: services,
-          error: svcError
+          error: svcError,
+          servicesCount: services?.length
         });
 
         if (svcError) {
@@ -706,15 +717,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
         // Check if "Reseñas y Fidelización" exists in the list
         const hasReviewsService = services?.some(s => {
-          console.log('[Reviews Service] Checking service:', s.name);
+          console.log('[Reviews Service] Checking service:', s.name, '- Match:', s.name === 'Reseñas y Fidelización');
           return s.name === 'Reseñas y Fidelización';
         }) || false;
 
         console.log('[Reviews Service] Has Reviews service:', hasReviewsService);
         setHasReviews(hasReviewsService);
-        console.log('[Reviews Service] Reviews service:', hasReviewsService ? 'ACTIVE' : 'INACTIVE');
+        console.log('[Reviews Service] Final result - hasReviews:', hasReviewsService ? 'ACTIVE ✅' : 'INACTIVE ❌');
+        console.log('============================================');
       } catch (error) {
-        console.error('[Reviews Service] Error:', error instanceof Error ? error.message : error);
+        console.error('[Reviews Service] Exception:', error instanceof Error ? error.message : error);
         setHasReviews(false);
       }
     };
@@ -1097,9 +1109,16 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     ];
 
     // Agregar Reseñas solo si el servicio está activo
+    console.log('[Sidebar] hasReviews:', hasReviews);
     if (hasReviews) {
+      console.log('[Sidebar] Adding Reseñas tab');
       items.push({ id: 'resenas', label: 'Reseñas', icon: <MessageSquare className="w-5 h-5" /> });
+    } else {
+      console.log('[Sidebar] NOT adding Reseñas tab - hasReviews is false');
     }
+
+    console.log('[Sidebar] Total items:', items.length);
+    console.log('[Sidebar] Items:', items.map(i => i.id));
 
     return items;
   }, [hasReviews]);
@@ -5528,7 +5547,7 @@ El precio debe ser un número entero en pesos colombianos.`
   return (
     <div className="min-h-screen flex bg-gray-100">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-900 text-white flex flex-col fixed h-full">
+      <aside className="w-64 bg-gray-900 text-white flex flex-col fixed h-full" key={`sidebar-${hasReviews}`}>
         {/* Logo */}
         <div className="p-6 border-b border-gray-800">
           <h1 className="text-xl font-bold flex items-center gap-2">
@@ -5564,6 +5583,19 @@ El precio debe ser un número entero en pesos colombianos.`
 
         {/* Quick Actions */}
         <div className="p-4 border-t border-gray-800">
+          <Button
+            variant="outline"
+            className="w-full border-gray-700 text-gray-300 hover:bg-gray-800 mb-2"
+            onClick={() => {
+              console.log('[DEBUG] user.businessId:', user.businessId);
+              console.log('[DEBUG] profileId:', profileId);
+              console.log('[DEBUG] hasReviews:', hasReviews);
+              console.log('[DEBUG] sidebarItems:', sidebarItems.map(i => ({ id: i.id, label: i.label })));
+              alert(`DEBUG:\nuser.businessId: ${user.businessId}\nprofileId: ${profileId}\nhasReviews: ${hasReviews}\nItems: ${sidebarItems.length}`);
+            }}
+          >
+            🔍 Debug Info
+          </Button>
           <Button
             variant="outline"
             className="w-full border-gray-700 text-gray-300 hover:bg-gray-800"
