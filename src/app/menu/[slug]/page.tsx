@@ -30,6 +30,8 @@ import {
   ChevronDown
 } from 'lucide-react';
 
+import { ReviewSection } from '@/components/ReviewSection';
+
 // ============================================================================
 // INTERFACES
 // ============================================================================
@@ -1559,6 +1561,11 @@ export default function PublicMenuPage() {
           </div>
         )}
       </main>
+
+      {/* Sección de Reseñas y Fidelización */}
+      {restaurant.id && (
+        <ReviewSection businessId={restaurant.id} />
+      )}
 
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-8">

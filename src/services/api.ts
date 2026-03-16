@@ -31,6 +31,7 @@ import type {
 } from '@/types';
 
 import * as storage from './storage';
+import { integrationService } from './integration-service';
 
 // --- Simulated Network Delay ---
 
@@ -215,57 +216,140 @@ export const authService = {
 
 export const businessService = {
   async getAll(): Promise<ApiResponse<Business[]>> {
-    await delay(300);
-    const businesses = storage.getBusinesses();
-    return { success: true, data: businesses, error: null, message: null };
+    try {
+      console.log('[Business API] Fetching businesses from Supabase...');
+
+      const response = await fetch('/api/superadmin/businesses');
+      const result = await response.json() as { success: boolean; data: Business[] | null; error: string | null };
+
+      console.log('[Business API] Response:', {
+        hasData: !!result.data,
+        dataLength: result.data?.length,
+        hasError: !result.success,
+        errorMessage: result.error
+      });
+
+      if (!result.success) {
+        console.error('[Business API] Error fetching:', result.error);
+        return {
+          success: false,
+          data: null,
+          error: result.error ?? 'Error desconocido',
+          message: null
+        };
+      }
+
+      return { success: true, data: result.data ?? [], error: null, message: null };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Business API] Exception:', message, error);
+      return { success: false, data: null, error: message, message: null };
+    }
   },
 
   async getById(id: string): Promise<ApiResponse<Business | null>> {
-    await delay(200);
-    const businesses = storage.getBusinesses();
-    const business = businesses.find(b => b.id === id) ?? null;
-    
-    if (!business) {
-      return { success: false, data: null, error: 'Negocio no encontrado', message: null };
+    try {
+      const supabaseModule = await import('@/lib/supabaseClient');
+      const supabase = supabaseModule.supabase;
+
+      const { data, error } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error || !data) {
+        return { success: false, data: null, error: 'Negocio no encontrado', message: null };
+      }
+
+      return { success: true, data, error: null, message: null };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Business API] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    return { success: true, data: business, error: null, message: null };
   },
 
   async create(data: Omit<Business, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<Business>> {
-    await delay(500);
-    
-    const newBusiness: Business = {
-      ...data,
-      id: storage.generateId('biz'),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    storage.addBusiness(newBusiness);
-    return { success: true, data: newBusiness, error: null, message: 'Negocio creado exitosamente' };
+    try {
+      const supabaseModule = await import('@/lib/supabaseClient');
+      const supabase = supabaseModule.supabase;
+
+      const newBusiness = {
+        ...data,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const { data: inserted, error } = await supabase
+        .from('businesses')
+        .insert(newBusiness)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[Business API] Error creating:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: inserted, error: null, message: 'Negocio creado exitosamente' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Business API] Error:', message);
+      return { success: false, data: null, error: message, message: null };
+    }
   },
 
   async update(id: string, updates: Partial<Business>): Promise<ApiResponse<Business>> {
-    await delay(400);
-    
-    const businesses = storage.getBusinesses();
-    const business = businesses.find(b => b.id === id);
-    
-    if (!business) {
-      return { success: false, data: null, error: 'Negocio no encontrado', message: null };
+    try {
+      const supabaseModule = await import('@/lib/supabaseClient');
+      const supabase = supabaseModule.supabase;
+
+      const { data: updated, error } = await supabase
+        .from('businesses')
+        .update({
+          ...updates,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[Business API] Error updating:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: updated, error: null, message: 'Negocio actualizado' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Business API] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    const updatedBusiness = { ...business, ...updates, updatedAt: new Date().toISOString() };
-    storage.updateBusiness(id, updates);
-    
-    return { success: true, data: updatedBusiness, error: null, message: 'Negocio actualizado' };
   },
 
   async delete(id: string): Promise<ApiResponse<null>> {
-    await delay(300);
-    storage.deleteBusiness(id);
-    return { success: true, data: null, error: null, message: 'Negocio eliminado' };
+    try {
+      const supabaseModule = await import('@/lib/supabaseClient');
+      const supabase = supabaseModule.supabase;
+
+      const { error } = await supabase
+        .from('businesses')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('[Business API] Error deleting:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: null, error: null, message: 'Negocio eliminado' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Business API] Error:', message);
+      return { success: false, data: null, error: message, message: null };
+    }
   }
 };
 
@@ -273,73 +357,152 @@ export const businessService = {
 
 export const systemService = {
   async getAll(): Promise<ApiResponse<SystemService[]>> {
-    await delay(300);
-    const services = storage.getServices();
-    return { success: true, data: services, error: null, message: null };
+    try {
+      console.log('[System Service] Fetching services from API...');
+
+      const response = await fetch('/api/superadmin/services');
+      const result = await response.json() as { success: boolean; data: SystemService[] | null; error: string | null };
+
+      if (!result.success) {
+        console.error('[System Service] Error fetching:', result.error);
+        return { success: false, data: null, error: result.error ?? 'Error desconocido', message: null };
+      }
+
+      return { success: true, data: result.data ?? [], error: null, message: null };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[System Service] Exception:', message);
+      return { success: false, data: null, error: message, message: null };
+    }
   },
 
   async create(data: CreateServiceData): Promise<ApiResponse<SystemService>> {
-    await delay(400);
-    
-    const newService: SystemService = {
-      ...data,
-      id: storage.generateId('srv'),
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    storage.addService(newService);
-    return { success: true, data: newService, error: null, message: 'Servicio creado exitosamente' };
+    try {
+      console.log('[System Service] Creating service:', data.name);
+
+      const response = await fetch('/api/superadmin/services/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error('[System Service] Error creating:', result.error);
+        return { success: false, data: null, error: result.error || 'Error desconocido', message: null };
+      }
+
+      return { success: true, data: result.data, error: null, message: result.message || 'Servicio creado exitosamente' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[System Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
+    }
   },
 
   async update(id: string, updates: UpdateServiceData): Promise<ApiResponse<SystemService>> {
-    await delay(300);
-    
-    const services = storage.getServices();
-    const service = services.find(s => s.id === id);
-    
-    if (!service) {
-      return { success: false, data: null, error: 'Servicio no encontrado', message: null };
+    try {
+      const supabaseAdminModule = await import('@/lib/supabaseAdmin');
+      const supabase = supabaseAdminModule.supabaseAdmin;
+
+      const { data: updated, error } = await supabase
+        .from('services')
+        .update({
+          ...updates,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[System Service] Error updating:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: updated, error: null, message: 'Servicio actualizado' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[System Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    const updatedService = { ...service, ...updates, updatedAt: new Date().toISOString() };
-    storage.updateService(id, updates);
-    
-    return { success: true, data: updatedService, error: null, message: 'Servicio actualizado' };
   },
 
   async toggleStatus(id: string): Promise<ApiResponse<SystemService>> {
-    await delay(200);
-    
-    const services = storage.getServices();
-    const service = services.find(s => s.id === id);
-    
-    if (!service) {
-      return { success: false, data: null, error: 'Servicio no encontrado', message: null };
+    try {
+      console.log('[System Service] Toggling status for service:', id);
+
+      const response = await fetch('/api/superadmin/services/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error('[System Service] Error toggling status:', result.error);
+        return { success: false, data: null, error: result.error || 'Error desconocido', message: null };
+      }
+
+      return { 
+        success: true, 
+        data: result.data, 
+        error: null, 
+        message: result.message || 'Servicio actualizado' 
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[System Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    const newStatus: ServiceStatus = service.status === 'active' ? 'inactive' : 'active';
-    storage.updateService(id, { status: newStatus });
-    
-    return { 
-      success: true, 
-      data: { ...service, status: newStatus }, 
-      error: null, 
-      message: `Servicio ${newStatus === 'active' ? 'activado' : 'desactivado'}` 
-    };
   },
 
   async delete(id: string): Promise<ApiResponse<null>> {
-    await delay(300);
-    storage.deleteService(id);
-    return { success: true, data: null, error: null, message: 'Servicio eliminado' };
+    try {
+      const supabaseAdminModule = await import('@/lib/supabaseAdmin');
+      const supabase = supabaseAdminModule.supabaseAdmin;
+
+      const { error } = await supabase
+        .from('services')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('[System Service] Error deleting:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: null, error: null, message: 'Servicio eliminado' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[System Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
+    }
   },
 
   async clearAll(): Promise<ApiResponse<null>> {
-    await delay(200);
-    storage.setServices([]);
-    return { success: true, data: null, error: null, message: 'Todos los servicios eliminados' };
+    try {
+      const supabaseAdminModule = await import('@/lib/supabaseAdmin');
+      const supabase = supabaseAdminModule.supabaseAdmin;
+
+      const { error } = await supabase
+        .from('services')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (error) {
+        console.error('[System Service] Error clearing all:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: null, error: null, message: 'Todos los servicios eliminados' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[System Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
+    }
   }
 };
 
@@ -347,99 +510,195 @@ export const systemService = {
 
 export const moduleService = {
   async getAll(): Promise<ApiResponse<Module[]>> {
-    await delay(300);
-    const modules = storage.getModules();
-    return { success: true, data: modules, error: null, message: null };
+    try {
+      console.log('[Module Service] Fetching modules from API...');
+
+      const response = await fetch('/api/superadmin/modules');
+      const result = await response.json() as { success: boolean; data: Module[] | null; error: string | null };
+
+      if (!result.success) {
+        console.error('[Module Service] Error fetching:', result.error);
+        return { success: false, data: null, error: result.error ?? 'Error desconocido', message: null };
+      }
+
+      return { success: true, data: result.data ?? [], error: null, message: null };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Module Service] Exception:', message);
+      return { success: false, data: null, error: message, message: null };
+    }
   },
 
   async create(data: CreateModuleData): Promise<ApiResponse<Module>> {
-    await delay(400);
-    
-    const newModule: Module = {
-      ...data,
-      id: storage.generateId('mod'),
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    storage.addModule(newModule);
-    return { success: true, data: newModule, error: null, message: 'Módulo creado exitosamente' };
+    try {
+      console.log('[Module Service] Creating module:', data.name);
+
+      const response = await fetch('/api/superadmin/modules/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error('[Module Service] Error creating:', result.error);
+        return { success: false, data: null, error: result.error || 'Error desconocido', message: null };
+      }
+
+      return { success: true, data: result.data, error: null, message: result.message || 'Módulo creado exitosamente' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Module Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
+    }
   },
 
   async update(id: string, updates: UpdateModuleData): Promise<ApiResponse<Module>> {
-    await delay(300);
-    
-    const modules = storage.getModules();
-    const moduleItem = modules.find(m => m.id === id);
-    
-    if (!moduleItem) {
-      return { success: false, data: null, error: 'Módulo no encontrado', message: null };
+    try {
+      const supabaseAdminModule = await import('@/lib/supabaseAdmin');
+      const supabase = supabaseAdminModule.supabaseAdmin;
+
+      const { data: updated, error } = await supabase
+        .from('modules')
+        .update({
+          ...updates,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[Module Service] Error updating:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: updated, error: null, message: 'Módulo actualizado' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Module Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    const updatedModule = { ...moduleItem, ...updates, updatedAt: new Date().toISOString() };
-    storage.updateModule(id, updates);
-    
-    return { success: true, data: updatedModule, error: null, message: 'Módulo actualizado' };
   },
 
   async toggleStatus(id: string): Promise<ApiResponse<Module>> {
-    await delay(200);
-    
-    const modules = storage.getModules();
-    const moduleItem = modules.find(m => m.id === id);
-    
-    if (!moduleItem) {
-      return { success: false, data: null, error: 'Módulo no encontrado', message: null };
-    }
-    
-    // Core modules cannot be deactivated
-    if (moduleItem.type === 'core') {
-      return { 
-        success: false, 
-        data: null, 
-        error: 'No se puede desactivar', 
-        message: 'Los módulos core no pueden ser desactivados' 
+    try {
+      const supabaseAdminModule = await import('@/lib/supabaseAdmin');
+      const supabase = supabaseAdminModule.supabaseAdmin;
+
+      // Get current module
+      const { data: current } = await supabase
+        .from('modules')
+        .select('type, status')
+        .eq('id', id)
+        .single();
+
+      if (!current) {
+        return { success: false, data: null, error: 'Módulo no encontrado', message: null };
+      }
+
+      // Core modules cannot be deactivated
+      if (current.type === 'core') {
+        return {
+          success: false,
+          data: null,
+          error: 'No se puede desactivar',
+          message: 'Los módulos core no pueden ser desactivados'
+        };
+      }
+
+      const newStatus = current.status === 'active' ? 'inactive' : 'active';
+
+      const { data: updated, error } = await supabase
+        .from('modules')
+        .update({
+          status: newStatus,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[Module Service] Error toggling status:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return {
+        success: true,
+        data: updated,
+        error: null,
+        message: `Módulo ${newStatus === 'active' ? 'activado' : 'desactivado'}`
       };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Module Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    const newStatus: ModuleStatus = moduleItem.status === 'active' ? 'inactive' : 'active';
-    storage.updateModule(id, { status: newStatus });
-    
-    return { 
-      success: true, 
-      data: { ...moduleItem, status: newStatus }, 
-      error: null, 
-      message: `Módulo ${newStatus === 'active' ? 'activado' : 'desactivado'}` 
-    };
   },
 
   async delete(id: string): Promise<ApiResponse<null>> {
-    await delay(300);
-    
-    const modules = storage.getModules();
-    const moduleItem = modules.find(m => m.id === id);
-    
-    if (moduleItem?.type === 'core') {
-      return { 
-        success: false, 
-        data: null, 
-        error: 'No se puede eliminar', 
-        message: 'Los módulos core no pueden ser eliminados' 
-      };
+    try {
+      const supabaseAdminModule = await import('@/lib/supabaseAdmin');
+      const supabase = supabaseAdminModule.supabaseAdmin;
+
+      // Check if core module
+      const { data: moduleItem } = await supabase
+        .from('modules')
+        .select('type')
+        .eq('id', id)
+        .single();
+
+      if (moduleItem?.type === 'core') {
+        return {
+          success: false,
+          data: null,
+          error: 'No se puede eliminar',
+          message: 'Los módulos core no pueden ser eliminados'
+        };
+      }
+
+      const { error } = await supabase
+        .from('modules')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('[Module Service] Error deleting:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: null, error: null, message: 'Módulo eliminado' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Module Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    storage.deleteModule(id);
-    return { success: true, data: null, error: null, message: 'Módulo eliminado' };
   },
 
   async clearAll(): Promise<ApiResponse<null>> {
-    await delay(200);
-    // Keep core modules
-    const modules = storage.getModules();
-    const coreModules = modules.filter(m => m.type === 'core');
-    storage.setModules(coreModules);
-    return { success: true, data: null, error: null, message: 'Módulos addon eliminados' };
+    try {
+      const supabaseAdminModule = await import('@/lib/supabaseAdmin');
+      const supabase = supabaseAdminModule.supabaseAdmin;
+
+      // Keep core modules only
+      const { error } = await supabase
+        .from('modules')
+        .delete()
+        .neq('type', 'core');
+
+      if (error) {
+        console.error('[Module Service] Error clearing all:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: null, error: null, message: 'Módulos addon eliminados' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[Module Service] Error:', message);
+      return { success: false, data: null, error: message, message: null };
+    }
   }
 };
 
@@ -727,7 +986,7 @@ export const aiConfigService = {
   async addModel(data: CreateAIModelData): Promise<ApiResponse<AIModelConfig>> {
     await delay(300);
     const config = storage.getAIConfig();
-    
+
     const newModel: AIModelConfig = {
       id: storage.generateId('model'),
       provider: data.provider,
@@ -737,13 +996,14 @@ export const aiConfigService = {
       apiKey: data.apiKey,
       baseUrl: data.baseUrl ?? null,
       authType: data.authType ?? 'bearer',
+      useCase: data.useCase ?? 'both',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    
+
     config.models.push(newModel);
     storage.setAIConfig(config);
-    
+
     return { success: true, data: newModel, error: null, message: 'Modelo agregado' };
   },
 
@@ -917,171 +1177,235 @@ export const libraryService = {
 
 export const userService = {
   async getAll(): Promise<ApiResponse<User[]>> {
-    await delay(300);
-    const users = storage.getUsers();
-    return { success: true, data: users, error: null, message: null };
+    try {
+      console.log('[User API] Fetching users from Supabase...');
+
+      const response = await fetch('/api/superadmin/users');
+      const result = await response.json() as { success: boolean; data: User[] | null; error: string | null };
+
+      console.log('[User API] Response:', {
+        hasData: !!result.data,
+        dataLength: result.data?.length,
+        hasError: !result.success,
+        errorMessage: result.error
+      });
+
+      if (!result.success) {
+        console.error('[User API] Error fetching:', result.error);
+        return {
+          success: false,
+          data: null,
+          error: result.error ?? 'Error desconocido',
+          message: null
+        };
+      }
+
+      return { success: true, data: result.data ?? [], error: null, message: null };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[User API] Exception:', message, error);
+      return { success: false, data: null, error: message, message: null };
+    }
   },
 
   async getById(id: string): Promise<ApiResponse<User | null>> {
-    await delay(200);
-    const user = storage.getUserById(id);
-    
-    if (!user) {
-      return { success: false, data: null, error: 'Usuario no encontrado', message: null };
+    try {
+      const supabaseModule = await import('@/lib/supabaseClient');
+      const supabase = supabaseModule.supabase;
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error || !data) {
+        return { success: false, data: null, error: 'Usuario no encontrado', message: null };
+      }
+
+      return { success: true, data, error: null, message: null };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[User API] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    return { success: true, data: user, error: null, message: null };
   },
 
   async create(data: CreateUserData): Promise<ApiResponse<User>> {
-    await delay(400);
-    
-    // Check if email already exists
-    const existingUser = storage.getUserByEmail(data.email);
-    if (existingUser) {
-      return { 
-        success: false, 
-        data: null, 
-        error: 'Email ya registrado', 
-        message: 'Ya existe un usuario con este email' 
+    try {
+      const supabaseModule = await import('@/lib/supabaseClient');
+      const supabase = supabaseModule.supabase;
+
+      // Check if email already exists
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', data.email)
+        .single();
+
+      if (existingUser) {
+        return {
+          success: false,
+          data: null,
+          error: 'Email ya registrado',
+          message: 'Ya existe un usuario con este email'
+        };
+      }
+
+      // Get business name if businessId is provided
+      let businessName: string | null = null;
+      if (data.businessId) {
+        const { data: business } = await supabase
+          .from('businesses')
+          .select('name')
+          .eq('id', data.businessId)
+          .single();
+        businessName = business?.name ?? null;
+      }
+
+      const newUser = {
+        id: crypto.randomUUID(),
+        email: data.email,
+        name: data.name,
+        username: data.username,
+        role: data.role,
+        status: data.status,
+        businessId: data.businessId ?? null,
+        businessName,
+        phone: data.phone ?? null,
+        avatar: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastLoginAt: null
       };
+
+      const { data: inserted, error } = await supabase
+        .from('users')
+        .insert(newUser)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[User API] Error creating:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: inserted, error: null, message: 'Usuario creado exitosamente' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[User API] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    // Get business name if businessId is provided
-    let businessName: string | null = null;
-    if (data.businessId) {
-      const businesses = storage.getBusinesses();
-      const business = businesses.find(b => b.id === data.businessId);
-      businessName = business?.name ?? null;
-    }
-    
-    const newUser: User = {
-      id: storage.generateId('user'),
-      email: data.email,
-      name: data.name,
-      username: data.username,
-      role: data.role,
-      status: data.status,
-      businessId: data.businessId ?? null,
-      businessName,
-      phone: data.phone ?? null,
-      avatar: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastLoginAt: null
-    };
-    
-    storage.addUser(newUser);
-    return { success: true, data: newUser, error: null, message: 'Usuario creado exitosamente' };
   },
 
   async update(id: string, updates: UpdateUserData): Promise<ApiResponse<User>> {
-    await delay(300);
-    
-    const user = storage.getUserById(id);
-    if (!user) {
-      return { success: false, data: null, error: 'Usuario no encontrado', message: null };
-    }
-    
-    // Get business name if businessId is being updated
-    let businessName = user.businessName;
-    if (updates.businessId !== undefined) {
-      if (updates.businessId) {
-        const businesses = storage.getBusinesses();
-        const business = businesses.find(b => b.id === updates.businessId);
-        businessName = business?.name ?? null;
-      } else {
-        businessName = null;
+    try {
+      const supabaseModule = await import('@/lib/supabaseClient');
+      const supabase = supabaseModule.supabase;
+
+      // Get business name if businessId is being updated
+      let businessName: string | null = null;
+      if (updates.businessId !== undefined) {
+        if (updates.businessId) {
+          const { data: business } = await supabase
+            .from('businesses')
+            .select('name')
+            .eq('id', updates.businessId)
+            .single();
+          businessName = business?.name ?? null;
+        }
       }
+
+      const { data: updated, error } = await supabase
+        .from('users')
+        .update({
+          ...updates,
+          businessName,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[User API] Error updating:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: updated, error: null, message: 'Usuario actualizado' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[User API] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    const updatedUser = { 
-      ...user, 
-      ...updates, 
-      businessName,
-      updatedAt: new Date().toISOString() 
-    };
-    storage.updateUser(id, { ...updates, businessName });
-    
-    return { success: true, data: updatedUser, error: null, message: 'Usuario actualizado' };
   },
 
   async toggleStatus(id: string): Promise<ApiResponse<User>> {
-    await delay(200);
-    
-    const user = storage.getUserById(id);
-    if (!user) {
-      return { success: false, data: null, error: 'Usuario no encontrado', message: null };
+    try {
+      const supabaseModule = await import('@/lib/supabaseClient');
+      const supabase = supabaseModule.supabase;
+
+      // Get current user status
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('status')
+        .eq('id', id)
+        .single();
+
+      if (!currentUser) {
+        return { success: false, data: null, error: 'Usuario no encontrado', message: null };
+      }
+
+      const newStatus = currentUser.status === 'active' ? 'inactive' : 'active';
+
+      const { data: updated, error } = await supabase
+        .from('users')
+        .update({
+          status: newStatus,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[User API] Error toggling status:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: updated, error: null, message: `Usuario ${newStatus === 'active' ? 'activado' : 'inactivado'}` };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[User API] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    // Prevent deactivating super admin
-    if (user.role === 'super_admin') {
-      return { 
-        success: false, 
-        data: null, 
-        error: 'No autorizado', 
-        message: 'No se puede desactivar al Super Admin' 
-      };
-    }
-    
-    const newStatus: UserStatus = user.status === 'active' ? 'inactive' : 'active';
-    storage.updateUser(id, { status: newStatus });
-    
-    return { 
-      success: true, 
-      data: { ...user, status: newStatus }, 
-      error: null, 
-      message: `Usuario ${newStatus === 'active' ? 'activado' : 'desactivado'}` 
-    };
   },
 
   async delete(id: string): Promise<ApiResponse<null>> {
-    await delay(300);
-    
-    const user = storage.getUserById(id);
-    if (!user) {
-      return { success: false, data: null, error: 'Usuario no encontrado', message: null };
-    }
-    
-    // Prevent deleting super admin
-    if (user.role === 'super_admin') {
-      return { 
-        success: false, 
-        data: null, 
-        error: 'No autorizado', 
-        message: 'No se puede eliminar al Super Admin' 
-      };
-    }
-    
-    storage.deleteUser(id);
-    return { success: true, data: null, error: null, message: 'Usuario eliminado' };
-  },
+    try {
+      const supabaseModule = await import('@/lib/supabaseClient');
+      const supabase = supabaseModule.supabase;
 
-  async updateRole(id: string, role: User['role']): Promise<ApiResponse<User>> {
-    await delay(200);
-    
-    const user = storage.getUserById(id);
-    if (!user) {
-      return { success: false, data: null, error: 'Usuario no encontrado', message: null };
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('[User API] Error deleting:', error);
+        return { success: false, data: null, error: error.message, message: null };
+      }
+
+      return { success: true, data: null, error: null, message: 'Usuario eliminado' };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[User API] Error:', message);
+      return { success: false, data: null, error: message, message: null };
     }
-    
-    // Prevent changing super admin role
-    if (user.role === 'super_admin') {
-      return { 
-        success: false, 
-        data: null, 
-        error: 'No autorizado', 
-        message: 'No se puede cambiar el rol del Super Admin' 
-      };
-    }
-    
-    storage.updateUser(id, { role });
-    
-    return { 
-      success: true, 
-      data: { ...user, role }, 
-      error: null, 
-      message: 'Rol actualizado' 
-    };
   }
 };
+
+// Re-export integrationService
+export { integrationService };
+
+// --- Plan Service ---

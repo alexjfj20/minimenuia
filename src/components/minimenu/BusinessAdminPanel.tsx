@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -61,7 +62,8 @@ import {
   Pencil,
   Eye,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  MessageSquare
 } from 'lucide-react';
 
 // --- Speech Recognition Types ---
@@ -496,6 +498,11 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     image: string | null;
   } | null>(null);
 
+  // --- AI Service Verification States ---
+  const [hasCatalogAI, setHasCatalogAI] = useState<boolean>(false);
+  const [hasReviews, setHasReviews] = useState<boolean>(false);
+  const [isCheckingAI, setIsCheckingAI] = useState<boolean>(true);
+
   // --- Speech Recognition Reference ---
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
@@ -547,6 +554,174 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(true);
   const [profileId, setProfileId] = useState<string | null>(null);
 
+  // --- Check if business has AI Catalog service active ---
+  useEffect(() => {
+    const checkCatalogAI = async (): Promise<void> => {
+      setIsCheckingAI(true);
+      try {
+        const businessId = profileId ?? user.businessId;
+
+        console.log('[AI Service] Checking AI service for business:', businessId);
+        console.log('[AI Service] profileId:', profileId);
+        console.log('[AI Service] user.businessId:', user.businessId);
+
+        if (!businessId) {
+          console.warn('[AI Service] No businessId available');
+          setHasCatalogAI(false);
+          setIsCheckingAI(false);
+          return;
+        }
+
+        // Query business_services table - get all active services for this business
+        const { data: businessServices, error: bsError } = await supabase
+          .from('business_services')
+          .select('service_id, status')
+          .eq('business_id', businessId)
+          .eq('status', 'active');
+
+        console.log('[AI Service] business_services query result:', {
+          data: businessServices,
+          error: bsError
+        });
+
+        if (bsError) {
+          // Si la tabla no existe, asumimos que no hay servicios configurados
+          if (bsError.message.includes('Could not find the table')) {
+            console.warn('[AI Service] Tabla business_services no existe. Ejecutar: supabase-create-business-services-table.sql');
+            setHasCatalogAI(false);
+            setIsCheckingAI(false);
+            return;
+          }
+
+          console.error('[AI Service] Error checking business_services:', bsError.message || bsError);
+          setHasCatalogAI(false);
+          setIsCheckingAI(false);
+          return;
+        }
+
+        if (!businessServices || businessServices.length === 0) {
+          console.log('[AI Service] No active services found for business');
+          setHasCatalogAI(false);
+          setIsCheckingAI(false);
+          return;
+        }
+
+        // Get service IDs
+        const serviceIds = businessServices.map(bs => bs.service_id);
+        console.log('[AI Service] Service IDs:', serviceIds);
+
+        // Query services table to find "IA para Catálogo"
+        const { data: services, error: svcError } = await supabase
+          .from('services')
+          .select('id, name')
+          .in('id', serviceIds);
+
+        console.log('[AI Service] services query result:', {
+          data: services,
+          error: svcError
+        });
+
+        if (svcError) {
+          console.error('[AI Service] Error fetching services:', svcError.message || svcError);
+          setHasCatalogAI(false);
+          setIsCheckingAI(false);
+          return;
+        }
+
+        // Check if "IA para Catálogo" exists in the list
+        const hasCatalogService = services?.some(s => s.name === 'IA para Catálogo') || false;
+        console.log('[AI Service] Has IA para Catálogo service:', hasCatalogService);
+
+        setHasCatalogAI(hasCatalogService);
+        console.log('[AI Service] Catalog AI service:', hasCatalogService ? 'ACTIVE' : 'INACTIVE');
+      } catch (error) {
+        console.error('[AI Service] Error:', error instanceof Error ? error.message : error);
+        setHasCatalogAI(false);
+      } finally {
+        setIsCheckingAI(false);
+      }
+    };
+
+    checkCatalogAI();
+  }, [profileId, user.businessId]);
+
+  // --- Check if business has Reviews service active ---
+  useEffect(() => {
+    const checkReviews = async (): Promise<void> => {
+      try {
+        const businessId = profileId ?? user.businessId;
+
+        console.log('[Reviews Service] Checking reviews service for business:', businessId);
+
+        if (!businessId) {
+          console.warn('[Reviews Service] No businessId available');
+          setHasReviews(false);
+          return;
+        }
+
+        // Query business_services table - get all active services for this business
+        const { data: businessServices, error: bsError } = await supabase
+          .from('business_services')
+          .select('service_id, status')
+          .eq('business_id', businessId)
+          .eq('status', 'active');
+
+        console.log('[Reviews Service] business_services query result:', {
+          data: businessServices,
+          error: bsError
+        });
+
+        if (bsError) {
+          console.error('[Reviews Service] Error checking business_services:', bsError.message || bsError);
+          setHasReviews(false);
+          return;
+        }
+
+        if (!businessServices || businessServices.length === 0) {
+          console.log('[Reviews Service] No active services found for business');
+          setHasReviews(false);
+          return;
+        }
+
+        // Get service IDs
+        const serviceIds = businessServices.map(bs => bs.service_id);
+        console.log('[Reviews Service] Service IDs:', serviceIds);
+
+        // Query services table to find "Reseñas y Fidelización"
+        const { data: services, error: svcError } = await supabase
+          .from('services')
+          .select('id, name')
+          .in('id', serviceIds);
+
+        console.log('[Reviews Service] services query result:', {
+          data: services,
+          error: svcError
+        });
+
+        if (svcError) {
+          console.error('[Reviews Service] Error fetching services:', svcError.message || svcError);
+          setHasReviews(false);
+          return;
+        }
+
+        // Check if "Reseñas y Fidelización" exists in the list
+        const hasReviewsService = services?.some(s => {
+          console.log('[Reviews Service] Checking service:', s.name);
+          return s.name === 'Reseñas y Fidelización';
+        }) || false;
+
+        console.log('[Reviews Service] Has Reviews service:', hasReviewsService);
+        setHasReviews(hasReviewsService);
+        console.log('[Reviews Service] Reviews service:', hasReviewsService ? 'ACTIVE' : 'INACTIVE');
+      } catch (error) {
+        console.error('[Reviews Service] Error:', error instanceof Error ? error.message : error);
+        setHasReviews(false);
+      }
+    };
+
+    checkReviews();
+  }, [profileId, user.businessId]);
+
   // --- Order Detail States ---
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -565,7 +740,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [orderDateTo, setOrderDateTo] = useState<string>('');
   const [showOrderDeleteConfirm, setShowOrderDeleteConfirm] = useState(false);
   const [isDeletingOrders, setIsDeletingOrders] = useState(false);
-  const [deleteProgress, setDeleteProgress] = useState({ current: 0, total: 0 });
+  const [deleteProgress, setDeleteProgress] = useState({ current: 0, total: 0, batch: 0, totalBatches: 0 });
 
   // --- Bulk Selection States (Domicilios) ---
   const [selectedDeliveryIds, setSelectedDeliveryIds] = useState<Set<string>>(new Set());
@@ -573,7 +748,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [deliveryDateTo, setDeliveryDateTo] = useState<string>('');
   const [showDeliveryDeleteConfirm, setShowDeliveryDeleteConfirm] = useState(false);
   const [isDeletingDeliveries, setIsDeletingDeliveries] = useState(false);
-  const [deliveryDeleteProgress, setDeliveryDeleteProgress] = useState({ current: 0, total: 0 });
+  const [deliveryDeleteProgress, setDeliveryDeleteProgress] = useState({ current: 0, total: 0, batch: 0, totalBatches: 0 });
 
   // --- Empaque States ---
   const [valorEmpaqueUnitario, setValorUnitarioEmpaque] = useState<number>(500);
@@ -669,6 +844,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isDeletingInvoices, setIsDeletingInvoices] = useState(false);
   const [invoiceToast, setInvoiceToast] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
+
+  // --- Nuevas variables para selección por rango de fechas ---
+  const [dateSelectionCount, setDateSelectionCount] = useState(0);
 
   // Load profile from API on mount
   useEffect(() => {
@@ -902,20 +1080,158 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     };
   }, [dbRestaurantOrders, dbDeliveryOrders, products]);
 
-  const sidebarItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: 'catalogo', label: 'Catálogo', icon: <Package className="w-5 h-5" /> },
-    { id: 'pedidos', label: 'Gestión de Pedidos', icon: <ShoppingCart className="w-5 h-5" /> },
-    { id: 'tpv', label: 'Factura Restaurante', icon: <FileText className="w-5 h-5" /> },
-    { id: 'domicilios', label: 'Facturación Domicilio', icon: <Truck className="w-5 h-5" /> },
-    { id: 'configuracion-domicilio', label: 'Configuración Domicilio', icon: <Truck className="w-5 h-5" /> },
-    { id: 'impresoras', label: 'Impresoras', icon: <Printer className="w-5 h-5" /> },
-    { id: 'empaque', label: 'Empaque', icon: <Package className="w-5 h-5" /> },
-    { id: 'backup', label: 'Backup', icon: <HardDrive className="w-5 h-5" /> },
-    { id: 'compartir', label: 'Compartir Menú', icon: <Share2 className="w-5 h-5" /> },
-    { id: 'suscripcion', label: 'Suscripción', icon: <CreditCard className="w-5 h-5" /> },
-    { id: 'perfil', label: 'Mi Perfil', icon: <Settings className="w-5 h-5" /> }
-  ];
+  const sidebarItems = useMemo(() => {
+    const items = [
+      { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+      { id: 'catalogo', label: 'Catálogo', icon: <Package className="w-5 h-5" /> },
+      { id: 'pedidos', label: 'Gestión de Pedidos', icon: <ShoppingCart className="w-5 h-5" /> },
+      { id: 'tpv', label: 'Factura Restaurante', icon: <FileText className="w-5 h-5" /> },
+      { id: 'domicilios', label: 'Facturación Domicilio', icon: <Truck className="w-5 h-5" /> },
+      { id: 'configuracion-domicilio', label: 'Configuración Domicilio', icon: <Truck className="w-5 h-5" /> },
+      { id: 'impresoras', label: 'Impresoras', icon: <Printer className="w-5 h-5" /> },
+      { id: 'empaque', label: 'Empaque', icon: <Package className="w-5 h-5" /> },
+      { id: 'backup', label: 'Backup', icon: <HardDrive className="w-5 h-5" /> },
+      { id: 'compartir', label: 'Compartir Menú', icon: <Share2 className="w-5 h-5" /> },
+      { id: 'suscripcion', label: 'Suscripción', icon: <CreditCard className="w-5 h-5" /> },
+      { id: 'perfil', label: 'Mi Perfil', icon: <Settings className="w-5 h-5" /> }
+    ];
+
+    // Agregar Reseñas solo si el servicio está activo
+    if (hasReviews) {
+      items.push({ id: 'resenas', label: 'Reseñas', icon: <MessageSquare className="w-5 h-5" /> });
+    }
+
+    return items;
+  }, [hasReviews]);
+
+  // ============================================================
+  // HELPER — Llama a GPT para generar datos del producto
+  // ============================================================
+
+  const fetchProductDataFromGPT = async (
+    userPrompt: string
+  ): Promise<{ name: string; description: string; price: number; category: string }> => {
+    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+
+    if (!apiKey) {
+      console.error('[fetchProductDataFromGPT] NEXT_PUBLIC_OPENAI_API_KEY no configurada en .env.local');
+      throw new Error('Servicio de IA no configurado. Reinicia el servidor después de agregar OPENAI_API_KEY en .env.local');
+    }
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Eres un asistente para restaurantes colombianos. Responde SOLO con JSON válido, sin markdown, sin texto adicional.'
+          },
+          {
+            role: 'user',
+            content: `Crea un producto de menú basado en: "${userPrompt}".
+Responde SOLO con este JSON exacto:
+{
+  "name": "nombre del plato",
+  "description": "descripción atractiva en 1 oración",
+  "price": 25000,
+  "category": "Platos Principales"
+}
+Categorías válidas: "Platos Principales", "Entradas", "Postres", "Bebidas".
+El precio debe ser un número entero en pesos colombianos.`
+          }
+        ],
+        temperature: 0.7
+      })
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      
+      // Manejo especial para error 429 - Cuota excedida
+      if (res.status === 429) {
+        console.warn('[fetchProductDataFromGPT] Cuota de OpenAI excedida, usando fallback');
+        return generateFallbackProduct(userPrompt);
+      }
+      
+      throw new Error(`GPT error ${res.status}: ${errorText}`);
+    }
+
+    const data = (await res.json()) as { choices: Array<{ message: { content: string } }> };
+    const content = data?.choices?.[0]?.message?.content;
+
+    if (!content || typeof content !== 'string') {
+      throw new Error('Respuesta vacía de GPT');
+    }
+
+    const parsed: unknown = JSON.parse(content.trim());
+
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      !('name' in parsed) ||
+      !('description' in parsed) ||
+      !('price' in parsed) ||
+      !('category' in parsed)
+    ) {
+      throw new Error('Estructura de respuesta inválida de GPT');
+    }
+
+    const product = parsed as { name: string; description: string; price: number; category: string };
+
+    if (
+      typeof product.name !== 'string' ||
+      typeof product.description !== 'string' ||
+      typeof product.price !== 'number' ||
+      typeof product.category !== 'string'
+    ) {
+      throw new Error('Tipos de datos inválidos en respuesta de GPT');
+    }
+
+    return product;
+  };
+
+  // ============================================================
+  // HELPER — Genera producto fallback cuando IA no está disponible
+  // ============================================================
+
+  const generateFallbackProduct = (
+    userPrompt: string
+  ): { name: string; description: string; price: number; category: string } => {
+    // Determinar categoría basada en palabras clave
+    const lowerPrompt = userPrompt.toLowerCase();
+    let category = 'Platos Principales';
+    
+    if (lowerPrompt.includes('bebida') || lowerPrompt.includes('jugo') || lowerPrompt.includes('gaseosa') || lowerPrompt.includes('limonada') || lowerPrompt.includes('café') || lowerPrompt.includes('té')) {
+      category = 'Bebidas';
+    } else if (lowerPrompt.includes('postre') || lowerPrompt.includes('dulce') || lowerPrompt.includes('torta') || lowerPrompt.includes('pastel') || lowerPrompt.includes('helado') || lowerPrompt.includes('flan')) {
+      category = 'Postres';
+    } else if (lowerPrompt.includes('entrada') || lowerPrompt.includes('aperitivo') || lowerPrompt.includes('empanada') || lowerPrompt.includes('arepa') || lowerPrompt.includes('tequeño')) {
+      category = 'Entradas';
+    }
+
+    // Extraer precio si se menciona (ej: "25 mil", "30000 pesos")
+    const priceMatch = userPrompt.match(/(\d+)\s*(mil|pesos|cop)?/i);
+    const extractedPrice = priceMatch ? parseInt(priceMatch[1]) * (priceMatch[2]?.toLowerCase() === 'mil' ? 1000 : 1) : 25000;
+
+    // Generar nombre capitalizado
+    const words = userPrompt.split(' ').filter(w => w.length > 3).slice(0, 4);
+    const generatedName = words.length > 0
+      ? words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+      : 'Nuevo Producto';
+
+    return {
+      name: generatedName,
+      description: `Delicioso ${generatedName.toLowerCase()} preparado con ingredientes frescos y de alta calidad.`,
+      price: extractedPrice,
+      category: category
+    };
+  };
 
   // --- AI Product Creation Handlers ---
   const handleAITextCreate = async (): Promise<void> => {
@@ -923,251 +1239,61 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
     setIsAIProcessing(true);
     try {
-      // Simular llamada a API de IA
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Generar imagen con IA
-      const generatedImage = await generateAIImage('Producto generado por IA', aiTextPrompt);
-
-      // Producto generado simulado
-      setAiGeneratedProduct({
-        name: 'Producto generado por IA',
-        description: aiTextPrompt,
-        price: 25000,
-        category: 'Platos Principales',
-        image: generatedImage
+      // Llamar al endpoint de generación de producto
+      const productRes = await fetch('/api/generate-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: aiTextPrompt })
       });
-    } catch (error) {
-      console.error('Error creating product with AI:', error);
-    } finally {
-      setIsAIProcessing(false);
-    }
-  };
 
-  const handleAIVoiceCreate = useCallback((): void => {
-    // Check if Speech Recognition is available
-    const SpeechRecognitionAPI = typeof window !== 'undefined'
-      ? (window.SpeechRecognition || window.webkitSpeechRecognition)
-      : null;
+      const productData = await productRes.json();
 
-    if (!SpeechRecognitionAPI) {
-      setSpeechError('Tu navegador no soporta reconocimiento de voz. Por favor usa Chrome o Edge.');
-      return;
-    }
-
-    if (isRecording && recognitionRef.current) {
-      // Stop recording
-      recognitionRef.current.stop();
-      setIsRecording(false);
-      return;
-    }
-
-    // Start recording
-    setSpeechError(null);
-    setAiTextPrompt('');
-    setAiGeneratedProduct(null);
-    setIsRecording(true);
-
-    const recognition = new SpeechRecognitionAPI();
-    recognitionRef.current = recognition;
-
-    // Configure recognition
-    recognition.lang = 'es-ES';
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    recognition.continuous = false;
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = event.results[0]?.[0]?.transcript ?? '';
-      setAiTextPrompt(transcript);
-
-      // Check if this is the final result
-      if (event.results[0]?.isFinal) {
-        setIsRecording(false);
-        processTranscript(transcript);
-      }
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      setIsRecording(false);
-      let errorMessage = 'Error desconocido al grabar audio';
-
-      switch (event.error) {
-        case 'not-allowed':
-        case 'permission-denied':
-          errorMessage = 'Permiso de micrófono denegado. Por favor permite el acceso al micrófono.';
-          break;
-        case 'no-speech':
-          errorMessage = 'No se detectó voz. Por favor intenta de nuevo.';
-          break;
-        case 'audio-capture':
-          errorMessage = 'No se encontró micrófono. Verifica que tengas un micrófono conectado.';
-          break;
-        case 'network':
-          errorMessage = 'Error de red. Verifica tu conexión a internet.';
-          break;
-        case 'aborted':
-          errorMessage = 'Grabación cancelada.';
-          break;
-        default:
-          errorMessage = `Error: ${event.error}`;
-      }
-
-      setSpeechError(errorMessage);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
-
-    try {
-      recognition.start();
-    } catch (error) {
-      setIsRecording(false);
-      setSpeechError('Error al iniciar el reconocimiento de voz');
-      console.error('Speech recognition error:', error);
-    }
-  }, [isRecording]);
-
-  const processTranscript = async (transcript: string): Promise<void> => {
-    if (!transcript.trim()) {
-      setSpeechError('No se detectó ninguna descripción. Por favor intenta de nuevo.');
-      return;
-    }
-
-    setIsAIProcessing(true);
-    try {
-      // Aquí iría la llamada real a la API de IA
-      // Por ahora simulamos el procesamiento
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Extraer precio si se menciona
-      const priceMatch = transcript.match(/(\d+)\s*(mil|pesos|cop)?/i);
-      const extractedPrice = priceMatch ? parseInt(priceMatch[1]) * 1000 : 15000;
-
-      // Determinar categoría basada en palabras clave
-      let category = 'Platos Principales';
-      const lowerTranscript = transcript.toLowerCase();
-      if (lowerTranscript.includes('bebida') || lowerTranscript.includes('jugo') || lowerTranscript.includes('gaseosa') || lowerTranscript.includes('limonada')) {
-        category = 'Bebidas';
-      } else if (lowerTranscript.includes('postre') || lowerTranscript.includes('dulce') || lowerTranscript.includes('torta') || lowerTranscript.includes('pastel')) {
-        category = 'Postres';
-      } else if (lowerTranscript.includes('entrada') || lowerTranscript.includes('aperitivo') || lowerTranscript.includes('empanada') || lowerTranscript.includes('arepa')) {
-        category = 'Entradas';
-      }
-
-      // Generar nombre del producto (primeras palabras significativas)
-      const words = transcript.split(' ').filter(w => w.length > 3).slice(0, 4);
-      const generatedName = words.length > 0
-        ? words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-        : 'Nuevo Producto';
-
-      // Generar imagen con IA
-      const generatedImage = await generateAIImage(generatedName, transcript);
-
-      setAiGeneratedProduct({
-        name: generatedName,
-        description: transcript,
-        price: extractedPrice,
-        category: category,
-        image: generatedImage
-      });
-    } catch (error) {
-      console.error('Error processing transcript:', error);
-      setSpeechError('Error al procesar la descripción');
-    } finally {
-      setIsAIProcessing(false);
-    }
-  };
-
-  // --- Product Save Functions ---
-  const addProductToList = async (product: Omit<Product, 'id'>): Promise<void> => {
-    try {
-      const currentBusinessId = profileId ?? user.businessId;
-      
-      // Validar formato UUID (8-4-4-4-12 hex)
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      
-      if (!uuidRegex.test(currentBusinessId || '')) {
-        console.error('[Products] Invalid businessId format detectado en frontend:', currentBusinessId);
-        setToastMessage({ 
-          type: 'error', 
-          message: 'Error de sesión: ID de negocio inválido. Intenta cerrar sesión y volver a entrar.' 
-        });
+      if (!productData.success || !productData.product) {
+        setSpeechError(productData.error || 'Error al generar producto con IA');
+        setIsAIProcessing(false);
         return;
       }
 
-      const response = await fetch('/api/products', {
+      // Llamar al endpoint de generación de imagen
+      const imageRes = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...product,
-          businessId: currentBusinessId
+          prompt: `${productData.product.name}, ${productData.product.description}`
         })
       });
 
-      const data = await response.json();
+      const imageData = await imageRes.json();
 
-      if (data.success && data.data && data.data.products && data.data.products.length > 0) {
-        const newProduct = data.data.products[0];
-        setProducts(prev => {
-          const newProducts = [...prev, newProduct as Product];
-          localStorage.setItem('businessProducts', JSON.stringify(newProducts));
-          return newProducts;
-        });
-        console.log('[Products] Added product:', newProduct.name);
-
-        // Update categories if a new one was added
-        if (newProduct.category && !categories.find(c => c.name === newProduct.category)) {
-          setCategories(prev => [...prev, {
-            id: `cat-${Date.now()}`,
-            name: newProduct.category,
-            icon: '🍴',
-            order: prev.length + 1
-          }]);
-        }
-      } else {
-        console.error('[Products] Failed to add product:', data.error || 'Error desconocido');
-        setToastMessage({ type: 'error', message: data.error || 'Error al crear el producto' });
+      if (!imageData.success || !imageData.image) {
+        setSpeechError(imageData.error || 'Error al generar imagen');
+        setIsAIProcessing(false);
+        return;
       }
-    } catch (error) {
-      console.error('[Products] Error adding product:', error);
+
+      setAiGeneratedProduct({
+        name: productData.product.name,
+        description: productData.product.description,
+        price: productData.product.price,
+        category: productData.product.category,
+        image: imageData.image
+      });
+
+      // Informar si se usó fallback
+      if (imageData.fallback || productData.product.name.includes('Nuevo Producto') || productData.product.description.includes('Delicioso')) {
+        setSpeechError('⚠️ IA no disponible (cuota excedida). Se generó producto automáticamente. Puedes editarlo.');
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[handleAITextCreate] Error:', message);
+      setSpeechError('Error al generar producto con IA. Intenta de nuevo.');
+    } finally {
+      setIsAIProcessing(false);
     }
   };
 
-  // --- Image Upload Functions ---
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Por favor selecciona un archivo de imagen válido');
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('La imagen no debe superar los 5MB');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setImagePreview(base64);
-      setProductForm(prev => ({ ...prev, image: base64 }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const removeImage = (): void => {
-    setImagePreview(null);
-    setProductForm(prev => ({ ...prev, image: null }));
-  };
-
-  // --- AI Image Generation Function ---
-  const generateAIImage = async (productName: string, description: string): Promise<string | null> => {
+  // --- AI Image Generation Function (MOVED BEFORE handleAIVoiceCreate) ---
+  const generateAIImage = useCallback(async (productName: string, description: string): Promise<string | null> => {
     setIsGeneratingImage(true);
 
     try {
@@ -1308,6 +1434,239 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     } finally {
       setIsGeneratingImage(false);
     }
+  }, []);
+
+  // --- Process Transcript Function (MOVED BEFORE handleAIVoiceCreate) ---
+  const processTranscript = useCallback(async (transcript: string): Promise<void> => {
+    if (!transcript.trim()) {
+      setSpeechError('No se detectó ninguna descripción. Por favor intenta de nuevo.');
+      return;
+    }
+
+    setIsAIProcessing(true);
+    try {
+      // Llamar al endpoint de generación de producto
+      const productRes = await fetch('/api/generate-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: transcript })
+      });
+
+      const productData = await productRes.json();
+
+      if (!productData.success || !productData.product) {
+        setSpeechError(productData.error || 'Error al generar producto con IA');
+        setIsAIProcessing(false);
+        return;
+      }
+
+      // Llamar al endpoint de generación de imagen
+      const imageRes = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `${productData.product.name}, ${productData.product.description}`
+        })
+      });
+
+      const imageData = await imageRes.json();
+
+      if (!imageData.success || !imageData.image) {
+        setSpeechError(imageData.error || 'Error al generar imagen');
+        setIsAIProcessing(false);
+        return;
+      }
+
+      setAiGeneratedProduct({
+        name: productData.product.name,
+        description: productData.product.description,
+        price: productData.product.price,
+        category: productData.product.category,
+        image: imageData.image
+      });
+
+      // Informar si se usó fallback
+      if (imageData.fallback || productData.product.name.includes('Nuevo Producto') || productData.product.description.includes('Delicioso')) {
+        setSpeechError('⚠️ IA no disponible (cuota excedida). Se generó producto automáticamente.');
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[processTranscript] Error:', message);
+      setSpeechError('Error al procesar la descripción. Intenta de nuevo.');
+    } finally {
+      setIsAIProcessing(false);
+    }
+  }, []);
+
+  const handleAIVoiceCreate = useCallback((): void => {
+    // Check if Speech Recognition is available
+    const SpeechRecognitionAPI = typeof window !== 'undefined'
+      ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+      : null;
+
+    if (!SpeechRecognitionAPI) {
+      setSpeechError('Tu navegador no soporta reconocimiento de voz. Por favor usa Chrome o Edge.');
+      return;
+    }
+
+    if (isRecording && recognitionRef.current) {
+      // Stop recording
+      recognitionRef.current.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    // Start recording
+    setSpeechError(null);
+    setAiTextPrompt('');
+    setAiGeneratedProduct(null);
+    setIsRecording(true);
+
+    const recognition = new SpeechRecognitionAPI();
+    recognitionRef.current = recognition;
+
+    // Configure recognition
+    recognition.lang = 'es-ES';
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? '';
+      setAiTextPrompt(transcript);
+
+      // Check if this is the final result
+      if (event.results[0]?.isFinal) {
+        setIsRecording(false);
+        processTranscript(transcript);
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      setIsRecording(false);
+      let errorMessage = 'Error desconocido al grabar audio';
+
+      switch (event.error) {
+        case 'not-allowed':
+        case 'permission-denied':
+          errorMessage = 'Permiso de micrófono denegado. Por favor permite el acceso al micrófono.';
+          break;
+        case 'no-speech':
+          errorMessage = 'No se detectó voz. Por favor intenta de nuevo.';
+          break;
+        case 'audio-capture':
+          errorMessage = 'No se encontró micrófono. Verifica que tengas un micrófono conectado.';
+          break;
+        case 'network':
+          errorMessage = 'Error de red. Verifica tu conexión a internet.';
+          break;
+        case 'aborted':
+          errorMessage = 'Grabación cancelada.';
+          break;
+        default:
+          errorMessage = `Error: ${event.error}`;
+      }
+
+      setSpeechError(errorMessage);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    try {
+      recognition.start();
+    } catch (error) {
+      setIsRecording(false);
+      setSpeechError('Error al iniciar el reconocimiento de voz');
+      console.error('Speech recognition error:', error);
+    }
+  }, [isRecording, processTranscript]);
+
+  // --- Product Save Functions ---
+  const addProductToList = async (product: Omit<Product, 'id'>): Promise<void> => {
+    try {
+      const currentBusinessId = profileId ?? user.businessId;
+      
+      // Validar formato UUID (8-4-4-4-12 hex)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      
+      if (!uuidRegex.test(currentBusinessId || '')) {
+        console.error('[Products] Invalid businessId format detectado en frontend:', currentBusinessId);
+        setToastMessage({ 
+          type: 'error', 
+          message: 'Error de sesión: ID de negocio inválido. Intenta cerrar sesión y volver a entrar.' 
+        });
+        return;
+      }
+
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...product,
+          businessId: currentBusinessId
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data && data.data.products && data.data.products.length > 0) {
+        const newProduct = data.data.products[0];
+        setProducts(prev => {
+          const newProducts = [...prev, newProduct as Product];
+          localStorage.setItem('businessProducts', JSON.stringify(newProducts));
+          return newProducts;
+        });
+        console.log('[Products] Added product:', newProduct.name);
+
+        // Update categories if a new one was added
+        if (newProduct.category && !categories.find(c => c.name === newProduct.category)) {
+          setCategories(prev => [...prev, {
+            id: `cat-${Date.now()}`,
+            name: newProduct.category,
+            icon: '🍴',
+            order: prev.length + 1
+          }]);
+        }
+      } else {
+        console.error('[Products] Failed to add product:', data.error || 'Error desconocido');
+        setToastMessage({ type: 'error', message: data.error || 'Error al crear el producto' });
+      }
+    } catch (error) {
+      console.error('[Products] Error adding product:', error);
+    }
+  };
+
+  // --- Image Upload Functions ---
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor selecciona un archivo de imagen válido');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('La imagen no debe superar los 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setImagePreview(base64);
+      setProductForm(prev => ({ ...prev, image: base64 }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = (): void => {
+    setImagePreview(null);
+    setProductForm(prev => ({ ...prev, image: null }));
   };
 
   const handleSaveAIProduct = (): void => {
@@ -2129,6 +2488,63 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     setInvoicePage(1);
   };
 
+  // --- NUEVAS FUNCIONES PARA SELECCIÓN POR RANGO DE FECHAS Y BATCH >500 ---
+
+  // Función para dividir array en chunks de tamaño específico (máximo 500 para Firestore)
+  const chunkArray = <T,>(array: T[], chunkSize: number): T[][] => {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += chunkSize) {
+      chunks.push(array.slice(i, i + chunkSize));
+    }
+    return chunks;
+  };
+
+  // Seleccionar invoices por rango de fechas
+  const selectInvoicesByDateRange = (): void => {
+    if (!invoiceDateFrom || !invoiceDateTo) {
+      showInvoiceToastMessage('warning', '⚠️ Debes seleccionar fecha inicio y fecha fin');
+      return;
+    }
+
+    const fromDate = new Date(invoiceDateFrom);
+    fromDate.setHours(0, 0, 0, 0);
+
+    const toDate = new Date(invoiceDateTo);
+    toDate.setHours(23, 59, 59, 999);
+
+    if (fromDate > toDate) {
+      showInvoiceToastMessage('warning', '⚠️ La fecha inicio no puede ser mayor a la fecha fin');
+      return;
+    }
+
+    const filtered = getFilteredInvoices();
+    const invoicesInRange = filtered.filter(inv => {
+      const invDate = new Date(inv.createdAt);
+      return invDate >= fromDate && invDate <= toDate;
+    });
+
+    if (invoicesInRange.length === 0) {
+      showInvoiceToastMessage('warning', '📭 No se encontraron facturas en ese rango de fechas');
+      return;
+    }
+
+    const newIds = invoicesInRange.map(inv => inv.id);
+    const merged = [...new Set([...Array.from(selectedInvoiceIds), ...newIds])];
+    setSelectedInvoiceIds(new Set(merged));
+    setDateSelectionCount(invoicesInRange.length);
+
+    showInvoiceToastMessage('success', `✅ ${invoicesInRange.length} factura(s) seleccionada(s)`);
+  };
+
+  // Limpiar selección y date pickers
+  const clearDateSelection = (): void => {
+    setSelectedInvoiceIds(new Set());
+    setDateSelectionCount(0);
+    setInvoiceDateFrom('');
+    setInvoiceDateTo('');
+    setInvoicePage(1);
+  };
+
   // --- Show Toast Notification ---
   const showInvoiceToastMessage = (type: 'success' | 'error' | 'warning', message: string): void => {
     setInvoiceToast({ type, message });
@@ -2156,40 +2572,91 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     }
   };
 
-  // --- Bulk Delete Invoices ---
+  // --- Bulk Delete Invoices (con Batch >500) ---
   const bulkDeleteInvoices = async (): Promise<void> => {
     if (selectedInvoiceIds.size === 0) {
       showInvoiceToastMessage('warning', 'No hay facturas seleccionadas');
       return;
     }
 
+    const rangeText = (invoiceDateFrom && invoiceDateTo)
+      ? `📅 Rango: ${invoiceDateFrom} → ${invoiceDateTo}`
+      : dateSelectionCount > 0
+        ? `📅 Selección por rango: ${dateSelectionCount} facturas`
+        : '☑ Selección manual';
+
+    // Guardar referencia antes de limpiar
+    const idsToDelete = Array.from(selectedInvoiceIds);
+    const totalToDelete = idsToDelete.length;
+
+    if (!confirm(`¿Estás seguro de eliminar ${totalToDelete} factura(s)?\n${rangeText}\n\n⚠️ Esta acción NO se puede deshacer.`)) {
+      return;
+    }
+
     setIsDeletingInvoices(true);
+    setDeleteProgress({ current: 0, total: totalToDelete, batch: 0, totalBatches: 0 });
 
     try {
-      const response = await fetch('/api/restaurant-invoice/bulk-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ids: Array.from(selectedInvoiceIds),
-          businessId: profileId ?? user.businessId // profileId es el ID real del negocio cargado desde la DB
-        })
-      });
+      const BATCH_SIZE = 500;
+      const chunks = chunkArray(idsToDelete, BATCH_SIZE);
+      const totalBatches = chunks.length;
 
-      const data = await response.json();
+      setDeleteProgress({ current: 0, total: totalToDelete, batch: 0, totalBatches });
 
-      if (data.success) {
-        setInvoices(prev => prev.filter(inv => !selectedInvoiceIds.has(inv.id)));
-        setSelectedInvoiceIds(new Set());
-        setShowBulkDeleteConfirm(false);
-        showInvoiceToastMessage('success', `${data.deletedCount} factura(s) eliminada(s) correctamente`);
-      } else {
-        showInvoiceToastMessage('error', data.error || 'Error al eliminar facturas');
+      let deletedCount = 0;
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const batchNumber = i + 1;
+
+        try {
+          const response = await fetch('/api/restaurant-invoice/bulk-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ids: chunk,
+              businessId: profileId ?? user.businessId
+            })
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            deletedCount += chunk.length;
+            setDeleteProgress(prev => ({
+              ...prev,
+              current: deletedCount,
+              batch: batchNumber
+            }));
+          } else {
+            console.error('[Invoice] Error en batch', batchNumber, ':', data.error);
+          }
+        } catch (batchError) {
+          console.error('[Invoice] Error procesando batch', batchNumber, ':', batchError);
+        }
+
+        // Pequeña pausa entre batches para no saturar
+        if (i < chunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
+
+      // Actualizar estado local
+      setInvoices(prev => prev.filter(inv => !selectedInvoiceIds.has(inv.id)));
+      setSelectedInvoiceIds(new Set());
+      setShowBulkDeleteConfirm(false);
+      clearDateSelection();
+
+      setDeleteProgress(prev => ({ ...prev, current: totalToDelete }));
+
+      showInvoiceToastMessage('success', `✅ ${deletedCount} de ${totalToDelete} factura(s) eliminada(s) correctamente`);
+
     } catch (error) {
       console.error('[Invoice] Error bulk deleting:', error);
-      showInvoiceToastMessage('error', 'Error al eliminar facturas');
+      showInvoiceToastMessage('error', `❌ Error parcial: eliminadas ${deleteProgress.current} de ${totalToDelete}. Intenta de nuevo.`);
     } finally {
       setIsDeletingInvoices(false);
+      setDeleteProgress({ current: 0, total: 0, batch: 0, totalBatches: 0 });
     }
   };
 
@@ -5276,23 +5743,28 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     Agregar Producto
                   </Button>
 
-                  <Button
-                    onClick={() => setShowAITextModal(true)}
-                    variant="outline"
-                    className="border-purple-600 text-purple-600 hover:bg-purple-50"
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Crear con IA (Texto)
-                  </Button>
+                  {/* AI Buttons - Only show if business has active AI Catalog service */}
+                  {!isCheckingAI && hasCatalogAI && (
+                    <>
+                      <Button
+                        onClick={() => setShowAITextModal(true)}
+                        variant="outline"
+                        className="border-purple-600 text-purple-600 hover:bg-purple-50"
+                      >
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Crear con IA (Texto)
+                      </Button>
 
-                  <Button
-                    onClick={() => setShowAIVoiceModal(true)}
-                    variant="outline"
-                    className="border-purple-600 text-purple-600 hover:bg-purple-50"
-                  >
-                    <Mic className="w-4 h-4 mr-2" />
-                    Crear con IA (Voz)
-                  </Button>
+                      <Button
+                        onClick={() => setShowAIVoiceModal(true)}
+                        variant="outline"
+                        className="border-purple-600 text-purple-600 hover:bg-purple-50"
+                      >
+                        <Mic className="w-4 h-4 mr-2" />
+                        Crear con IA (Voz)
+                      </Button>
+                    </>
+                  )}
 
                   <div className="relative flex-1 max-w-sm">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -5975,7 +6447,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     </div>
                   )}
 
-                  {/* Date Filters */}
+                  {/* Date Filters - FILTROS EXISTENTES */}
                   <div className="flex flex-wrap items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-gray-500" />
@@ -6011,29 +6483,143 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
                     )}
                   </div>
 
-                  {/* Bulk Actions */}
-                  {selectedInvoiceIds.size > 0 && (
-                    <div className="mb-4 p-3 bg-red-50 rounded-lg flex items-center justify-between">
-                      <span className="text-sm text-red-700 font-medium">
-                        {selectedInvoiceIds.size} factura(s) seleccionada(s)
-                      </span>
-                      <div className="flex gap-2">
+                  {/* NUEVA BARRA DE HERRAMIENTAS - Selección por rango de fechas */}
+                  <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-orange-600" />
+                          <span className="text-sm font-medium text-orange-800">Seleccionar por rango:</span>
+                        </div>
+                        <Input
+                          type="date"
+                          value={invoiceDateFrom}
+                          onChange={(e) => setInvoiceDateFrom(e.target.value)}
+                          className="w-40 h-9 bg-white"
+                          placeholder="Desde"
+                        />
+                        <span className="text-gray-400">—</span>
+                        <Input
+                          type="date"
+                          value={invoiceDateTo}
+                          onChange={(e) => setInvoiceDateTo(e.target.value)}
+                          className="w-40 h-9 bg-white"
+                          placeholder="Hasta"
+                        />
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setSelectedInvoiceIds(new Set())}
+                          onClick={selectInvoicesByDateRange}
+                          className="text-orange-600 border-orange-300 hover:bg-orange-100"
                         >
-                          Cancelar
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setShowBulkDeleteConfirm(true)}
-                        >
-                          <Trash2 className="w-4 h-4 mr-1" />
-                          Eliminar Seleccionadas
+                          🔍 Seleccionar por fechas
                         </Button>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={clearDateSelection}
+                          className="text-gray-600"
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Limpiar selección
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bulk Actions */}
+                  {selectedInvoiceIds.size > 0 && (
+                    <>
+                      {/* CHIP DE RESUMEN DE SELECCIÓN */}
+                      <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <Check className="w-4 h-4 text-purple-600" />
+                            <span className="text-sm font-medium text-purple-800">
+                              <strong>{selectedInvoiceIds.size}</strong> factura(s) seleccionada(s)
+                            </span>
+                          </div>
+                          {(invoiceDateFrom && invoiceDateTo) && (
+                            <div className="flex items-center gap-2 px-3 py-1 bg-purple-100 rounded-full">
+                              <Calendar className="w-3 h-3 text-purple-600" />
+                              <span className="text-xs text-purple-700">
+                                📅 {invoiceDateFrom} → {invoiceDateTo}
+                              </span>
+                            </div>
+                          )}
+                          {dateSelectionCount > 0 && (
+                            <div className="flex items-center gap-2 px-3 py-1 bg-purple-100 rounded-full">
+                              <span className="text-xs text-purple-700">
+                                📊 {dateSelectionCount} del rango
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={clearDateSelection}
+                            className="text-gray-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* BARRA DE ACCIONES MASIVAS */}
+                      <div className="mb-4 p-3 bg-red-50 rounded-lg flex items-center justify-between">
+                        <span className="text-sm text-red-700 font-medium">
+                          {selectedInvoiceIds.size} factura(s) seleccionada(s)
+                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedInvoiceIds(new Set())}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setShowBulkDeleteConfirm(true)}
+                          >
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Eliminar Seleccionadas
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* BARRA DE PROGRESO - Eliminación masiva en curso */}
+                  {isDeletingInvoices && (
+                    <div className="mb-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-orange-600" />
+                          <span className="text-sm font-medium text-orange-800">
+                            🔄 Eliminando facturas... {deleteProgress.batch} de {deleteProgress.totalBatches}
+                          </span>
+                        </div>
+                        <span className="text-sm font-medium text-orange-800">
+                          {deleteProgress.current} de {deleteProgress.total}
+                        </span>
+                      </div>
+                      <div className="w-full bg-orange-200 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="bg-orange-500 h-full transition-all duration-300 ease-in-out"
+                          style={{
+                            width: `${deleteProgress.total > 0 ? (deleteProgress.current / deleteProgress.total) * 100 : 0}%`
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-orange-700 mt-2">
+                        Procesando lote {deleteProgress.batch} de {deleteProgress.totalBatches}...
+                      </p>
                     </div>
                   )}
 
@@ -8749,6 +9335,17 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             businessName={profileForm.businessName}
             onToast={(message) => setToastMessage(message)}
           />
+        )}
+
+        {/* Reseñas Tab */}
+        {activeTab === 'resenas' && user?.businessId && (
+          <div className="space-y-6">
+            <iframe
+              src={`/dashboard/reviews?businessId=${user.businessId}`}
+              className="w-full h-[calc(100vh-200px)] border-0 rounded-lg shadow-md"
+              title="Reseñas y Fidelización"
+            />
+          </div>
         )}
 
         {/* Suscripción Tab */}

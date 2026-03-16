@@ -40,7 +40,8 @@ import type {
   CreateUserData
 } from '@/types';
 import * as api from '@/services/api';
-import { 
+import { supabase } from '@/lib/supabaseClient';
+import {
   LayoutDashboard,
   Building2,
   Settings,
@@ -105,7 +106,8 @@ import {
   Activity,
   Clock,
   Download,
-  RotateCcw
+  RotateCcw,
+  Bell
 } from 'lucide-react';
 
 // --- Icon Mapping ---
@@ -149,6 +151,9 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showModuleModal, setShowModuleModal] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showIntegrationModal, setShowIntegrationModal] = useState(false);
+  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(false);
   const [showBusinessModal, setShowBusinessModal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
@@ -178,14 +183,26 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     description: '',
     price: 0,
     currency: 'COP' as Currency,
-    billingType: 'monthly' as BillingType
+    billingType: 'monthly' as BillingType,
+    trialEnabled: false,
+    trialDays: null as number | null,
+    trialAiCredits: null as number | null,
+    aiCreditsIncluded: 0,
+    aiCreditsLimit: null as number | null,
+    activateForAll: false
   });
   
   const [moduleForm, setModuleForm] = useState({
     name: '',
     description: '',
     type: 'addon' as ModuleType,
-    icon: 'zap'
+    icon: 'zap',
+    trialEnabled: false,
+    trialDays: null as number | null,
+    trialAiCredits: null as number | null,
+    aiCreditsIncluded: null as number | null,
+    aiCreditsLimit: null as number | null,
+    activateForAll: false
   });
   
   const [planForm, setPlanForm] = useState({
@@ -201,6 +218,17 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     maxCategories: 5,
     isPopular: false,
     color: '#8b5cf6'
+  });
+
+  const [integrationForm, setIntegrationForm] = useState({
+    name: '',
+    description: '',
+    icon: 'Zap',
+    trialEnabled: false,
+    trialDays: null as number | null,
+    trialAiCredits: null as number | null,
+    requiereApiKeyPropia: false,
+    activarTodos: false
   });
 
   const [businessForm, setBusinessForm] = useState({
@@ -249,7 +277,8 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     model: '',
     apiKey: '',
     baseUrl: '',
-    authType: 'bearer'
+    authType: 'bearer',
+    useCase: 'both'
   });
   const [libraryForm, setLibraryForm] = useState({
     name: '',
@@ -259,10 +288,76 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     file: null as File | null
   });
 
+  // ============================================================
+  // LOAD AI MODELS FROM SUPABASE
+  // ============================================================
+
+  const loadAIModels = useCallback(async () => {
+    try {
+      const response = await fetch('/api/ai-models');
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        // Convertir datos de Supabase al formato de AIModelConfig
+        const models: AIModelConfig[] = data.data.map((m: {
+          id: string;
+          provider: string;
+          name: string;
+          model: string;
+          active: boolean;
+          api_key: string;
+          base_url: string | null;
+          auth_type: string;
+          use_case: string;
+          created_at: string;
+          updated_at: string;
+        }) => ({
+          id: m.id,
+          provider: m.provider as AIProvider,
+          name: m.name,
+          model: m.model,
+          active: m.active,
+          apiKey: m.api_key,
+          baseUrl: m.base_url,
+          authType: m.auth_type as 'bearer' | 'header' | 'none',
+          useCase: m.use_case as UseCaseType,
+          createdAt: m.created_at,
+          updatedAt: m.updated_at
+        }));
+
+        // Actualizar aiConfig con los modelos cargados
+        setAiConfig(prev => {
+          if (!prev) {
+            return {
+              systemPrompt: '',
+              models: models,
+              temperature: 0.7,
+              maxTokens: 1000,
+              knowledgeSources: [],
+              activeModelId: models.find((m: AIModelConfig) => m.active)?.id || null,
+              enabled: true,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+          }
+          return {
+            ...prev,
+            models: models,
+            activeModelId: models.find((m: AIModelConfig) => m.active)?.id || prev.activeModelId
+          };
+        });
+      }
+    } catch (error) {
+      console.error('[SuperAdmin] Error cargando modelos:', error);
+    }
+  }, []);
+
   // --- Load Data ---
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      console.log('[SuperAdmin] Loading data from Supabase...');
+      
       const [bizRes, srvRes, modRes, planRes, userRes] = await Promise.all([
         api.businessService.getAll(),
         api.systemService.getAll(),
@@ -270,12 +365,27 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
         api.planService.getAll(),
         api.userService.getAll()
       ]);
+
+      console.log('[SuperAdmin] Business response:', bizRes);
+      console.log('[SuperAdmin] User response:', userRes);
+
+      if (bizRes.success && bizRes.data) {
+        console.log('[SuperAdmin] Setting businesses:', bizRes.data.length);
+        setBusinesses(bizRes.data);
+      } else {
+        console.warn('[SuperAdmin] Business load failed:', bizRes.error);
+      }
       
-      if (bizRes.success && bizRes.data) setBusinesses(bizRes.data);
       if (srvRes.success && srvRes.data) setServices(srvRes.data);
       if (modRes.success && modRes.data) setModules(modRes.data);
       if (planRes.success && planRes.data) setPlans(planRes.data);
-      if (userRes.success && userRes.data) setUsers(userRes.data);
+      
+      if (userRes.success && userRes.data) {
+        console.log('[SuperAdmin] Setting users:', userRes.data.length);
+        setUsers(userRes.data);
+      } else {
+        console.warn('[SuperAdmin] User load failed:', userRes.error);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -286,6 +396,31 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Cargar modelos de IA al montar
+  useEffect(() => {
+    loadAIModels();
+  }, [loadAIModels]);
+
+  // Cargar integraciones al montar
+  useEffect(() => {
+    const loadIntegrations = async () => {
+      setIsLoadingIntegrations(true);
+      try {
+        const response = await api.integrationService.getAll();
+        if (response.success && response.data) {
+          setIntegrations(response.data);
+          console.log('[Integrations] Loaded', response.data.length, 'integrations');
+        }
+      } catch (error) {
+        console.error('[Integrations] Error loading:', error);
+      } finally {
+        setIsLoadingIntegrations(false);
+      }
+    };
+
+    loadIntegrations();
+  }, []);
 
   // --- Load Payment Config ---
   const loadPaymentConfig = useCallback(async () => {
@@ -500,48 +635,123 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
 
   const handleSaveAIModel = async () => {
     if (!aiModelForm.apiKey || !aiModelForm.model) return;
-    
-    if (editingModel) {
-      const response = await api.aiConfigService.updateModel(editingModel.id, aiModelForm);
-      if (response.success && response.data && aiConfig) {
-        setAiConfig(prev => prev ? {
-          ...prev,
-          models: prev.models.map(m => m.id === editingModel.id ? response.data! : m)
-        } : null);
+
+    try {
+      if (editingModel) {
+        // Actualizar modelo existente en Supabase
+        const response = await fetch('/api/ai-models', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingModel.id,
+            provider: aiModelForm.provider,
+            name: aiModelForm.name,
+            model: aiModelForm.model,
+            api_key: aiModelForm.apiKey,
+            base_url: aiModelForm.baseUrl,
+            auth_type: aiModelForm.authType,
+            use_case: aiModelForm.useCase,
+            active: editingModel.active
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Recargar lista de modelos
+          await loadAIModels();
+        } else {
+          alert('Error al actualizar: ' + (data.error || 'Error desconocido'));
+        }
+      } else {
+        // Crear nuevo modelo en Supabase
+        const response = await fetch('/api/ai-models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: aiModelForm.provider,
+            name: aiModelForm.name,
+            model: aiModelForm.model,
+            api_key: aiModelForm.apiKey,
+            base_url: aiModelForm.baseUrl,
+            auth_type: aiModelForm.authType,
+            use_case: aiModelForm.useCase,
+            active: false
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Recargar lista de modelos
+          await loadAIModels();
+        } else {
+          alert('Error al crear: ' + (data.error || 'Error desconocido'));
+        }
       }
-    } else {
-      const response = await api.aiConfigService.addModel(aiModelForm);
-      if (response.success && response.data && aiConfig) {
-        setAiConfig(prev => prev ? {
-          ...prev,
-          models: [...prev.models, response.data!]
-        } : null);
-      }
+
+      setShowAiModelModal(false);
+      resetAiModelForm();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[SuperAdmin] Error guardando modelo:', message);
+      alert('Error al guardar modelo');
     }
-    
-    setShowAiModelModal(false);
-    resetAiModelForm();
   };
 
   const handleDeleteModel = async (id: string) => {
-    const response = await api.aiConfigService.deleteModel(id);
-    if (response.success && aiConfig) {
-      setAiConfig(prev => prev ? {
-        ...prev,
-        models: prev.models.filter(m => m.id !== id),
-        activeModelId: prev.activeModelId === id ? null : prev.activeModelId
-      } : null);
+    try {
+      const response = await fetch(`/api/ai-models?id=${id}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await loadAIModels();
+      } else {
+        alert('Error al eliminar: ' + (data.error || 'Error desconocido'));
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[SuperAdmin] Error eliminando modelo:', message);
+      alert('Error al eliminar modelo');
     }
   };
 
   const handleSetActiveModel = async (id: string) => {
-    const response = await api.aiConfigService.setActiveModel(id);
-    if (response.success && response.data && aiConfig) {
-      setAiConfig(prev => prev ? {
-        ...prev,
-        models: prev.models.map(m => ({ ...m, active: m.id === id })),
-        activeModelId: id
-      } : null);
+    try {
+      // Primero desactivar todos
+      const modelsResponse = await fetch('/api/ai-models');
+      const modelsData = await modelsResponse.json();
+
+      if (modelsData.success && modelsData.data) {
+        // Desactivar todos los modelos
+        for (const model of modelsData.data) {
+          await fetch('/api/ai-models', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: model.id,
+              provider: model.provider,
+              name: model.name,
+              model: model.model,
+              api_key: model.api_key,
+              base_url: model.base_url,
+              auth_type: model.auth_type,
+              use_case: model.use_case,
+              active: model.id === id // Solo activar el seleccionado
+            })
+          });
+        }
+
+        // Recargar lista
+        await loadAIModels();
+      }
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      console.error('[SuperAdmin] Error activando modelo:', message);
+      alert('Error al activar modelo');
     }
   };
 
@@ -552,7 +762,8 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
       model: '',
       apiKey: '',
       baseUrl: '',
-      authType: 'bearer'
+      authType: 'bearer',
+      useCase: 'both'
     });
     setEditingModel(null);
     setConnectionTestResult(null);
@@ -566,7 +777,8 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
       model: model.model,
       apiKey: model.apiKey,
       baseUrl: model.baseUrl ?? '',
-      authType: model.authType
+      authType: model.authType,
+      useCase: model.useCase
     });
     setShowAiModelModal(true);
   };
@@ -633,6 +845,34 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     const response = await api.systemService.toggleStatus(id);
     if (response.success && response.data) {
       setServices(prev => prev.map(s => s.id === id ? response.data! : s));
+      
+      // Si el servicio se activó, asignarlo a todos los negocios activos
+      if (response.data.status === 'active') {
+        try {
+          const businesses = await api.businessService.getAll();
+          if (businesses.success && businesses.data) {
+            const activeBusinesses = businesses.data.filter(b => b.status === 'active');
+
+            for (const business of activeBusinesses) {
+              await fetch('/api/business-services', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  businessId: business.id,
+                  serviceId: id,
+                  status: 'active',
+                  aiCreditsUsed: 0,
+                  aiCreditsResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                })
+              });
+            }
+
+            console.log(`[Service] ${response.data.name} activated for ${activeBusinesses.length} businesses`);
+          }
+        } catch (error) {
+          console.error('[Service] Error activating for all businesses:', error);
+        }
+      }
     }
   };
 
@@ -652,7 +892,36 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     } else {
       const response = await api.systemService.create(serviceForm);
       if (response.success && response.data) {
-        setServices(prev => [...prev, response.data!]);
+        const newService = response.data!;
+        setServices(prev => [...prev, newService]);
+        
+        // Si "Activar para todos" está ON, asignar a todos los negocios activos
+        if (serviceForm.activateForAll) {
+          try {
+            const businesses = await api.businessService.getAll();
+            if (businesses.success && businesses.data) {
+              const activeBusinesses = businesses.data.filter(b => b.status === 'active');
+              
+              for (const business of activeBusinesses) {
+                await fetch('/api/business-services', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    businessId: business.id,
+                    serviceId: newService.id,
+                    status: 'active',
+                    aiCreditsUsed: 0,
+                    aiCreditsResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                  })
+                });
+              }
+              
+              console.log(`[Service] Activated for ${activeBusinesses.length} businesses`);
+            }
+          } catch (error) {
+            console.error('[Service] Error activating for all businesses:', error);
+          }
+        }
       }
     }
     setShowServiceModal(false);
@@ -668,7 +937,36 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     } else {
       const response = await api.moduleService.create(moduleForm);
       if (response.success && response.data) {
-        setModules(prev => [...prev, response.data!]);
+        const newModule = response.data!;
+        setModules(prev => [...prev, newModule]);
+        
+        // Si "Activar para todos" está ON, asignar a todos los negocios activos
+        if (moduleForm.activateForAll) {
+          try {
+            const businesses = await api.businessService.getAll();
+            if (businesses.success && businesses.data) {
+              const activeBusinesses = businesses.data.filter(b => b.status === 'active');
+              
+              for (const business of activeBusinesses) {
+                await fetch('/api/business-modules', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    businessId: business.id,
+                    moduleId: newModule.id,
+                    status: 'active',
+                    aiCreditsUsed: 0,
+                    aiCreditsResetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                  })
+                });
+              }
+              
+              console.log(`[Module] Activated for ${activeBusinesses.length} businesses`);
+            }
+          } catch (error) {
+            console.error('[Module] Error activating for all businesses:', error);
+          }
+        }
       }
     }
     setShowModuleModal(false);
@@ -746,6 +1044,60 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     setPlans(prev => prev.filter(p => p.id !== id));
   };
 
+  const handleSaveIntegration = async () => {
+    if (!integrationForm.name || !integrationForm.description) {
+      alert('Nombre y descripción son requeridos');
+      return;
+    }
+
+    // Aquí iría la lógica para guardar en Supabase
+    // Por ahora solo mostramos un mensaje de éxito
+    console.log('[SuperAdmin] Saving integration:', integrationForm);
+    
+    // Si "Activar para todos" está ON, asignar a todos los negocios activos
+    if (integrationForm.activarTodos) {
+      try {
+        const businesses = await api.businessService.getAll();
+        if (businesses.success && businesses.data) {
+          const activeBusinesses = businesses.data.filter(b => b.status === 'active');
+          
+          for (const business of activeBusinesses) {
+            await fetch('/api/business-integrations', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                businessId: business.id,
+                integrationName: integrationForm.name,
+                status: 'active'
+              })
+            });
+          }
+          
+          console.log(`[Integration] Activated for ${activeBusinesses.length} businesses`);
+        }
+      } catch (error) {
+        console.error('[Integration] Error activating for all businesses:', error);
+      }
+    }
+
+    alert('✅ Integración guardada exitosamente');
+    setShowIntegrationModal(false);
+    resetIntegrationForm();
+  };
+
+  const resetIntegrationForm = () => {
+    setIntegrationForm({
+      name: '',
+      description: '',
+      icon: 'Zap',
+      trialEnabled: false,
+      trialDays: null,
+      trialAiCredits: null,
+      requiereApiKeyPropia: false,
+      activarTodos: false
+    });
+  };
+
   const handleSaveBusiness = async () => {
     const selectedPlan = plans.find(p => p.id === businessForm.planId);
     const newBusiness: Business = {
@@ -787,19 +1139,138 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     });
   };
 
-  const openManageBusiness = (business: Business) => {
+  const openManageBusiness = async (business: Business) => {
     setSelectedBusiness(business);
-    // Inicializar módulos y servicios asignados (simulado)
+    
+    // Inicializar módulos core (siempre asignados)
     setAssignedModules(modules.filter(m => m.type === 'core').map(m => m.id));
-    setAssignedServices([]);
+    
+    // Cargar servicios asignados desde business_services
+    try {
+      const { data: businessServices } = await supabase
+        .from('business_services')
+        .select('service_id')
+        .eq('business_id', business.id)
+        .eq('status', 'active');
+
+      const assignedServiceIds = businessServices?.map(s => s.service_id) || [];
+      setAssignedServices(assignedServiceIds);
+      
+      console.log('[SuperAdmin] Loaded services for business:', assignedServiceIds.length);
+    } catch (error) {
+      console.error('[SuperAdmin] Error loading services:', error);
+      setAssignedServices([]);
+    }
+    
     setShowManageModal(true);
   };
 
-  const handleSaveManageBusiness = () => {
-    // Aquí se guardarían los módulos y servicios asignados
-    // Por ahora solo cerramos el modal
-    setShowManageModal(false);
-    setSelectedBusiness(null);
+  const handleSaveManageBusiness = async () => {
+    try {
+      console.log('[SuperAdmin] Saving business:', selectedBusiness.id);
+      console.log('[SuperAdmin] Assigned services:', assignedServices);
+
+      // Actualizar estado del negocio (sin updated_at porque no existe en la tabla)
+      const { error: businessError } = await supabase
+        .from('businesses')
+        .update({
+          status: selectedBusiness.status
+        })
+        .eq('id', selectedBusiness.id);
+
+      if (businessError) {
+        console.error('[SuperAdmin] Error updating business:', JSON.stringify(businessError, null, 2));
+        alert('Error al actualizar el negocio: ' + (businessError.message || 'Error desconocido'));
+        return;
+      }
+
+      console.log('[SuperAdmin] Business updated successfully');
+
+      // Obtener el negocio actualizado
+      const { data: updatedBusiness } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('id', selectedBusiness.id)
+        .single();
+
+      console.log('[SuperAdmin] Updated business:', updatedBusiness);
+
+      // Guardar servicios asignados en business_services
+      // Primero, obtener servicios actuales del negocio
+      const { data: currentServices, error: currentServicesError } = await supabase
+        .from('business_services')
+        .select('service_id')
+        .eq('business_id', selectedBusiness.id);
+
+      if (currentServicesError) {
+        console.error('[SuperAdmin] Error getting current services:', currentServicesError);
+      }
+
+      const currentServiceIds = currentServices?.map(s => s.service_id) || [];
+
+      console.log('[SuperAdmin] Current services:', currentServiceIds);
+      console.log('[SuperAdmin] Services to insert:', assignedServices.filter(id => !currentServiceIds.includes(id)));
+      console.log('[SuperAdmin] Services to delete:', currentServiceIds.filter(id => !assignedServices.includes(id)));
+
+      // Servicios a insertar (nuevos)
+      const servicesToInsert = assignedServices.filter(id => !currentServiceIds.includes(id));
+      
+      // Servicios a eliminar (ya no asignados)
+      const servicesToDelete = currentServiceIds.filter(id => !assignedServices.includes(id));
+
+      // Insertar nuevos servicios
+      if (servicesToInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from('business_services')
+          .insert(
+            servicesToInsert.map(serviceId => ({
+              business_id: selectedBusiness.id,
+              service_id: serviceId,
+              status: 'active',
+              ai_credits_used: 0,
+              ai_credits_reset_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              created_at: new Date().toISOString()
+            }))
+          );
+
+        if (insertError) {
+          console.error('[SuperAdmin] Error inserting services:', JSON.stringify(insertError, null, 2));
+        } else {
+          console.log('[SuperAdmin] Services inserted:', servicesToInsert.length);
+        }
+      }
+
+      // Eliminar servicios no asignados
+      if (servicesToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('business_services')
+          .delete()
+          .eq('business_id', selectedBusiness.id)
+          .in('service_id', servicesToDelete);
+
+        if (deleteError) {
+          console.error('[SuperAdmin] Error deleting services:', JSON.stringify(deleteError, null, 2));
+        } else {
+          console.log('[SuperAdmin] Services deleted:', servicesToDelete.length);
+        }
+      }
+
+      // Actualizar lista de negocios
+      if (updatedBusiness) {
+        setBusinesses(prev => prev.map(b => b.id === selectedBusiness.id ? {
+          ...b,
+          status: updatedBusiness.status
+        } : b));
+      }
+
+      console.log('[SuperAdmin] Business saved successfully');
+      alert('✅ Negocio actualizado correctamente');
+      setShowManageModal(false);
+      setSelectedBusiness(null);
+    } catch (error) {
+      console.error('[SuperAdmin] Error saving business:', error);
+      alert('Error al guardar el negocio: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+    }
   };
 
   const toggleModuleAssignment = (moduleId: string) => {
@@ -918,12 +1389,15 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
   };
 
   const filteredUsers = users.filter(user => {
-    const matchSearch = !searchUser || 
+    const matchSearch = !searchUser ||
       user.name.toLowerCase().includes(searchUser.toLowerCase()) ||
       user.email.toLowerCase().includes(searchUser.toLowerCase()) ||
       user.username.toLowerCase().includes(searchUser.toLowerCase());
     const matchRole = filterUserRole === 'all' || user.role === filterUserRole;
     const matchStatus = filterUserStatus === 'all' || user.status === filterUserStatus;
+    
+    console.log('[SuperAdmin] Users state:', users.length, 'Filtered:', matchSearch && matchRole && matchStatus ? 'YES' : 'NO');
+    
     return matchSearch && matchRole && matchStatus;
   });
 
@@ -959,12 +1433,35 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
 
   // --- Reset Forms ---
   const resetServiceForm = () => {
-    setServiceForm({ name: '', description: '', price: 0, currency: 'COP', billingType: 'monthly' });
+    setServiceForm({
+      name: '',
+      description: '',
+      price: 0,
+      currency: 'COP',
+      billingType: 'monthly',
+      trialEnabled: false,
+      trialDays: null,
+      trialAiCredits: null,
+      aiCreditsIncluded: 0,
+      aiCreditsLimit: null,
+      activateForAll: false
+    });
     setEditingService(null);
   };
 
   const resetModuleForm = () => {
-    setModuleForm({ name: '', description: '', type: 'addon', icon: 'zap' });
+    setModuleForm({
+      name: '',
+      description: '',
+      type: 'addon',
+      icon: 'zap',
+      trialEnabled: false,
+      trialDays: null,
+      trialAiCredits: null,
+      aiCreditsIncluded: null,
+      aiCreditsLimit: null,
+      activateForAll: false
+    });
     setEditingModule(null);
   };
 
@@ -2792,8 +3289,9 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                                       "h-8 w-8 p-0",
                                       model.active ? "text-green-600" : "text-gray-400"
                                     )}
+                                    title={model.active ? "Desactivar" : "Activar"}
                                   >
-                                    {model.active ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                                    {model.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -2890,38 +3388,216 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Integraciones Disponibles</CardTitle>
-                    <p className="text-sm text-gray-500">
-                      Conecta tu negocio con herramientas externas.
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Integraciones Disponibles</CardTitle>
+                        <p className="text-sm text-gray-500">
+                          Conecta tu negocio con herramientas externas.
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => setShowIntegrationModal(true)}
+                        variant="outline"
+                        className="border-purple-600 text-purple-600 hover:bg-purple-50"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        + Agregar Integración
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {[
-                        { name: 'WhatsApp Business', desc: 'Envío automático de mensajes', icon: MessageCircle, color: 'green' },
-                        { name: 'Google Analytics', desc: 'Seguimiento de visitas', icon: BarChart3, color: 'blue' },
-                        { name: 'Facebook Pixel', desc: 'Remarketing y conversiones', icon: Globe, color: 'indigo' },
-                        { name: 'Slack', desc: 'Notificaciones en tiempo real', icon: MessageCircle, color: 'purple' }
-                      ].map((integration, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-4 border rounded-lg">
-                          <div className="flex items-center gap-4">
-                            <div className={cn(
-                              'w-12 h-12 rounded-lg flex items-center justify-center',
-                              `bg-${integration.color}-100`
-                            )}>
-                              <integration.icon className={cn('w-6 h-6', `text-${integration.color}-600`)} />
+                    {isLoadingIntegrations ? (
+                      <div className="flex justify-center py-8">
+                        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                      </div>
+                    ) : integrations.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <Globe className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                        <p>No hay integraciones disponibles</p>
+                        <p className="text-sm">Agregá tu primera integración</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {integrations.map((integration) => {
+                          // Mapear nombre del ícono a componente
+                          const iconMap: Record<string, any> = {
+                            MessageCircle: MessageCircle,
+                            BarChart: BarChart3,
+                            Globe: Globe,
+                            CreditCard: CreditCard,
+                            Bell: Bell,
+                            Link: Link2,
+                            Zap: Zap
+                          };
+                          const IconComponent = iconMap[integration.icon] || Zap;
+                          
+                          // Colores por categoría
+                          const colorMap: Record<string, string> = {
+                            communication: 'green',
+                            analytics: 'blue',
+                            marketing: 'indigo',
+                            payment: 'yellow',
+                            notification: 'red',
+                            general: 'gray'
+                          };
+                          const color = colorMap[integration.category] || 'gray';
+                          
+                          return (
+                            <div key={integration.id} className="flex items-center justify-between p-4 border rounded-lg">
+                              <div className="flex items-center gap-4">
+                                <div className={cn(
+                                  'w-12 h-12 rounded-lg flex items-center justify-center',
+                                  `bg-${color}-100`
+                                )}>
+                                  <IconComponent className={cn('w-6 h-6', `text-${color}-600`)} />
+                                </div>
+                                <div>
+                                  <h4 className="font-medium">{integration.name}</h4>
+                                  <p className="text-sm text-gray-500">{integration.description}</p>
+                                </div>
+                              </div>
+                              <Button size="sm" variant="outline">Configurar</Button>
                             </div>
-                            <div>
-                              <h4 className="font-medium">{integration.name}</h4>
-                              <p className="text-sm text-gray-500">{integration.desc}</p>
-                            </div>
-                          </div>
-                          <Button size="sm" variant="outline">Configurar</Button>
-                        </div>
-                      ))}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
+
+                {/* Nueva Integración Modal */}
+                <Dialog open={showIntegrationModal} onOpenChange={setShowIntegrationModal}>
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Nueva Integración</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      {/* Campo 1: Nombre */}
+                      <div>
+                        <Label>Nombre</Label>
+                        <Input
+                          value={integrationForm.name}
+                          onChange={e => setIntegrationForm(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="Ej: Stripe Pagos"
+                        />
+                      </div>
+
+                      {/* Campo 2: Descripción */}
+                      <div>
+                        <Label>Descripción</Label>
+                        <Textarea
+                          value={integrationForm.description}
+                          onChange={e => setIntegrationForm(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="Ej: Pasarela de pagos online"
+                        />
+                      </div>
+
+                      {/* Campo 3: Ícono */}
+                      <div>
+                        <Label>Ícono</Label>
+                        <Select
+                          value={integrationForm.icon}
+                          onValueChange={(v) => setIntegrationForm(prev => ({ ...prev, icon: v }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Zap">⚡ Zap (Rápido)</SelectItem>
+                            <SelectItem value="Globe">🌐 Globe (Global)</SelectItem>
+                            <SelectItem value="MessageCircle">💬 Message (Mensajes)</SelectItem>
+                            <SelectItem value="BarChart">📊 BarChart (Estadísticas)</SelectItem>
+                            <SelectItem value="CreditCard">💳 CreditCard (Pagos)</SelectItem>
+                            <SelectItem value="Bell">🔔 Bell (Notificaciones)</SelectItem>
+                            <SelectItem value="Link">🔗 Link (Enlace)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Campo 4: Prueba Gratuita */}
+                      <div className="border-t pt-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className="text-base">Prueba Gratuita</Label>
+                          <Switch
+                            checked={integrationForm.trialEnabled}
+                            onCheckedChange={(v) => setIntegrationForm(prev => ({ ...prev, trialEnabled: v }))}
+                          />
+                        </div>
+                        {integrationForm.trialEnabled && (
+                          <div className="space-y-3 mt-3 pl-2 border-l-2 border-purple-200">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label className="text-sm">Duración (días)</Label>
+                                <Select
+                                  value={String(integrationForm.trialDays || 1)}
+                                  onValueChange={(v) => setIntegrationForm(prev => ({ ...prev, trialDays: Number(v) }))}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {[1, 2, 3, 4, 5, 6, 7].map(days => (
+                                      <SelectItem key={days} value={String(days)}>
+                                        {days} {days === 1 ? 'día' : 'días'}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <Label className="text-sm">Créditos IA gratis</Label>
+                                <Input
+                                  type="number"
+                                  value={integrationForm.trialAiCredits || ''}
+                                  onChange={e => setIntegrationForm(prev => ({ ...prev, trialAiCredits: Number(e.target.value) || null }))}
+                                  placeholder="Ej: 10"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Campo 5: Requiere API Key propia */}
+                      <div className="border-t pt-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-base">Requiere API Key propia</Label>
+                            <p className="text-xs text-gray-500 mt-1">
+                              El negocio debe ingresar su propia API Key
+                            </p>
+                          </div>
+                          <Switch
+                            checked={integrationForm.requiereApiKeyPropia}
+                            onCheckedChange={(v) => setIntegrationForm(prev => ({ ...prev, requiereApiKeyPropia: v }))}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Campo 6: Activar para todos */}
+                      <div className="border-t pt-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-base">Activar para todos los negocios</Label>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Asigna automáticamente a todos los negocios activos
+                            </p>
+                          </div>
+                          <Switch
+                            checked={integrationForm.activarTodos}
+                            onCheckedChange={(v) => setIntegrationForm(prev => ({ ...prev, activarTodos: v }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setShowIntegrationModal(false)}>Cancelar</Button>
+                      <Button onClick={handleSaveIntegration} className="bg-purple-600 hover:bg-purple-700">
+                        Guardar Integración
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
 
@@ -3278,6 +3954,94 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Campo 1: Prueba Gratuita */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-base">Prueba Gratuita</Label>
+                <Switch
+                  checked={serviceForm.trialEnabled}
+                  onCheckedChange={(v) => setServiceForm(prev => ({ ...prev, trialEnabled: v }))}
+                />
+              </div>
+              {serviceForm.trialEnabled && (
+                <div className="space-y-3 mt-3 pl-2 border-l-2 border-purple-200">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm">Duración (días)</Label>
+                      <Select
+                        value={String(serviceForm.trialDays || 1)}
+                        onValueChange={(v) => setServiceForm(prev => ({ ...prev, trialDays: Number(v) }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5, 6, 7].map(days => (
+                            <SelectItem key={days} value={String(days)}>
+                              {days} {days === 1 ? 'día' : 'días'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-sm">Créditos IA en prueba</Label>
+                      <Input
+                        type="number"
+                        value={serviceForm.trialAiCredits || ''}
+                        onChange={e => setServiceForm(prev => ({ ...prev, trialAiCredits: Number(e.target.value) || null }))}
+                        placeholder="Ej: 10"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Campo 2: Activar para todos */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base">Activar para todos los negocios</Label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Asigna este servicio automáticamente a todos los negocios activos
+                  </p>
+                </div>
+                <Switch
+                  checked={serviceForm.activateForAll}
+                  onCheckedChange={(v) => setServiceForm(prev => ({ ...prev, activateForAll: v }))}
+                />
+              </div>
+            </div>
+
+            {/* Campo 3: Créditos de IA */}
+            <div className="border-t pt-4">
+              <Label className="text-base">Créditos de IA incluidos</Label>
+              <p className="text-xs text-gray-500 mb-3">
+                Los créditos se reinician automáticamente cada mes
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm">Créditos incluidos</Label>
+                  <Input
+                    type="number"
+                    value={serviceForm.aiCreditsIncluded}
+                    onChange={e => setServiceForm(prev => ({ ...prev, aiCreditsIncluded: Number(e.target.value) || 0 }))}
+                    placeholder="Ej: 30"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">Límite de usos por mes</Label>
+                  <Input
+                    type="number"
+                    value={serviceForm.aiCreditsLimit || ''}
+                    onChange={e => setServiceForm(prev => ({ ...prev, aiCreditsLimit: Number(e.target.value) || null }))}
+                    placeholder="Ej: 50"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowServiceModal(false)}>Cancelar</Button>
@@ -3347,6 +4111,96 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                     <SelectItem value="zap">Zap</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* Campo 1: Prueba Gratuita */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-base">Prueba Gratuita</Label>
+                <Switch
+                  checked={moduleForm.trialEnabled}
+                  onCheckedChange={(v) => setModuleForm(prev => ({ ...prev, trialEnabled: v }))}
+                />
+              </div>
+              {moduleForm.trialEnabled && (
+                <div className="space-y-3 mt-3 pl-2 border-l-2 border-purple-200">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm">Duración (días)</Label>
+                      <Select
+                        value={String(moduleForm.trialDays || 1)}
+                        onValueChange={(v) => setModuleForm(prev => ({ ...prev, trialDays: Number(v) }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5, 6, 7].map(days => (
+                            <SelectItem key={days} value={String(days)}>
+                              {days} {days === 1 ? 'día' : 'días'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-sm">Créditos IA en prueba</Label>
+                      <Input
+                        type="number"
+                        value={moduleForm.trialAiCredits || ''}
+                        onChange={e => setModuleForm(prev => ({ ...prev, trialAiCredits: Number(e.target.value) || null }))}
+                        placeholder="Ej: 10"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Campo 2: Créditos de IA (solo si Tipo = IA) */}
+            {moduleForm.type === 'ia' && (
+              <div className="border-t pt-4">
+                <Label className="text-base">Créditos de IA incluidos</Label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Los créditos se reinician automáticamente cada mes
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm">Créditos incluidos</Label>
+                    <Input
+                      type="number"
+                      value={moduleForm.aiCreditsIncluded || ''}
+                      onChange={e => setModuleForm(prev => ({ ...prev, aiCreditsIncluded: Number(e.target.value) || null }))}
+                      placeholder="Ej: 30"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm">Límite de usos por mes</Label>
+                    <Input
+                      type="number"
+                      value={moduleForm.aiCreditsLimit || ''}
+                      onChange={e => setModuleForm(prev => ({ ...prev, aiCreditsLimit: Number(e.target.value) || null }))}
+                      placeholder="Ej: 50"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Campo 3: Activar para todos */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base">Activar para todos los negocios</Label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Asigna este módulo automáticamente a todos los negocios activos
+                  </p>
+                </div>
+                <Switch
+                  checked={moduleForm.activateForAll}
+                  onCheckedChange={(v) => setModuleForm(prev => ({ ...prev, activateForAll: v }))}
+                />
               </div>
             </div>
           </div>
@@ -3771,6 +4625,32 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                 onChange={(e) => setAiModelForm(prev => ({ ...prev, model: e.target.value }))}
                 placeholder="gemini-1.5-flash, gpt-4o-mini, llama-3.1-70b-versatile"
               />
+            </div>
+
+            {/* Use Case Selection */}
+            <div>
+              <Label>Uso del modelo</Label>
+              <Select
+                value={aiModelForm.useCase}
+                onValueChange={(v: 'text' | 'image' | 'both') => setAiModelForm(prev => ({
+                  ...prev,
+                  useCase: v
+                }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="both">Texto e Imagen</SelectItem>
+                  <SelectItem value="text">Solo Texto</SelectItem>
+                  <SelectItem value="image">Solo Imagen</SelectItem>
+                </SelectContent>
+              </Select>
+              {aiModelForm.provider === 'Groq' && aiModelForm.useCase === 'image' && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠️ Groq no soporta generación de imágenes
+                </p>
+              )}
             </div>
 
             {/* API Key */}

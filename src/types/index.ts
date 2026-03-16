@@ -7,7 +7,7 @@
 export type EntityStatus = 'active' | 'inactive' | 'suspended' | 'pending_payment';
 export type BillingType = 'monthly' | 'one_time' | 'yearly' | 'lifetime';
 export type Currency = 'COP' | 'USD';
-export type ModuleType = 'core' | 'addon';
+export type ModuleType = 'core' | 'addon' | 'ia';
 
 // --- Entity Status Types ---
 export type ServiceStatus = 'active' | 'inactive';
@@ -98,6 +98,11 @@ export interface CreateServiceData {
   price: number;
   currency: Currency;
   billingType: BillingType;
+  trialEnabled?: boolean;
+  trialDays?: number | null;
+  trialAiCredits?: number | null;
+  aiCreditsIncluded?: number;
+  aiCreditsLimit?: number | null;
 }
 
 export interface UpdateServiceData {
@@ -107,6 +112,11 @@ export interface UpdateServiceData {
   currency?: Currency;
   billingType?: BillingType;
   status?: ServiceStatus;
+  trialEnabled?: boolean;
+  trialDays?: number | null;
+  trialAiCredits?: number | null;
+  aiCreditsIncluded?: number;
+  aiCreditsLimit?: number | null;
 }
 
 // --- Module ---
@@ -127,6 +137,12 @@ export interface CreateModuleData {
   description: string;
   type: ModuleType;
   icon: string;
+  trialEnabled?: boolean;
+  trialDays?: number | null;
+  trialAiCredits?: number | null;
+  aiCreditsIncluded?: number | null;
+  aiCreditsLimit?: number | null;
+  activateForAll?: boolean;
 }
 
 export interface UpdateModuleData {
@@ -135,6 +151,11 @@ export interface UpdateModuleData {
   type?: ModuleType;
   icon?: string;
   status?: ModuleStatus;
+  trialEnabled?: boolean;
+  trialDays?: number | null;
+  trialAiCredits?: number | null;
+  aiCreditsIncluded?: number | null;
+  aiCreditsLimit?: number | null;
 }
 
 // --- Plan ---
@@ -395,6 +416,8 @@ export interface ModuleFilters {
 
 export type AIProvider = 'Google Gemini' | 'OpenAI GPT' | 'Groq' | 'Custom API';
 
+export type UseCaseType = 'text' | 'image' | 'both';
+
 export interface AIModelConfig {
   id: string;
   provider: AIProvider;
@@ -404,6 +427,7 @@ export interface AIModelConfig {
   apiKey: string;
   baseUrl: string | null;
   authType: 'bearer' | 'header' | 'none';
+  useCase: UseCaseType;
   createdAt: string;
   updatedAt: string;
 }
@@ -455,6 +479,7 @@ export interface CreateAIModelData {
   apiKey: string;
   baseUrl?: string;
   authType?: 'bearer' | 'header' | 'none';
+  useCase?: UseCaseType;
 }
 
 // --- User Management Types ---
