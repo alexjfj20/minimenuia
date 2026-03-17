@@ -230,15 +230,15 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             </Button>
           </div>
           
-          {/* Hero Image Placeholder */}
-          <div className="mt-16 rounded-2xl bg-gray-100 border-2 border-dashed border-gray-300 p-8">
-            <div className="aspect-video flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-24 h-24 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Utensils className="w-12 h-12 text-purple-600" />
-                </div>
-                <p className="text-gray-500">Vista previa del panel de administración</p>
-              </div>
+          {/* Hero Image */}
+          <div className="mt-16">
+            <div className="rounded-2xl overflow-hidden shadow-2xl border border-gray-200">
+              <img
+                src="/img/catalogo.png"
+                alt="Vista previa del panel de administración"
+                className="w-full h-auto object-cover"
+                loading="lazy"
+              />
             </div>
           </div>
         </div>
