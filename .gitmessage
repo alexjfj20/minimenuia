@@ -1,5 +1,6 @@
-fix: properly wrap useSearchParams in Suspense boundary for /dashboard/reviews
+fix: refactor /dashboard/reseñas page to avoid useAuth SSR issues
 
-- Refactored ReviewsDashboard to use Suspense boundary
-- Moved useSearchParams() to child component ReviewsContent
-- Fixes Next.js error: "useSearchParams() should be wrapped in a suspense boundary"
+- Removed dependency on useAuth hook
+- Changed to use businessId from URL query parameter instead
+- Wrapped component in Suspense boundary for proper SSR handling
+- Fixes build error: "useAuth must be used within an AuthProvider"
