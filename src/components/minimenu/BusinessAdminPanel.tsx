@@ -3,13 +3,14 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabaseClient';
+import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusBadge } from './StatusBadge';
 import type { User } from '@/types';
@@ -416,6 +417,7 @@ function OrderCard({ order, timer, onView }: OrderCardProps) {
 }
 
 export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showProductModal, setShowProductModal] = useState(false);
   const [searchProduct, setSearchProduct] = useState('');
@@ -542,7 +544,15 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     nequiPhone: string;
     nequiHolder: string;
     bancolombiaAccount: string;
-  } | null>(null);
+  }>({
+    hotmartEnabled: false,
+    nequiEnabled: false,
+    bancolombiaEnabled: false,
+    nequiPhone: '',
+    nequiHolder: '',
+    bancolombiaAccount: ''
+  });
+  const [expandedPaymentMethod, setExpandedPaymentMethod] = useState<'nequi' | 'bancolombia' | null>(null);
 
   // --- Speech Recognition Reference ---
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -784,17 +794,25 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         const response = await fetch('/api/public/plans');
         const data = await response.json();
 
+        console.log('[Subscription] Plans API response:', data);
+
         if (data.success && data.data) {
           setAvailablePlans(data.data);
           console.log('[Subscription] Loaded', data.data.length, 'plans from API');
+          console.log('[Subscription] Plans:', data.data.map((p: { name: string; isActive: boolean; isPublic: boolean }) => ({
+            name: p.name,
+            isActive: p.isActive,
+            isPublic: p.isPublic
+          })));
+        } else {
+          console.error('[Subscription] Plans API returned error or empty data:', data);
         }
 
         // Cargar plan actual del negocio desde businesses table
-        // NOTA: Usar solo columnas que existen: id, name, plan_name, created_at
-        // Si plan_id no existe, usamos plan_name como fallback
+        // NOTA: La columna en Supabase es planId (camelCase) y createdAt
         const { data: businessData, error } = await supabase
           .from('businesses')
-          .select('id, name, plan_name, created_at')
+          .select('id, name, planId, createdAt')
           .eq('id', user.businessId)
           .maybeSingle();
 
@@ -804,67 +822,160 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           console.error('[Subscription] User businessId:', user.businessId);
         } else if (businessData) {
           console.log('[Subscription] Business data loaded:', businessData);
-          
-          // Si businessData tiene plan_name, buscar el plan por nombre
+
+          // Si businessData tiene planId, buscar el plan por ID
           // Si no, mostrar plan genérico
-          if (businessData.plan_name) {
-            const currentPlanData = data.data?.find((p: { name: string }) => 
-              p.name.toLowerCase() === businessData.plan_name?.toLowerCase()
+          if (businessData.planId) {
+            const currentPlanData = data.data?.find((p: { id: string }) =>
+              p.id === businessData.planId
             );
-            
+
             if (currentPlanData) {
               setCurrentPlan({
                 id: currentPlanData.id,
                 name: currentPlanData.name,
                 price: currentPlanData.price,
-                startDate: businessData.created_at,
-                endDate: new Date(new Date(businessData.created_at).setMonth(new Date(businessData.created_at).getMonth() + 1)).toISOString(),
+                startDate: businessData.createdAt,
+                endDate: new Date(new Date(businessData.createdAt).setMonth(new Date(businessData.createdAt).getMonth() + 1)).toISOString(),
                 status: 'active'
               });
             } else {
               // Plan no encontrado en la lista, usar info básica
               setCurrentPlan({
                 id: 'unknown',
-                name: businessData.plan_name,
+                name: 'Plan Básico',
                 price: 0,
-                startDate: businessData.created_at,
-                endDate: new Date(new Date(businessData.created_at).setMonth(new Date(businessData.created_at).getMonth() + 1)).toISOString(),
+                startDate: businessData.createdAt,
+                endDate: new Date(new Date(businessData.createdAt).setMonth(new Date(businessData.createdAt).getMonth() + 1)).toISOString(),
                 status: 'active'
               });
             }
           } else {
-            // No hay plan_name, usar plan por defecto
+            // No hay planId, usar plan por defecto (GRATIS)
             setCurrentPlan({
               id: 'free',
               name: 'Plan Gratuito',
               price: 0,
-              startDate: businessData.created_at,
-              endDate: new Date(new Date(businessData.created_at).setMonth(new Date(businessData.created_at).getMonth() + 1)).toISOString(),
+              startDate: businessData.createdAt,
+              endDate: new Date(new Date(businessData.createdAt).setMonth(new Date(businessData.createdAt).getMonth() + 1)).toISOString(),
               status: 'active'
             });
           }
-          
+
           console.log('[Subscription] Current plan set to:', currentPlan);
         } else {
           console.warn('[Subscription] No business data found for user:', user.businessId);
+          // Si no hay negocio, usar plan gratuito por defecto para mostrar la UI
+          setCurrentPlan({
+            id: 'free',
+            name: 'Plan Gratuito',
+            price: 0,
+            startDate: new Date().toISOString(),
+            endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
+            status: 'active'
+          });
         }
 
-        // Cargar métodos de pago activos desde global_payment_config
-        const { data: paymentConfig } = await supabase
-          .from('global_payment_config')
-          .select('*')
-          .single();
+        // Cargar métodos de pago activos desde API (configurado por Super Admin en Supabase)
+        // FALLBACK: Si la tabla no existe, usa localStorage
+        try {
+          console.log('============================================');
+          console.log('[Subscription] Loading payment config from API...');
+          const response = await fetch('/api/payment-config');
+          const data = await response.json();
 
-        if (paymentConfig) {
-          console.log('[Subscription] Payment config loaded:', paymentConfig);
-          setPaymentMethods({
-            hotmartEnabled: paymentConfig.stripe?.enabled || false,
-            nequiEnabled: paymentConfig.nequi?.enabled || false,
-            bancolombiaEnabled: paymentConfig.bancolombia?.enabled || false,
-            nequiPhone: paymentConfig.nequi?.phone || '',
-            nequiHolder: paymentConfig.nequi?.accountHolder || '',
-            bancolombiaAccount: paymentConfig.bancolombia?.instructions || ''
-          });
+          console.log('[Subscription] API response:', data);
+          console.log('[Subscription] API data.hotmart:', data.data?.hotmart);
+          console.log('[Subscription] API data.nequi:', data.data?.nequi);
+          console.log('[Subscription] API data.bancolombia:', data.data?.bancolombia);
+
+          if (data.success && data.data) {
+            const paymentConfig = data.data;
+            console.log('[Subscription] Payment config loaded from API:', paymentConfig);
+            console.log('[Subscription] hotmart.enabled:', paymentConfig.hotmart?.enabled);
+            console.log('[Subscription] nequi.enabled:', paymentConfig.nequi?.enabled);
+            console.log('[Subscription] bancolombia.enabled:', paymentConfig.bancolombia?.enabled);
+
+            setPaymentMethods({
+              hotmartEnabled: paymentConfig.hotmart?.enabled || false,
+              nequiEnabled: paymentConfig.nequi?.enabled || false,
+              bancolombiaEnabled: paymentConfig.bancolombia?.enabled || false,
+              nequiPhone: paymentConfig.nequi?.accountNumber || '',
+              nequiHolder: paymentConfig.nequi?.accountHolder || '',
+              bancolombiaAccount: paymentConfig.bancolombia?.accountNumber || ''
+            });
+            
+            console.log('[Subscription] paymentMethods set to:', {
+              hotmartEnabled: paymentConfig.hotmart?.enabled,
+              nequiEnabled: paymentConfig.nequi?.enabled,
+              bancolombiaEnabled: paymentConfig.bancolombia?.enabled
+            });
+          } else {
+            console.warn('[Subscription] API returned error, trying localStorage fallback...');
+            // Fallback a localStorage
+            const storedConfig = localStorage.getItem('minimenu_payment_config');
+            if (storedConfig) {
+              const paymentConfig = JSON.parse(storedConfig);
+              console.log('[Subscription] Payment config loaded from localStorage:', paymentConfig);
+              setPaymentMethods({
+                hotmartEnabled: paymentConfig.hotmart?.enabled || false,
+                nequiEnabled: paymentConfig.nequi?.enabled || false,
+                bancolombiaEnabled: paymentConfig.bancolombia?.enabled || false,
+                nequiPhone: paymentConfig.nequi?.accountNumber || '',
+                nequiHolder: paymentConfig.nequi?.accountHolder || '',
+                bancolombiaAccount: paymentConfig.bancolombia?.accountNumber || ''
+              });
+            } else {
+              console.warn('[Subscription] No payment config in localStorage either');
+              setPaymentMethods({
+                hotmartEnabled: false,
+                nequiEnabled: false,
+                bancolombiaEnabled: false,
+                nequiPhone: '',
+                nequiHolder: '',
+                bancolombiaAccount: ''
+              });
+            }
+          }
+          console.log('============================================');
+        } catch (error) {
+          console.error('[Subscription] Error loading from API, trying localStorage fallback:', error);
+          // Fallback a localStorage si la API falla
+          try {
+            const storedConfig = localStorage.getItem('minimenu_payment_config');
+            if (storedConfig) {
+              const paymentConfig = JSON.parse(storedConfig);
+              console.log('[Subscription] Payment config loaded from localStorage:', paymentConfig);
+              setPaymentMethods({
+                hotmartEnabled: paymentConfig.hotmart?.enabled || false,
+                nequiEnabled: paymentConfig.nequi?.enabled || false,
+                bancolombiaEnabled: paymentConfig.bancolombia?.enabled || false,
+                nequiPhone: paymentConfig.nequi?.accountNumber || '',
+                nequiHolder: paymentConfig.nequi?.accountHolder || '',
+                bancolombiaAccount: paymentConfig.bancolombia?.accountNumber || ''
+              });
+            } else {
+              console.warn('[Subscription] No payment config found anywhere');
+              setPaymentMethods({
+                hotmartEnabled: false,
+                nequiEnabled: false,
+                bancolombiaEnabled: false,
+                nequiPhone: '',
+                nequiHolder: '',
+                bancolombiaAccount: ''
+              });
+            }
+          } catch (fallbackError) {
+            console.error('[Subscription] Error loading from localStorage:', fallbackError);
+            setPaymentMethods({
+              hotmartEnabled: false,
+              nequiEnabled: false,
+              bancolombiaEnabled: false,
+              nequiPhone: '',
+              nequiHolder: '',
+              bancolombiaAccount: ''
+            });
+          }
         }
       } catch (error) {
         console.error('[Subscription] Error loading data:', error);
@@ -874,7 +985,10 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     };
 
     if (user.businessId) {
+      console.log('[Subscription] useEffect triggered, businessId:', user.businessId);
       loadSubscriptionData();
+    } else {
+      console.warn('[Subscription] useEffect skipped, user.businessId is null');
     }
   }, [user.businessId]);
 
@@ -9758,55 +9872,204 @@ El precio debe ser un número entero en pesos colombianos.`
                                         Elige tu método de pago para activar el plan
                                       </DialogDescription>
                                     </DialogHeader>
+                                    
+                                    {/* Debug logging */}
+                                    {console.log('[Modal Debug] paymentMethods:', paymentMethods)}
+                                    {console.log('[Modal Debug] hotmartEnabled:', paymentMethods?.hotmartEnabled)}
+                                    {console.log('[Modal Debug] nequiEnabled:', paymentMethods?.nequiEnabled)}
+                                    {console.log('[Modal Debug] bancolombiaEnabled:', paymentMethods?.bancolombiaEnabled)}
+                                    
                                     <div className="space-y-3 mt-4">
+                                      {/* Título de métodos de pago */}
+                                      <div className="border-b pb-2 mb-3">
+                                        <h4 className="font-semibold text-sm text-gray-700">Métodos de Pago Disponibles</h4>
+                                      </div>
+
                                       {/* Hotmart */}
-                                      {paymentMethods?.hotmartEnabled && plan.hotmartUrl && (
+                                      {paymentMethods?.hotmartEnabled ? (
                                         <Button
-                                          className="w-full"
-                                          onClick={() => window.open(plan.hotmartUrl || '#', '_blank')}
+                                          className="w-full justify-start"
+                                          onClick={() => {
+                                            if (plan.hotmartUrl) {
+                                              window.open(plan.hotmartUrl, '_blank');
+                                            } else {
+                                              alert('⚠️ El plan no tiene enlace de Hotmart configurado.\n\nContacta al administrador para obtener el enlace de pago.');
+                                            }
+                                          }}
                                         >
-                                          <CreditCard className="w-4 h-4 mr-2" />
-                                          Pagar con Tarjeta (Hotmart)
+                                          <CreditCard className="w-5 h-5 mr-3" />
+                                          <div className="text-left">
+                                            <p className="font-medium">Tarjeta de Crédito/Débito</p>
+                                            <p className="text-xs text-gray-500">Procesado por Hotmart</p>
+                                          </div>
                                         </Button>
-                                      )}
+                                      ) : null}
 
                                       {/* Nequi */}
-                                      {paymentMethods?.nequiEnabled && (
-                                        <Button
-                                          variant="outline"
-                                          className="w-full"
-                                          onClick={() => {
-                                            navigator.clipboard.writeText(paymentMethods.nequiPhone);
-                                            alert(`Número Nequi copiado: ${paymentMethods.nequiPhone}\n\nTitular: ${paymentMethods.nequiHolder}\n\nMonto: $${plan.price.toLocaleString('es-CO')}`);
-                                          }}
-                                        >
-                                          <Smartphone className="w-4 h-4 mr-2" />
-                                          Nequi: {paymentMethods.nequiPhone}
-                                        </Button>
-                                      )}
+                                      {paymentMethods?.nequiEnabled ? (
+                                        <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                          <Button
+                                            variant="ghost"
+                                            className="w-full justify-start p-4 hover:bg-gray-50"
+                                            onClick={() => setExpandedPaymentMethod(expandedPaymentMethod === 'nequi' ? null : 'nequi')}
+                                          >
+                                            <Smartphone className="w-5 h-5 mr-3 text-purple-600" />
+                                            <div className="text-left flex-1">
+                                              <p className="font-medium text-gray-900">Nequi</p>
+                                              <p className="text-xs text-gray-500">
+                                                {paymentMethods.nequiPhone ? `${paymentMethods.nequiPhone} - ${paymentMethods.nequiHolder}` : 'Configuración pendiente'}
+                                              </p>
+                                            </div>
+                                            <svg
+                                              className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
+                                                expandedPaymentMethod === 'nequi' ? 'rotate-180' : ''
+                                              }`}
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                            >
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                          </Button>
+                                          
+                                          {/* Accordion Content */}
+                                          {expandedPaymentMethod === 'nequi' && paymentMethods.nequiPhone && (
+                                            <div className="px-4 pb-4 animate-slide-down">
+                                              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                                                <div>
+                                                  <p className="text-xs font-medium text-purple-700 uppercase mb-1">Número de Nequi</p>
+                                                  <div className="flex items-center gap-2">
+                                                    <p className="text-lg font-bold text-purple-900">{paymentMethods.nequiPhone}</p>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      className="h-8 px-2"
+                                                      onClick={() => {
+                                                        navigator.clipboard.writeText(paymentMethods.nequiPhone);
+                                                        toast.showSuccess('¡Copiado!', 'El número de Nequi se copió al portapapeles');
+                                                      }}
+                                                    >
+                                                      <Copy className="w-4 h-4" />
+                                                    </Button>
+                                                  </div>
+                                                </div>
+                                                
+                                                <div>
+                                                  <p className="text-xs font-medium text-purple-700 uppercase mb-1">Titular</p>
+                                                  <p className="text-sm text-purple-900">{paymentMethods.nequiHolder}</p>
+                                                </div>
+                                                
+                                                <div>
+                                                  <p className="text-xs font-medium text-purple-700 uppercase mb-1">Monto a Pagar</p>
+                                                  <p className="text-2xl font-bold text-purple-900">${plan.price.toLocaleString('es-CO')} COP</p>
+                                                </div>
+                                                
+                                                <div className="pt-2 border-t border-purple-200">
+                                                  <p className="text-xs text-purple-700">
+                                                    <strong>Instrucciones:</strong> Realiza el pago al número mostrado y envía el comprobante al administrador para activar tu plan.
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : null}
 
                                       {/* Bancolombia */}
-                                      {paymentMethods?.bancolombiaEnabled && (
-                                        <Button
-                                          variant="outline"
-                                          className="w-full"
-                                          onClick={() => {
-                                            navigator.clipboard.writeText(paymentMethods.bancolombiaAccount);
-                                            alert(`Datos de Bancolombia copiados\n\n${paymentMethods.bancolombiaAccount}\n\nMonto: $${plan.price.toLocaleString('es-CO')}`);
-                                          }}
-                                        >
-                                          <Landmark className="w-4 h-4 mr-2" />
-                                          Transferencia Bancolombia
-                                        </Button>
-                                      )}
+                                      {paymentMethods?.bancolombiaEnabled ? (
+                                        <div className="border border-gray-200 rounded-lg overflow-hidden mt-3">
+                                          <Button
+                                            variant="ghost"
+                                            className="w-full justify-start p-4 hover:bg-gray-50"
+                                            onClick={() => setExpandedPaymentMethod(expandedPaymentMethod === 'bancolombia' ? null : 'bancolombia')}
+                                          >
+                                            <Landmark className="w-5 h-5 mr-3 text-purple-600" />
+                                            <div className="text-left flex-1">
+                                              <p className="font-medium text-gray-900">Transferencia Bancolombia</p>
+                                              <p className="text-xs text-gray-500">
+                                                {paymentMethods.bancolombiaAccount ? 'Copia los datos para transferir' : 'Configuración pendiente'}
+                                              </p>
+                                            </div>
+                                            <svg
+                                              className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${
+                                                expandedPaymentMethod === 'bancolombia' ? 'rotate-180' : ''
+                                              }`}
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                            >
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                          </Button>
+                                          
+                                          {/* Accordion Content */}
+                                          {expandedPaymentMethod === 'bancolombia' && paymentMethods.bancolombiaAccount && (
+                                            <div className="px-4 pb-4 animate-slide-down">
+                                              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                                                <div>
+                                                  <p className="text-xs font-medium text-purple-700 uppercase mb-1">Banco</p>
+                                                  <p className="text-sm font-medium text-purple-900">Bancolombia</p>
+                                                </div>
+                                                
+                                                <div>
+                                                  <p className="text-xs font-medium text-purple-700 uppercase mb-1">Número de Cuenta</p>
+                                                  <div className="flex items-center gap-2">
+                                                    <p className="text-lg font-bold text-purple-900">{paymentMethods.bancolombiaAccount}</p>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      className="h-8 px-2"
+                                                      onClick={() => {
+                                                        navigator.clipboard.writeText(paymentMethods.bancolombiaAccount);
+                                                        toast.showSuccess('¡Copiado!', 'El número de cuenta se copió al portapapeles');
+                                                      }}
+                                                    >
+                                                      <Copy className="w-4 h-4" />
+                                                    </Button>
+                                                  </div>
+                                                </div>
+                                                
+                                                <div>
+                                                  <p className="text-xs font-medium text-purple-700 uppercase mb-1">Titular</p>
+                                                  <p className="text-sm text-purple-900">{paymentMethods.nequiHolder || 'No especificado'}</p>
+                                                </div>
+                                                
+                                                <div>
+                                                  <p className="text-xs font-medium text-purple-700 uppercase mb-1">Monto a Pagar</p>
+                                                  <p className="text-2xl font-bold text-purple-900">${plan.price.toLocaleString('es-CO')} COP</p>
+                                                </div>
+                                                
+                                                <div className="pt-2 border-t border-purple-200">
+                                                  <p className="text-xs text-purple-700">
+                                                    <strong>Instrucciones:</strong> Realiza la transferencia a la cuenta mostrada y envía el comprobante al administrador para activar tu plan.
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : null}
 
                                       {/* Sin métodos configurados */}
-                                      {!paymentMethods || (!paymentMethods.hotmartEnabled && !paymentMethods.nequiEnabled && !paymentMethods.bancolombiaEnabled) && (
-                                        <div className="text-center py-4 text-gray-500">
-                                          <p className="text-sm">Contacta al administrador para activar tu plan</p>
-                                          <Button variant="link" onClick={() => window.location.href = '/support'}>
+                                      {!paymentMethods || (!paymentMethods.hotmartEnabled && !paymentMethods.nequiEnabled && !paymentMethods.bancolombiaEnabled) ? (
+                                        <div className="text-center py-6">
+                                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <CreditCard className="w-8 h-8 text-gray-400" />
+                                          </div>
+                                          <p className="text-sm text-gray-600 font-medium mb-2">No hay métodos de pago configurados</p>
+                                          <p className="text-xs text-gray-500 mb-4">Contacta al administrador para activar tu plan</p>
+                                          <Button variant="outline" size="sm" onClick={() => window.location.href = '/support'}>
                                             Contactar Soporte
                                           </Button>
+                                        </div>
+                                      ) : null}
+
+                                      {/* Instrucciones */}
+                                      {(paymentMethods?.nequiEnabled || paymentMethods?.bancolombiaEnabled) && (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+                                          <p className="text-xs text-blue-800">
+                                            <strong>💡 Instrucciones:</strong> Después de realizar el pago, envía el comprobante al administrador para activar tu plan.
+                                          </p>
                                         </div>
                                       )}
                                     </div>
