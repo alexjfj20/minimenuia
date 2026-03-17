@@ -1,6 +1,0 @@
-fix: refactor /dashboard/reseñas page to avoid useAuth SSR issues
-
-- Removed dependency on useAuth hook
-- Changed to use businessId from URL query parameter instead
-- Wrapped component in Suspense boundary for proper SSR handling
-- Fixes build error: "useAuth must be used within an AuthProvider"
