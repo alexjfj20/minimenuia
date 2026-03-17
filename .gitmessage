@@ -1,0 +1,21 @@
+feat: sync subscription page with real plans data from Supabase
+
+CHANGES:
+- Added subscription states (availablePlans, currentPlan, isLoadingPlans)
+- Added useEffect to load plans from /api/public/plans endpoint
+- Added useEffect to load current plan from businesses table
+- Replaced hardcoded subscription UI with dynamic data from Supabase
+- Plans now display real prices, features, and limits from database
+- Current plan shows actual subscription dates and status
+
+FIXES:
+- Subscription page now shows real data instead of mock/test data
+- Plans are loaded from Supabase 'plans' table
+- Current plan is loaded from 'businesses' table (plan_id, plan_name)
+- Dynamic rendering of available plans with proper styling
+- Loading state while fetching subscription data
+
+INSTRUCTIONS:
+1. Ensure 'plans' table exists in Supabase with sample data
+2. Ensure 'businesses' table has plan_id and plan_name columns
+3. User will see their actual plan and available upgrade options

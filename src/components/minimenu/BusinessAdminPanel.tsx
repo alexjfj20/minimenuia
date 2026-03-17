@@ -503,6 +503,36 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [hasReviews, setHasReviews] = useState<boolean>(false);
   const [isCheckingAI, setIsCheckingAI] = useState<boolean>(true);
 
+  // --- Subscription States ---
+  const [availablePlans, setAvailablePlans] = useState<Array<{
+    id: string;
+    name: string;
+    slug: string;
+    description: string;
+    price: number;
+    currency: string;
+    period: string;
+    features: string;
+    isActive: boolean;
+    isPublic: boolean;
+    isPopular: boolean;
+    order: number;
+    icon: string;
+    color: string;
+    maxUsers: number;
+    maxProducts: number;
+    maxCategories: number;
+  }>>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState<boolean>(false);
+  const [currentPlan, setCurrentPlan] = useState<{
+    id: string;
+    name: string;
+    price: number;
+    startDate: string;
+    endDate: string;
+    status: string;
+  } | null>(null);
+
   // --- Speech Recognition Reference ---
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
@@ -733,6 +763,68 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
     checkReviews();
   }, [profileId, user.businessId]);
+
+  // --- Load Subscription Plans ---
+  useEffect(() => {
+    const loadSubscriptionData = async (): Promise<void> => {
+      setIsLoadingPlans(true);
+      try {
+        // Cargar planes disponibles desde API
+        const response = await fetch('/api/public/plans');
+        const data = await response.json();
+
+        if (data.success && data.data) {
+          setAvailablePlans(data.data);
+          console.log('[Subscription] Loaded', data.data.length, 'plans from API');
+        }
+
+        // Cargar plan actual del negocio desde businesses table
+        const { data: businessData, error } = await supabase
+          .from('businesses')
+          .select('id, name, plan_id, plan_name, created_at')
+          .eq('id', user.businessId)
+          .single();
+
+        if (error) {
+          console.error('[Subscription] Error loading business:', error);
+        } else if (businessData) {
+          // Buscar el plan actual en los planes cargados
+          const currentPlanData = data.data?.find((p: { id: string }) => p.id === businessData.plan_id);
+          
+          if (currentPlanData) {
+            setCurrentPlan({
+              id: currentPlanData.id,
+              name: currentPlanData.name,
+              price: currentPlanData.price,
+              startDate: businessData.created_at,
+              endDate: new Date(new Date(businessData.created_at).setMonth(new Date(businessData.created_at).getMonth() + 1)).toISOString(),
+              status: 'active'
+            });
+          } else {
+            // Si no encuentra el plan, usar info básica del negocio
+            setCurrentPlan({
+              id: businessData.plan_id || 'unknown',
+              name: businessData.plan_name || 'Plan Básico',
+              price: 0,
+              startDate: businessData.created_at,
+              endDate: new Date(new Date(businessData.created_at).setMonth(new Date(businessData.created_at).getMonth() + 1)).toISOString(),
+              status: 'active'
+            });
+          }
+          
+          console.log('[Subscription] Current plan:', currentPlan);
+        }
+      } catch (error) {
+        console.error('[Subscription] Error loading data:', error);
+      } finally {
+        setIsLoadingPlans(false);
+      }
+    };
+
+    if (user.businessId) {
+      loadSubscriptionData();
+    }
+  }, [user.businessId]);
 
   // --- Order Detail States ---
   const [showOrderDetail, setShowOrderDetail] = useState(false);
@@ -9391,344 +9483,249 @@ El precio debe ser un número entero en pesos colombianos.`
               </div>
             </div>
 
-            {/* Banner de Prueba Gratis (simulado) */}
-            <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0">
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                      <Clock className="w-6 h-6" />
+            {/* Loading State */}
+            {isLoadingPlans ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
+                  <p className="text-gray-600">Cargando información de suscripción...</p>
+                </CardContent>
+              </Card>
+            ) : currentPlan ? (
+              <>
+                {/* Banner de Plan Actual */}
+                <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0">
+                  <CardContent className="p-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                          <CreditCard className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-lg">Plan {currentPlan.name}</h3>
+                          <p className="text-purple-100">
+                            <strong>${currentPlan.price.toLocaleString('es-CO')}</strong> COP/mes
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className="bg-green-500 text-white">
+                        <Check className="w-4 h-4 mr-1" />
+                        Activo
+                      </Badge>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg">🎉 Período de Prueba</h3>
-                      <p className="text-purple-100">Te quedan <strong>7 días</strong> de prueba gratuita</p>
-                    </div>
-                  </div>
-                  <Button className="bg-white text-purple-600 hover:bg-purple-50 font-semibold">
-                    Activar Plan Ahora
-                  </Button>
+                  </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Plan Actual - Detalles */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <CreditCard className="w-5 h-5 text-purple-600" />
+                        Detalles del Plan
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="bg-purple-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-bold text-purple-800 text-lg">
+                            {currentPlan.name}
+                          </h4>
+                          <Badge className="bg-green-100 text-green-700">
+                            <Check className="w-3 h-3 mr-1" />
+                            Activo
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="text-gray-500">Fecha Inicio:</span>
+                            <p className="font-medium">
+                              {new Date(currentPlan.startDate).toLocaleDateString('es-CO')}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Próximo Pago:</span>
+                            <p className="font-medium">
+                              {new Date(currentPlan.endDate).toLocaleDateString('es-CO')}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Precio:</span>
+                            <p className="font-medium text-purple-600">
+                              ${currentPlan.price.toLocaleString('es-CO')} COP/mes
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Estado:</span>
+                            <p className="font-medium text-green-600 capitalize">{currentPlan.status}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1" onClick={() => window.location.href = '/#pricing-section'}>
+                          Cambiar Plan
+                        </Button>
+                        <Button variant="outline" className="text-purple-600 hover:bg-purple-50 border-purple-200">
+                          <FileText className="w-4 h-4 mr-2" />
+                          Facturas
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Uso Actual */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5 text-purple-600" />
+                        Uso Actual
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Pedidos */}
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">Pedidos este mes</span>
+                          <span className="font-medium">127 / 500</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div className="bg-green-500 h-2 rounded-full" style={{ width: '25%' }}></div>
+                        </div>
+                      </div>
+
+                      {/* Productos */}
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">Productos en catálogo</span>
+                          <span className="font-medium">24 / 200</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div className="bg-green-500 h-2 rounded-full" style={{ width: '12%' }}></div>
+                        </div>
+                      </div>
+
+                      {/* Empleados */}
+                      <div>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600">Empleados registrados</span>
+                          <span className="font-medium">2 / 3</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '67%' }}></div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t">
+                        <p className="text-xs text-gray-500">
+                          ✅ Verde: &lt;70% | 🟡 Amarillo: 70-90% | 🔴 Rojo: &gt;90%
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
-              </CardContent>
-            </Card>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Plan Actual */}
+                {/* Planes Disponibles */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-purple-600" />
+                        Planes Disponibles
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {availablePlans.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {availablePlans.map((plan) => {
+                          const isCurrentPlan = currentPlan.id === plan.id;
+                          return (
+                            <div
+                              key={plan.id}
+                              className={`border rounded-xl p-5 transition-colors ${
+                                isCurrentPlan
+                                  ? 'border-2 border-purple-500 bg-purple-50 relative'
+                                  : 'hover:border-purple-300'
+                              }`}
+                            >
+                              {plan.isPopular && (
+                                <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-purple-600">
+                                  <Star className="w-3 h-3 mr-1" />
+                                  Más Popular
+                                </Badge>
+                              )}
+                              {isCurrentPlan && (
+                                <Badge className="absolute -top-2 right-2 bg-green-500">
+                                  Tu plan
+                                </Badge>
+                              )}
+                              <div className="text-center mb-4">
+                                <div
+                                  className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center"
+                                  style={{
+                                    backgroundColor: `${plan.color}20`,
+                                    color: plan.color
+                                  }}
+                                >
+                                  <Star className="w-6 h-6" />
+                                </div>
+                                <h4 className="font-bold text-lg">{plan.name}</h4>
+                                <p className="text-gray-500 text-sm">{plan.description}</p>
+                              </div>
+                              <div className="text-center mb-4">
+                                <span className="text-3xl font-bold" style={{ color: plan.color }}>
+                                  ${plan.price.toLocaleString('es-CO')}
+                                </span>
+                                <span className="text-gray-500">/{plan.period === 'monthly' ? 'mes' : plan.period}</span>
+                              </div>
+                              <ul className="space-y-2 text-sm mb-4">
+                                {plan.features.split('\n').slice(0, 4).map((feature, idx) => (
+                                  <li key={idx} className="flex items-center gap-2">
+                                    <Check className="w-4 h-4 text-green-500" />
+                                    <span className="text-gray-700">{feature.trim()}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              {isCurrentPlan ? (
+                                <Button className="w-full bg-purple-600 hover:bg-purple-700" disabled>
+                                  Plan Actual
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  className="w-full"
+                                  onClick={() => window.location.href = '/#pricing-section'}
+                                >
+                                  Seleccionar
+                                </Button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-gray-500">
+                        <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                        <p>No hay planes disponibles en este momento</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CreditCard className="w-5 h-5 text-purple-600" />
-                    Plan Actual
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="bg-purple-50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-bold text-purple-800 text-lg">Plan Profesional</h4>
-                      <Badge className="bg-green-100 text-green-700">Activo</Badge>
-                    </div>
-                    <p className="text-purple-600 text-sm mb-4">Ideal para negocios en crecimiento</p>
-
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-gray-500">Fecha Inicio:</span>
-                        <p className="font-medium">01/02/2025</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Vencimiento:</span>
-                        <p className="font-medium">01/03/2025</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Días Restantes:</span>
-                        <p className="font-medium text-orange-600">23 días</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Precio:</span>
-                        <p className="font-medium">$99.000 COP/mes</p>
-                      </div>
-                    </div>
-
-                    {/* Barra de progreso */}
-                    <div className="mt-4">
-                      <div className="flex justify-between text-xs text-gray-500 mb-1">
-                        <span>Progreso del período</span>
-                        <span>23%</span>
-                      </div>
-                      <div className="w-full bg-purple-200 rounded-full h-2">
-                        <div className="bg-purple-600 h-2 rounded-full" style={{ width: '23%' }}></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1">
-                      Cambiar Plan
-                    </Button>
-                    <Button variant="outline" className="text-red-600 hover:bg-red-50 border-red-200">
-                      Cancelar
-                    </Button>
-                  </div>
+                <CardContent className="py-12 text-center">
+                  <p className="text-gray-500">No se encontró información de suscripción</p>
                 </CardContent>
               </Card>
+            )}
 
-              {/* Uso Actual */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-purple-600" />
-                    Uso Actual
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Pedidos */}
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">Pedidos este mes</span>
-                      <span className="font-medium">127 / 500</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-green-500 h-2 rounded-full" style={{ width: '25%' }}></div>
-                    </div>
-                  </div>
-
-                  {/* Productos */}
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">Productos en catálogo</span>
-                      <span className="font-medium">24 / 200</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-green-500 h-2 rounded-full" style={{ width: '12%' }}></div>
-                    </div>
-                  </div>
-
-                  {/* Empleados */}
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">Empleados registrados</span>
-                      <span className="font-medium">2 / 3</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-yellow-500 h-2 rounded-full" style={{ width: '67%' }}></div>
-                    </div>
-                  </div>
-
-                  {/* Mesas */}
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">Mesas configuradas</span>
-                      <span className="font-medium">10 / 15</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-green-500 h-2 rounded-full" style={{ width: '67%' }}></div>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t">
-                    <p className="text-xs text-gray-500">
-                      ✅ Verde: &lt;70% | 🟡 Amarillo: 70-90% | 🔴 Rojo: &gt;90%
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Footer */}
+            <div className="text-center py-6 text-sm text-gray-500">
+              <p>¿Necesitas ayuda con tu suscripción? <a href="/support" className="text-purple-600 hover:underline">Contactar soporte</a></p>
             </div>
-
-            {/* Planes Disponibles */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-purple-600" />
-                    Planes Disponibles
-                  </CardTitle>
-                  <div className="flex bg-gray-100 rounded-lg p-1">
-                    <button className="px-3 py-1 text-sm font-medium rounded-md bg-white shadow-sm">
-                      Mensual
-                    </button>
-                    <button className="px-3 py-1 text-sm font-medium rounded-md text-gray-600">
-                      Anual
-                    </button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Plan Básico */}
-                  <div className="border rounded-xl p-5 hover:border-purple-300 transition-colors">
-                    <div className="text-center mb-4">
-                      <div className="w-12 h-12 bg-gray-100 rounded-full mx-auto mb-3 flex items-center justify-center">
-                        <Package className="w-6 h-6 text-gray-600" />
-                      </div>
-                      <h4 className="font-bold text-lg">Básico</h4>
-                      <p className="text-gray-500 text-sm">Para empezar</p>
-                    </div>
-                    <div className="text-center mb-4">
-                      <span className="text-3xl font-bold">$49.900</span>
-                      <span className="text-gray-500">/mes</span>
-                    </div>
-                    <ul className="space-y-2 text-sm mb-4">
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        50 productos
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        1 usuario
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        Soporte por email
-                      </li>
-                    </ul>
-                    <Button variant="outline" className="w-full">Seleccionar</Button>
-                  </div>
-
-                  {/* Plan Profesional */}
-                  <div className="border-2 border-purple-500 rounded-xl p-5 relative bg-purple-50">
-                    <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 bg-purple-600">
-                      Más Popular
-                    </Badge>
-                    <Badge className="absolute -top-2 right-2 bg-green-500">
-                      Tu plan
-                    </Badge>
-                    <div className="text-center mb-4">
-                      <div className="w-12 h-12 bg-purple-100 rounded-full mx-auto mb-3 flex items-center justify-center">
-                        <Star className="w-6 h-6 text-purple-600" />
-                      </div>
-                      <h4 className="font-bold text-lg">Profesional</h4>
-                      <p className="text-gray-500 text-sm">Para crecer</p>
-                    </div>
-                    <div className="text-center mb-4">
-                      <span className="text-3xl font-bold text-purple-600">$99.900</span>
-                      <span className="text-gray-500">/mes</span>
-                    </div>
-                    <ul className="space-y-2 text-sm mb-4">
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        200 productos
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        3 usuarios
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        Pedidos online
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        Soporte prioritario
-                      </li>
-                    </ul>
-                    <Button className="w-full bg-purple-600 hover:bg-purple-700">
-                      Plan Actual
-                    </Button>
-                  </div>
-
-                  {/* Plan Empresarial */}
-                  <div className="border rounded-xl p-5 hover:border-purple-300 transition-colors">
-                    <div className="text-center mb-4">
-                      <div className="w-12 h-12 bg-orange-100 rounded-full mx-auto mb-3 flex items-center justify-center">
-                        <Building2 className="w-6 h-6 text-orange-600" />
-                      </div>
-                      <h4 className="font-bold text-lg">Empresarial</h4>
-                      <p className="text-gray-500 text-sm">Para grandes</p>
-                    </div>
-                    <div className="text-center mb-4">
-                      <span className="text-3xl font-bold">$199.900</span>
-                      <span className="text-gray-500">/mes</span>
-                    </div>
-                    <ul className="space-y-2 text-sm mb-4">
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        Productos ilimitados
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        10 usuarios
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        Multi-sucursal
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-green-500" />
-                        Soporte 24/7
-                      </li>
-                    </ul>
-                    <Button variant="outline" className="w-full">Actualizar</Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Historial de Pagos */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-purple-600" />
-                  Historial de Pagos
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-3 px-2 font-medium text-gray-500">Fecha</th>
-                        <th className="text-left py-3 px-2 font-medium text-gray-500">Plan</th>
-                        <th className="text-left py-3 px-2 font-medium text-gray-500">Monto</th>
-                        <th className="text-left py-3 px-2 font-medium text-gray-500">Estado</th>
-                        <th className="text-left py-3 px-2 font-medium text-gray-500">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b hover:bg-gray-50">
-                        <td className="py-3 px-2">01/02/2025</td>
-                        <td className="py-3 px-2">Profesional</td>
-                        <td className="py-3 px-2">$99.900 COP</td>
-                        <td className="py-3 px-2">
-                          <Badge className="bg-green-100 text-green-700">Pagado</Badge>
-                        </td>
-                        <td className="py-3 px-2">
-                          <Button variant="ghost" size="sm" className="h-8 px-2">
-                            <Download className="w-4 h-4 mr-1" />
-                            PDF
-                          </Button>
-                        </td>
-                      </tr>
-                      <tr className="border-b hover:bg-gray-50">
-                        <td className="py-3 px-2">01/01/2025</td>
-                        <td className="py-3 px-2">Profesional</td>
-                        <td className="py-3 px-2">$99.900 COP</td>
-                        <td className="py-3 px-2">
-                          <Badge className="bg-green-100 text-green-700">Pagado</Badge>
-                        </td>
-                        <td className="py-3 px-2">
-                          <Button variant="ghost" size="sm" className="h-8 px-2">
-                            <Download className="w-4 h-4 mr-1" />
-                            PDF
-                          </Button>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-gray-50">
-                        <td className="py-3 px-2">01/12/2024</td>
-                        <td className="py-3 px-2">Básico</td>
-                        <td className="py-3 px-2">$49.900 COP</td>
-                        <td className="py-3 px-2">
-                          <Badge className="bg-green-100 text-green-700">Pagado</Badge>
-                        </td>
-                        <td className="py-3 px-2">
-                          <Button variant="ghost" size="sm" className="h-8 px-2">
-                            <Download className="w-4 h-4 mr-1" />
-                            PDF
-                          </Button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         )}
       </main>
