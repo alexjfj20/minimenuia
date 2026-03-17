@@ -1,0 +1,5 @@
+fix: wrap useSearchParams in Suspense boundary for /dashboard/reviews page
+
+- Added Suspense boundary around component using useSearchParams()
+- Refactored ReviewsDashboard to use separate ReviewsContent component
+- Fixes Next.js error: "useSearchParams() should be wrapped in a suspense boundary"

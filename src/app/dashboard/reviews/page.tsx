@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Star, Users, TrendingUp, Calendar, MessageSquare } from 'lucide-react';
@@ -35,6 +35,130 @@ export default function ReviewsDashboard() {
   const searchParams = useSearchParams();
   const businessIdFromUrl = searchParams?.get('businessId');
   
+  const [loading, setLoading] = useState(true);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loyaltyCustomers, setLoyaltyCustomers] = useState<LoyaltyCustomer[]>([]);
+  const [stats, setStats] = useState<ReviewStats | null>(null);
+  const [businessId, setBusinessId] = useState<string | null>(null);
+
+  // Usar businessId de la URL
+  useEffect(() => {
+    if (businessIdFromUrl) {
+      setBusinessId(businessIdFromUrl);
+    }
+  }, [businessIdFromUrl]);
+
+  // Cargar reseñas
+  const loadReviews = useCallback(async () => {
+    if (!businessId) return;
+
+    setLoading(true);
+
+    try {
+      // Cargar reseñas
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from('reviews')
+        .select('*')
+        .eq('business_id', businessId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (reviewsError) throw reviewsError;
+
+      setReviews(reviewsData || []);
+
+      // Calcular estadísticas
+      const total = reviewsData?.length || 0;
+      const avg = reviewsData && reviewsData.length > 0
+        ? reviewsData.reduce((sum, r) => sum + r.rating, 0) / reviewsData.length
+        : 0;
+
+      const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      reviewsData?.forEach(r => {
+        distribution[r.rating] = (distribution[r.rating] || 0) + 1;
+      });
+
+      setStats({
+        averageRating: avg,
+        totalReviews: total,
+        ratingDistribution: distribution
+      });
+
+      // Cargar clientes de fidelización
+      const { data: loyaltyData, error: loyaltyError } = await supabase
+        .from('loyalty_points')
+        .select('*')
+        .eq('business_id', businessId)
+        .order('points', { ascending: false })
+        .limit(50);
+
+      if (loyaltyError) throw loyaltyError;
+
+      setLoyaltyCustomers(loyaltyData || []);
+    } catch (error: unknown) {
+      console.error('[ReviewsDashboard] Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [businessId]);
+
+  useEffect(() => {
+    loadReviews();
+  }, [loadReviews]);
+
+  const renderStars = (rating: number, size = 'w-5 h-5') => {
+    return Array.from({ length: 5 }, (_, i) => (
+      <Star
+        key={i}
+        className={`${size} ${
+          i < rating
+            ? 'fill-yellow-400 text-yellow-400'
+            : 'fill-gray-200 text-gray-200'
+        }`}
+      />
+    ));
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
+          <p className="text-gray-600">Cargando reseñas...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!businessId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center text-gray-600">
+          <p>No se encontró el negocio</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
+          <p className="text-gray-600">Cargando reseñas...</p>
+        </div>
+      </div>
+    }>
+      <ReviewsContent />
+    </Suspense>
+  );
+}
+
+// Componente separado para el contenido
+function ReviewsContent() {
+  const searchParams = useSearchParams();
+  const businessIdFromUrl = searchParams?.get('businessId');
+
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loyaltyCustomers, setLoyaltyCustomers] = useState<LoyaltyCustomer[]>([]);
