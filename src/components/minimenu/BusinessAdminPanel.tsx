@@ -790,33 +790,53 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         }
 
         // Cargar plan actual del negocio desde businesses table
-        // NOTA: La columna en Supabase es plan_id (snake_case)
+        // NOTA: Usar solo columnas que existen: id, name, plan_name, created_at
+        // Si plan_id no existe, usamos plan_name como fallback
         const { data: businessData, error } = await supabase
           .from('businesses')
-          .select('id, name, plan_id, plan_name, created_at')
+          .select('id, name, plan_name, created_at')
           .eq('id', user.businessId)
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error('[Subscription] Error loading business:', error);
+          console.error('[Subscription] Error details:', JSON.stringify(error, null, 2));
+          console.error('[Subscription] User businessId:', user.businessId);
         } else if (businessData) {
-          // Buscar el plan actual en los planes cargados
-          const currentPlanData = data.data?.find((p: { id: string }) => p.id === businessData.plan_id);
+          console.log('[Subscription] Business data loaded:', businessData);
           
-          if (currentPlanData) {
-            setCurrentPlan({
-              id: currentPlanData.id,
-              name: currentPlanData.name,
-              price: currentPlanData.price,
-              startDate: businessData.created_at,
-              endDate: new Date(new Date(businessData.created_at).setMonth(new Date(businessData.created_at).getMonth() + 1)).toISOString(),
-              status: 'active'
-            });
+          // Si businessData tiene plan_name, buscar el plan por nombre
+          // Si no, mostrar plan genérico
+          if (businessData.plan_name) {
+            const currentPlanData = data.data?.find((p: { name: string }) => 
+              p.name.toLowerCase() === businessData.plan_name?.toLowerCase()
+            );
+            
+            if (currentPlanData) {
+              setCurrentPlan({
+                id: currentPlanData.id,
+                name: currentPlanData.name,
+                price: currentPlanData.price,
+                startDate: businessData.created_at,
+                endDate: new Date(new Date(businessData.created_at).setMonth(new Date(businessData.created_at).getMonth() + 1)).toISOString(),
+                status: 'active'
+              });
+            } else {
+              // Plan no encontrado en la lista, usar info básica
+              setCurrentPlan({
+                id: 'unknown',
+                name: businessData.plan_name,
+                price: 0,
+                startDate: businessData.created_at,
+                endDate: new Date(new Date(businessData.created_at).setMonth(new Date(businessData.created_at).getMonth() + 1)).toISOString(),
+                status: 'active'
+              });
+            }
           } else {
-            // Si no encuentra el plan, usar info básica del negocio
+            // No hay plan_name, usar plan por defecto
             setCurrentPlan({
-              id: businessData.plan_id || 'unknown',
-              name: businessData.plan_name || 'Plan Básico',
+              id: 'free',
+              name: 'Plan Gratuito',
               price: 0,
               startDate: businessData.created_at,
               endDate: new Date(new Date(businessData.created_at).setMonth(new Date(businessData.created_at).getMonth() + 1)).toISOString(),
@@ -824,7 +844,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
             });
           }
           
-          console.log('[Subscription] Current plan:', currentPlan);
+          console.log('[Subscription] Current plan set to:', currentPlan);
+        } else {
+          console.warn('[Subscription] No business data found for user:', user.businessId);
         }
 
         // Cargar métodos de pago activos desde global_payment_config

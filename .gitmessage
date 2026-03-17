@@ -1,23 +1,23 @@
-feat: add payment methods to subscription page with real-time data
+fix: correct business query to use existing columns in subscription page
 
-CHANGES:
-- Added paymentMethods state to store payment gateway config
-- Load global_payment_config from Supabase on subscription page load
-- Added modal dialog for plan selection with payment options
-- Hotmart: Direct checkout link (hotmartUrl per plan)
-- Nequi: Shows phone number, copies to clipboard on click
-- Bancolombia: Shows account info, copies to clipboard on click
-- Added Smartphone and Landmark icons from lucide-react
+PROBLEM:
+- Query was trying to select 'plan_id' column which doesn't exist in businesses table
+- Error: "[Subscription] Error loading business: {}"
 
-FEATURES:
-- Dynamic payment buttons based on active gateways
-- Clipboard copy for Nequi/Bancolombia payment info
-- Alert with payment amount and details
-- Fallback message if no payment methods configured
-- TypeScript strict mode, no any types
+SOLUTION:
+- Changed query to only select existing columns: id, name, plan_name, created_at
+- Changed from .single() to .maybeSingle() for better null handling
+- Added detailed error logging to debug issues
+- Changed plan matching logic to use plan_name instead of plan_id
+- Added fallback to 'Plan Gratuito' if no plan_name exists
+
+ADDED DEBUGGING:
+- Logs error details with JSON.stringify
+- Logs user.businessId being queried
+- Logs businessData when loaded
+- Logs currentPlan when set
 
 INSTRUCTIONS:
-1. Configure payment gateways in Super Admin → Pagos
-2. Set Hotmart URLs for each plan in plans table
-3. Configure Nequi phone and Bancolombia account info
-4. Users will see active payment methods when selecting a plan
+- Execute supabase-verificar-columnas-businesses.sql to check actual column names
+- If you need plan_id column, add it to businesses table first
+- For now, uses plan_name for matching which is more reliable
