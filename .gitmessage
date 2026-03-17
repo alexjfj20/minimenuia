@@ -1,21 +1,23 @@
-feat: sync subscription page with real plans data from Supabase
+feat: add payment methods to subscription page with real-time data
 
 CHANGES:
-- Added subscription states (availablePlans, currentPlan, isLoadingPlans)
-- Added useEffect to load plans from /api/public/plans endpoint
-- Added useEffect to load current plan from businesses table
-- Replaced hardcoded subscription UI with dynamic data from Supabase
-- Plans now display real prices, features, and limits from database
-- Current plan shows actual subscription dates and status
+- Added paymentMethods state to store payment gateway config
+- Load global_payment_config from Supabase on subscription page load
+- Added modal dialog for plan selection with payment options
+- Hotmart: Direct checkout link (hotmartUrl per plan)
+- Nequi: Shows phone number, copies to clipboard on click
+- Bancolombia: Shows account info, copies to clipboard on click
+- Added Smartphone and Landmark icons from lucide-react
 
-FIXES:
-- Subscription page now shows real data instead of mock/test data
-- Plans are loaded from Supabase 'plans' table
-- Current plan is loaded from 'businesses' table (plan_id, plan_name)
-- Dynamic rendering of available plans with proper styling
-- Loading state while fetching subscription data
+FEATURES:
+- Dynamic payment buttons based on active gateways
+- Clipboard copy for Nequi/Bancolombia payment info
+- Alert with payment amount and details
+- Fallback message if no payment methods configured
+- TypeScript strict mode, no any types
 
 INSTRUCTIONS:
-1. Ensure 'plans' table exists in Supabase with sample data
-2. Ensure 'businesses' table has plan_id and plan_name columns
-3. User will see their actual plan and available upgrade options
+1. Configure payment gateways in Super Admin → Pagos
+2. Set Hotmart URLs for each plan in plans table
+3. Configure Nequi phone and Bancolombia account info
+4. Users will see active payment methods when selecting a plan

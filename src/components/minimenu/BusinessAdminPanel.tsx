@@ -63,7 +63,9 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
-  MessageSquare
+  MessageSquare,
+  Smartphone,
+  Landmark
 } from 'lucide-react';
 
 // --- Speech Recognition Types ---
@@ -522,6 +524,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     maxUsers: number;
     maxProducts: number;
     maxCategories: number;
+    hotmartUrl?: string | null;
   }>>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState<boolean>(false);
   const [currentPlan, setCurrentPlan] = useState<{
@@ -531,6 +534,14 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     startDate: string;
     endDate: string;
     status: string;
+  } | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<{
+    hotmartEnabled: boolean;
+    nequiEnabled: boolean;
+    bancolombiaEnabled: boolean;
+    nequiPhone: string;
+    nequiHolder: string;
+    bancolombiaAccount: string;
   } | null>(null);
 
   // --- Speech Recognition Reference ---
@@ -779,6 +790,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
         }
 
         // Cargar plan actual del negocio desde businesses table
+        // NOTA: La columna en Supabase es plan_id (snake_case)
         const { data: businessData, error } = await supabase
           .from('businesses')
           .select('id, name, plan_id, plan_name, created_at')
@@ -813,6 +825,24 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           }
           
           console.log('[Subscription] Current plan:', currentPlan);
+        }
+
+        // Cargar métodos de pago activos desde global_payment_config
+        const { data: paymentConfig } = await supabase
+          .from('global_payment_config')
+          .select('*')
+          .single();
+
+        if (paymentConfig) {
+          console.log('[Subscription] Payment config loaded:', paymentConfig);
+          setPaymentMethods({
+            hotmartEnabled: paymentConfig.stripe?.enabled || false,
+            nequiEnabled: paymentConfig.nequi?.enabled || false,
+            bancolombiaEnabled: paymentConfig.bancolombia?.enabled || false,
+            nequiPhone: paymentConfig.nequi?.phone || '',
+            nequiHolder: paymentConfig.nequi?.accountHolder || '',
+            bancolombiaAccount: paymentConfig.bancolombia?.instructions || ''
+          });
         }
       } catch (error) {
         console.error('[Subscription] Error loading data:', error);
@@ -9693,13 +9723,73 @@ El precio debe ser un número entero en pesos colombianos.`
                                   Plan Actual
                                 </Button>
                               ) : (
-                                <Button
-                                  variant="outline"
-                                  className="w-full"
-                                  onClick={() => window.location.href = '/#pricing-section'}
-                                >
-                                  Seleccionar
-                                </Button>
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button variant="outline" className="w-full">
+                                      Seleccionar
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-md">
+                                    <DialogHeader>
+                                      <DialogTitle>Seleccionar Plan {plan.name}</DialogTitle>
+                                      <DialogDescription>
+                                        Elige tu método de pago para activar el plan
+                                      </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="space-y-3 mt-4">
+                                      {/* Hotmart */}
+                                      {paymentMethods?.hotmartEnabled && plan.hotmartUrl && (
+                                        <Button
+                                          className="w-full"
+                                          onClick={() => window.open(plan.hotmartUrl || '#', '_blank')}
+                                        >
+                                          <CreditCard className="w-4 h-4 mr-2" />
+                                          Pagar con Tarjeta (Hotmart)
+                                        </Button>
+                                      )}
+
+                                      {/* Nequi */}
+                                      {paymentMethods?.nequiEnabled && (
+                                        <Button
+                                          variant="outline"
+                                          className="w-full"
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(paymentMethods.nequiPhone);
+                                            alert(`Número Nequi copiado: ${paymentMethods.nequiPhone}\n\nTitular: ${paymentMethods.nequiHolder}\n\nMonto: $${plan.price.toLocaleString('es-CO')}`);
+                                          }}
+                                        >
+                                          <Smartphone className="w-4 h-4 mr-2" />
+                                          Nequi: {paymentMethods.nequiPhone}
+                                        </Button>
+                                      )}
+
+                                      {/* Bancolombia */}
+                                      {paymentMethods?.bancolombiaEnabled && (
+                                        <Button
+                                          variant="outline"
+                                          className="w-full"
+                                          onClick={() => {
+                                            navigator.clipboard.writeText(paymentMethods.bancolombiaAccount);
+                                            alert(`Datos de Bancolombia copiados\n\n${paymentMethods.bancolombiaAccount}\n\nMonto: $${plan.price.toLocaleString('es-CO')}`);
+                                          }}
+                                        >
+                                          <Landmark className="w-4 h-4 mr-2" />
+                                          Transferencia Bancolombia
+                                        </Button>
+                                      )}
+
+                                      {/* Sin métodos configurados */}
+                                      {!paymentMethods || (!paymentMethods.hotmartEnabled && !paymentMethods.nequiEnabled && !paymentMethods.bancolombiaEnabled) && (
+                                        <div className="text-center py-4 text-gray-500">
+                                          <p className="text-sm">Contacta al administrador para activar tu plan</p>
+                                          <Button variant="link" onClick={() => window.location.href = '/support'}>
+                                            Contactar Soporte
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
                               )}
                             </div>
                           );
