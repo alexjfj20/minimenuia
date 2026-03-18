@@ -553,6 +553,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     bancolombiaAccount: ''
   });
   const [expandedPaymentMethod, setExpandedPaymentMethod] = useState<'nequi' | 'bancolombia' | null>(null);
+  const [showHotmartModal, setShowHotmartModal] = useState(false);
+  const [hotmartModalMessage, setHotmartModalMessage] = useState({ title: '', message: '' });
 
   // --- Speech Recognition Reference ---
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -9893,7 +9895,11 @@ El precio debe ser un número entero en pesos colombianos.`
                                             if (plan.hotmartUrl) {
                                               window.open(plan.hotmartUrl, '_blank');
                                             } else {
-                                              alert('⚠️ El plan no tiene enlace de Hotmart configurado.\n\nContacta al administrador para obtener el enlace de pago.');
+                                              setHotmartModalMessage({
+                                                title: 'Enlace no configurado',
+                                                message: 'El plan no tiene enlace de Hotmart configurado. Contacta al administrador.'
+                                              });
+                                              setShowHotmartModal(true);
                                             }
                                           }}
                                         >
@@ -12265,6 +12271,32 @@ function BackupSection({ businessName, onToast }: BackupSectionProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Hotmart Modal - Mejorado con Dialog de Shadcn */}
+      <Dialog open={showHotmartModal} onOpenChange={setShowHotmartModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <DialogTitle className="text-xl">{hotmartModalMessage.title}</DialogTitle>
+            </div>
+            <DialogDescription className="text-base text-gray-600">
+              {hotmartModalMessage.message}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-end mt-4">
+            <Button
+              type="button"
+              onClick={() => setShowHotmartModal(false)}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-8"
+            >
+              Entendido
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

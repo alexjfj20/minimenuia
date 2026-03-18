@@ -219,6 +219,7 @@ export interface UpdatePlanData {
   maxUsers?: number;
   maxProducts?: number;
   maxCategories?: number;
+  hotmartUrl?: string | null;
 }
 
 // --- Integration ---
@@ -256,6 +257,10 @@ export interface ManualGatewaySettings {
 export interface HotmartSettings {
   enabled: boolean;
   instructions: string;
+  urlGratis: string;
+  urlBasico: string;
+  urlProfesional: string;
+  urlEmpresarial: string;
 }
 
 export interface GlobalPaymentConfig {
