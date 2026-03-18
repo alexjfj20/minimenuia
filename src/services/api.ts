@@ -714,13 +714,13 @@ export const planService = {
         .order('order', { ascending: true });
 
       if (error) throw error;
-      
+
       // If no plans in Supabase, migrate from localStorage
       if (!data || data.length === 0) {
         console.log('[PlanService] No plans in Supabase, migrating from localStorage...');
         const { default: storage } = await import('./storage');
         const localPlans = storage.getPlans();
-        
+
         if (localPlans.length > 0) {
           // Migrate each plan to Supabase
           const migratedPlans: LandingPlan[] = [];
@@ -738,24 +738,31 @@ export const planService = {
                 maxUsers: plan.maxUsers ?? 1,
                 maxProducts: plan.maxProducts ?? 50,
                 maxCategories: plan.maxCategories ?? 5,
-                hotmartUrl: plan.hotmartUrl || null,
+                hotmart_url: plan.hotmartUrl || null,
                 createdAt: plan.createdAt || new Date().toISOString(),
                 updatedAt: new Date().toISOString()
               })
               .select()
               .single();
-            
+
             if (!createError && createdPlan) {
               migratedPlans.push(createdPlan);
             }
           }
-          
+
           console.log(`[PlanService] Migrated ${migratedPlans.length} plans to Supabase`);
           return { success: true, data: migratedPlans, error: null, message: 'Planes migrados' };
         }
       }
-      
-      return { success: true, data: data || [], error: null, message: null };
+
+      // Transform snake_case to camelCase
+      const transformedPlans = (data || []).map(plan => ({
+        ...plan,
+        hotmartUrl: plan.hotmart_url ?? '',
+        features: Array.isArray(plan.features) ? plan.features : plan.features.split('\n').filter(f => f.trim())
+      }));
+
+      return { success: true, data: transformedPlans, error: null, message: null };
     } catch (error: any) {
       console.error('[PlanService] GetAll error:', error);
       return { success: false, data: [], error: error.message, message: 'Error al obtener planes' };
@@ -776,7 +783,13 @@ export const planService = {
         return { success: false, data: null, error: 'Plan no encontrado', message: null };
       }
 
-      return { success: true, data, error: null, message: null };
+      // Transformar snake_case a camelCase (igual que getAll)
+      const transformed = {
+        ...data,
+        hotmartUrl: data.hotmart_url ?? ''
+      } as LandingPlan;
+
+      return { success: true, data: transformed, error: null, message: null };
     } catch (error: any) {
       return { success: false, data: null, error: error.message, message: 'Error al obtener plan' };
     }
@@ -786,7 +799,7 @@ export const planService = {
     try {
       const { supabase } = await import('@/lib/supabaseClient');
 
-      const newPlan: Omit<LandingPlan, 'id' | 'createdAt' | 'updatedAt' | 'hotmartUrl'> = {
+      const newPlan = {
         ...data,
         features: (() => {
           const f = data.features;
@@ -806,8 +819,8 @@ export const planService = {
         color: data.color || '#8b5cf6',
         maxUsers: data.maxUsers ?? 1,
         maxProducts: data.maxProducts ?? 50,
-        maxCategories: data.maxCategories ?? 5
-        // hotmartUrl eliminado — columna no existe en Supabase
+        maxCategories: data.maxCategories ?? 5,
+        hotmart_url: (data as any).hotmartUrl ?? null  // columna snake_case en Supabase
       };
 
       // PASO 1: INSERT sin .select().single() — evita PGRST116
@@ -831,10 +844,11 @@ export const planService = {
         console.warn('[PlanService] Insert OK, fallback local:', fetchError?.message);
         const fallback = {
           ...newPlan,
+          hotmartUrl: newPlan.hotmart_url ?? '',   // camelCase para UI
           id: crypto.randomUUID(),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
-        } as LandingPlan;
+        } as unknown as LandingPlan;
         return { success: true, data: fallback, error: null, message: 'Plan creado exitosamente' };
       }
 
@@ -848,49 +862,53 @@ export const planService = {
   async update(id: string, updates: UpdatePlanData): Promise<ApiResponse<LandingPlan>> {
     try {
       const { supabase } = await import('@/lib/supabaseClient');
+      const u = updates as any;
 
-      // Build update data with only fields that likely exist in Supabase
-      const updateData: any = {
-        updatedAt: new Date().toISOString()
-      };
-
-      // Add fields one by one with null checks
-      if (updates.name !== undefined) updateData.name = updates.name;
-      if (updates.slug !== undefined) updateData.slug = updates.slug;
-      if (updates.description !== undefined) updateData.description = updates.description;
-      if (updates.price !== undefined) updateData.price = updates.price;
-      if (updates.currency !== undefined) updateData.currency = updates.currency;
-      if (updates.period !== undefined) updateData.period = updates.period;
-      if (updates.maxUsers !== undefined) updateData.maxUsers = updates.maxUsers;
-      if (updates.maxProducts !== undefined) updateData.maxProducts = updates.maxProducts;
-      if (updates.maxCategories !== undefined) updateData.maxCategories = updates.maxCategories;
-      if (updates.isPopular !== undefined) updateData.isPopular = updates.isPopular;
-      if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
-      if (updates.isPublic !== undefined) updateData.isPublic = updates.isPublic;
-      if (updates.order !== undefined) updateData.order = updates.order;
-      if (updates.icon !== undefined) updateData.icon = updates.icon;
-      if (updates.color !== undefined) updateData.color = updates.color;
-      // hotmartUrl eliminado — columna no existe en Supabase
-
-      // Handle features - convert string to array con fix para JSON stringificado
-      if (updates.features !== undefined) {
-        if (typeof updates.features === 'string') {
-          updateData.features = updates.features.split('\n').filter(Boolean);
-        } else if (Array.isArray(updates.features)) {
-          const f = updates.features;
+      // Normalizar features
+      let features: string[] | undefined;
+      if (u.features !== undefined) {
+        if (typeof u.features === 'string') {
+          features = u.features.split('\n').filter(Boolean);
+        } else if (Array.isArray(u.features)) {
+          const f = u.features as string[];
           if (f.length === 1 && typeof f[0] === 'string' && f[0].startsWith('[')) {
-            try { updateData.features = JSON.parse(f[0]) as string[]; }
-            catch { updateData.features = f; }
+            try { features = JSON.parse(f[0]) as string[]; } catch { features = f; }
           } else {
-            updateData.features = f;
+            features = f;
           }
         }
       }
 
+      // Construir objeto de update incluyendo TODOS los campos presentes
+      // IMPORTANTE: hotmart_url es snake_case en Supabase (hotmartUrl → hotmart_url)
+      const updateData: Record<string, unknown> = {
+        updatedAt: new Date().toISOString(),
+        ...(u.name         !== undefined && { name: u.name }),
+        ...(u.slug         !== undefined && { slug: u.slug }),
+        ...(u.description  !== undefined && { description: u.description }),
+        ...(u.price        !== undefined && { price: u.price }),
+        ...(u.currency     !== undefined && { currency: u.currency }),
+        ...(u.period       !== undefined && { period: u.period }),
+        ...(u.maxUsers     !== undefined && { maxUsers: u.maxUsers }),
+        ...(u.maxProducts  !== undefined && { maxProducts: u.maxProducts }),
+        ...(u.maxCategories !== undefined && { maxCategories: u.maxCategories }),
+        ...(u.isPopular    !== undefined && { isPopular: u.isPopular }),
+        ...(u.isActive     !== undefined && { isActive: u.isActive }),
+        ...(u.isPublic     !== undefined && { isPublic: u.isPublic }),
+        ...(u.order        !== undefined && { order: u.order }),
+        ...(u.icon         !== undefined && { icon: u.icon }),
+        ...(u.color        !== undefined && { color: u.color }),
+        ...(features       !== undefined && { features }),
+        // hotmartUrl (camelCase del form) → hotmart_url (snake_case en Supabase)
+        ...(u.hotmartUrl   !== undefined && { hotmart_url: u.hotmartUrl ?? null }),
+        // También aceptar si ya viene en snake_case
+        ...(u.hotmart_url  !== undefined && { hotmart_url: u.hotmart_url ?? null }),
+      };
+
       console.log('[PlanService] Updating plan:', id);
       console.log('[PlanService] Update data:', JSON.stringify(updateData, null, 2));
 
-      // UPDATE separado — sin .select().single() para evitar PGRST116
+      // UPDATE sin .select().single() para evitar PGRST116
       const { error: updateError } = await supabase
         .from('plans')
         .update(updateData)
@@ -909,22 +927,26 @@ export const planService = {
         .single();
 
       if (fetchError || !updatedPlan) {
-        // Update OK en Supabase, retornamos datos del form como fallback visual
         console.warn('[PlanService] Update OK, fallback local:', fetchError?.message);
-        const fallback = { 
+        const fallback = {
           ...updates,
           id,
-          features: Array.isArray(updates.features) 
-            ? updates.features 
-            : String(updates.features ?? '').split('\n').filter(Boolean),
+          hotmartUrl: u.hotmartUrl ?? u.hotmart_url ?? null,
+          features: features ?? [],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
-        } as LandingPlan;
+        } as unknown as LandingPlan;
         return { success: true, data: fallback, error: null, message: 'Plan actualizado' };
       }
 
-      console.log('[PlanService] Plan updated successfully:', updatedPlan.id);
-      return { success: true, data: updatedPlan, error: null, message: 'Plan actualizado' };
+      // Transformar snake_case → camelCase en el retorno
+      const transformed = {
+        ...updatedPlan,
+        hotmartUrl: updatedPlan.hotmart_url ?? ''
+      } as LandingPlan;
+
+      console.log('[PlanService] Plan updated successfully:', transformed.id, 'hotmartUrl:', transformed.hotmartUrl);
+      return { success: true, data: transformed, error: null, message: 'Plan actualizado' };
     } catch (error: any) {
       console.error('[PlanService] Update error:', error);
       const errorMessage = error?.message || error?.details || error?.hint || 'Error desconocido al actualizar plan';
@@ -956,89 +978,67 @@ export const paymentConfigService = {
       const supabaseModule = await import('@/lib/supabaseClient');
       const supabase = supabaseModule.supabase;
 
-      // Obtener configuración desde Supabase
+      // Obtener configuración desde Supabase (limitar a 1 fila)
       const { data: paymentData, error } = await supabase
         .from('payment_gateway')
         .select('*')
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (error) {
         console.error('[PaymentConfig] Error fetching from Supabase:', error);
-        // Retornar configuración por defecto si hay error
-        return { 
-          success: true, 
-          data: getDefaultPaymentConfig(), 
-          error: null, 
-          message: null 
+        return {
+          success: true,
+          data: getDefaultPaymentConfig(),
+          error: null,
+          message: null
+        };
+      }
+
+      if (!paymentData) {
+        console.warn('[PaymentConfig] No payment config found, creating default row...');
+        
+        // No hay fila, crear una por defecto
+        const { data: newRow, error: insertError } = await supabase
+          .from('payment_gateway')
+          .insert({})
+          .select()
+          .single();
+        
+        if (insertError) {
+          console.error('[PaymentConfig] Error creating default row:', insertError);
+          return {
+            success: false,
+            data: null,
+            error: insertError.message,
+            message: null
+          };
+        }
+        
+        console.log('[PaymentConfig] Default row created successfully');
+        return {
+          success: true,
+          data: transformToPaymentConfig(newRow),
+          error: null,
+          message: null
         };
       }
 
       // Transformar datos de Supabase a formato GlobalPaymentConfig
-      const config: GlobalPaymentConfig = {
-        stripe: {
-          enabled: paymentData.stripe_enabled || false,
-          mode: (paymentData.stripe_mode as GatewayMode) || 'sandbox',
-          publicKey: paymentData.stripe_public_key || '',
-          secretKey: paymentData.stripe_secret_key || '',
-          instructions: paymentData.stripe_instructions || ''
-        },
-        mercadoPago: {
-          enabled: paymentData.mercado_pago_enabled || false,
-          mode: (paymentData.mercado_pago_mode as GatewayMode) || 'sandbox',
-          publicKey: paymentData.mercado_pago_public_key || '',
-          secretKey: paymentData.mercado_pago_secret_key || '',
-          instructions: paymentData.mercado_pago_instructions || ''
-        },
-        paypal: {
-          enabled: paymentData.paypal_enabled || false,
-          mode: (paymentData.paypal_mode as GatewayMode) || 'sandbox',
-          publicKey: paymentData.paypal_public_key || '',
-          secretKey: paymentData.paypal_secret_key || '',
-          instructions: paymentData.paypal_instructions || ''
-        },
-        nequi: {
-          enabled: paymentData.nequi_enabled || false,
-          accountNumber: paymentData.nequi_account_number || '',
-          accountHolder: paymentData.nequi_account_holder || '',
-          instructions: paymentData.nequi_instructions || '',
-          qrCodeUrl: paymentData.nequi_qr_code_url || null
-        },
-        bancolombia: {
-          enabled: paymentData.bancolombia_enabled || false,
-          accountNumber: paymentData.bancolombia_account_number || '',
-          accountHolder: paymentData.bancolombia_account_holder || '',
-          instructions: paymentData.bancolombia_instructions || '',
-          qrCodeUrl: paymentData.bancolombia_qr_code_url || null
-        },
-        daviplata: {
-          enabled: paymentData.daviplata_enabled || false,
-          accountNumber: paymentData.daviplata_account_number || '',
-          accountHolder: paymentData.daviplata_account_holder || '',
-          instructions: paymentData.daviplata_instructions || '',
-          qrCodeUrl: paymentData.daviplata_qr_code_url || null
-        },
-        breB: {
-          enabled: paymentData.bre_b_enabled || false,
-          accountNumber: paymentData.bre_b_account_number || '',
-          accountHolder: paymentData.bre_b_account_holder || '',
-          instructions: paymentData.bre_b_instructions || '',
-          qrCodeUrl: paymentData.bre_b_qr_code_url || null
-        },
-        hotmart: {
-          enabled: paymentData.hotmart_enabled || false,
-          instructions: paymentData.hotmart_instructions || ''
-        }
+      return {
+        success: true,
+        data: transformToPaymentConfig(paymentData),
+        error: null,
+        message: null
       };
-
-      return { success: true, data: config, error: null, message: null };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
       console.error('[PaymentConfig] Error:', message);
-      return { 
-        success: false, 
-        data: getDefaultPaymentConfig(), 
-        error: message, 
-        message: null 
+      return {
+        success: false,
+        data: getDefaultPaymentConfig(),
+        error: message,
+        message: null
       };
     }
   },
@@ -1094,32 +1094,37 @@ export const paymentConfigService = {
         
         hotmart_enabled: config.hotmart.enabled,
         hotmart_instructions: config.hotmart.instructions,
-        
+        hotmart_url_gratis: (config.hotmart as any)?.url_gratis ?? '',
+        hotmart_url_basico: (config.hotmart as any)?.url_basico ?? '',
+        hotmart_url_profesional: (config.hotmart as any)?.url_profesional ?? '',
+        hotmart_url_empresarial: (config.hotmart as any)?.url_empresarial ?? '',
+
         updated_at: new Date().toISOString()
       };
 
-      // Verificar si existe un registro
+      // Verificar si existe un registro (usar maybeSingle para evitar fallos con múltiples filas)
       const { data: existing } = await supabase
         .from('payment_gateway')
         .select('id')
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       let error: any = null;
-      
-      if (existing) {
+
+      if (existing?.id) {
         // Actualizar registro existente
         const result = await supabase
           .from('payment_gateway')
           .update(dbConfig)
           .eq('id', existing.id);
-        
+
         error = result.error;
       } else {
         // Insertar nuevo registro
         const result = await supabase
           .from('payment_gateway')
           .insert(dbConfig);
-        
+
         error = result.error;
       }
 
@@ -1138,6 +1143,68 @@ export const paymentConfigService = {
 };
 
 // Helper function para obtener configuración por defecto
+function transformToPaymentConfig(paymentData: any): GlobalPaymentConfig {
+  return {
+    stripe: {
+      enabled: paymentData.stripe_enabled || false,
+      mode: (paymentData.stripe_mode as GatewayMode) || 'sandbox',
+      publicKey: paymentData.stripe_public_key || '',
+      secretKey: paymentData.stripe_secret_key || '',
+      instructions: paymentData.stripe_instructions || ''
+    },
+    mercadoPago: {
+      enabled: paymentData.mercado_pago_enabled || false,
+      mode: (paymentData.mercado_pago_mode as GatewayMode) || 'sandbox',
+      publicKey: paymentData.mercado_pago_public_key || '',
+      secretKey: paymentData.mercado_pago_secret_key || '',
+      instructions: paymentData.mercado_pago_instructions || ''
+    },
+    paypal: {
+      enabled: paymentData.paypal_enabled || false,
+      mode: (paymentData.paypal_mode as GatewayMode) || 'sandbox',
+      publicKey: paymentData.paypal_public_key || '',
+      secretKey: paymentData.paypal_secret_key || '',
+      instructions: paymentData.paypal_instructions || ''
+    },
+    nequi: {
+      enabled: paymentData.nequi_enabled || false,
+      accountNumber: paymentData.nequi_account_number || '',
+      accountHolder: paymentData.nequi_account_holder || '',
+      instructions: paymentData.nequi_instructions || '',
+      qrCodeUrl: paymentData.nequi_qr_code_url || null
+    },
+    bancolombia: {
+      enabled: paymentData.bancolombia_enabled || false,
+      accountNumber: paymentData.bancolombia_account_number || '',
+      accountHolder: paymentData.bancolombia_account_holder || '',
+      instructions: paymentData.bancolombia_instructions || '',
+      qrCodeUrl: paymentData.bancolombia_qr_code_url || null
+    },
+    daviplata: {
+      enabled: paymentData.daviplata_enabled || false,
+      accountNumber: paymentData.daviplata_account_number || '',
+      accountHolder: paymentData.daviplata_account_holder || '',
+      instructions: paymentData.daviplata_instructions || '',
+      qrCodeUrl: paymentData.daviplata_qr_code_url || null
+    },
+    breB: {
+      enabled: paymentData.bre_b_enabled || false,
+      accountNumber: paymentData.bre_b_account_number || '',
+      accountHolder: paymentData.bre_b_account_holder || '',
+      instructions: paymentData.bre_b_instructions || '',
+      qrCodeUrl: paymentData.bre_b_qr_code_url || null
+    },
+    hotmart: {
+      enabled: paymentData.hotmart_enabled || false,
+      instructions: paymentData.hotmart_instructions || '',
+      url_gratis: paymentData.hotmart_url_gratis || '',
+      url_basico: paymentData.hotmart_url_basico || '',
+      url_profesional: paymentData.hotmart_url_profesional || '',
+      url_empresarial: paymentData.hotmart_url_empresarial || ''
+    }
+  };
+}
+
 function getDefaultPaymentConfig(): GlobalPaymentConfig {
   return {
     stripe: {
@@ -1191,7 +1258,11 @@ function getDefaultPaymentConfig(): GlobalPaymentConfig {
     },
     hotmart: {
       enabled: false,
-      instructions: 'Serás redirigido a Hotmart para completar tu suscripción de forma segura.'
+      instructions: 'Serás redirigido a Hotmart para completar tu suscripción de forma segura.',
+      url_gratis: '',
+      url_basico: '',
+      url_profesional: '',
+      url_empresarial: ''
     }
   };
 }

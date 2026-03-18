@@ -217,7 +217,8 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     maxProducts: 50,
     maxCategories: 5,
     isPopular: false,
-    color: '#8b5cf6'
+    color: '#8b5cf6',
+    hotmartUrl: ''
   });
 
   const [integrationForm, setIntegrationForm] = useState({
@@ -256,7 +257,6 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [hasPaymentChanges, setHasPaymentChanges] = useState(false);
-  const [planHotmartUrls, setPlanHotmartUrls] = useState<Record<string, string>>({});
 
   // --- AI Config State ---
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
@@ -429,14 +429,6 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
       const response = await api.paymentConfigService.get();
       if (response.success && response.data) {
         setPaymentConfig(response.data);
-        // Initialize plan hotmart URLs from plans
-        const urls: Record<string, string> = {};
-        plans.forEach(plan => {
-          if (plan.hotmartUrl) {
-            urls[plan.id] = plan.hotmartUrl;
-          }
-        });
-        setPlanHotmartUrls(urls);
         setHasPaymentChanges(false);
       }
     } catch (error) {
@@ -444,13 +436,13 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     } finally {
       setPaymentLoading(false);
     }
-  }, [plans]);
+  }, []);
 
   useEffect(() => {
-    if (plans.length > 0 && !paymentConfig) {
+    if (!paymentConfig) {
       loadPaymentConfig();
     }
-  }, [plans, paymentConfig, loadPaymentConfig]);
+  }, [paymentConfig, loadPaymentConfig]);
 
   // --- Payment Config Handlers ---
   const updateApiGateway = (
@@ -528,11 +520,36 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     setHasPaymentChanges(true);
   };
 
-  const updatePlanHotmartUrl = (planId: string, url: string) => {
-    setPlanHotmartUrls(prev => ({
-      ...prev,
-      [planId]: url
-    }));
+  const updatePlanHotmartUrl = (slug: string, url: string) => {
+    setPaymentConfig(prev => {
+      if (!prev) {
+        // Si paymentConfig es null, crear uno con hotmart inicializado
+        return {
+          stripe: { enabled: false, mode: 'sandbox', publicKey: '', secretKey: '', instructions: '' },
+          mercadoPago: { enabled: false, mode: 'sandbox', publicKey: '', secretKey: '', instructions: '' },
+          paypal: { enabled: false, mode: 'sandbox', publicKey: '', secretKey: '', instructions: '' },
+          nequi: { enabled: false, accountHolder: '', accountNumber: '', instructions: '', qrCodeUrl: null },
+          bancolombia: { enabled: false, accountHolder: '', accountNumber: '', instructions: '', qrCodeUrl: null },
+          daviplata: { enabled: false, accountHolder: '', accountNumber: '', instructions: '', qrCodeUrl: null },
+          breB: { enabled: false, accountHolder: '', accountNumber: '', instructions: '', qrCodeUrl: null },
+          hotmart: {
+            enabled: false,
+            instructions: '',
+            url_gratis: '',
+            url_basico: '',
+            url_profesional: '',
+            url_empresarial: ''
+          }
+        };
+      }
+      return {
+        ...prev,
+        hotmart: {
+          ...prev.hotmart,
+          [`url_${slug}`]: url
+        }
+      };
+    });
     setHasPaymentChanges(true);
   };
 
@@ -540,17 +557,13 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     if (!paymentConfig) return;
     setPaymentSaving(true);
     try {
-      // Save global payment config
+      // Guardar configuración global de pagos (incluye URLs de Hotmart)
       await api.paymentConfigService.update(paymentConfig);
-      
-      // Update plans with hotmart URLs
-      for (const [planId, url] of Object.entries(planHotmartUrls)) {
-        await api.planService.update(planId, { hotmartUrl: url || null });
-      }
-      
+
       setHasPaymentChanges(false);
+      alert('✅ Configuración guardada correctamente');
     } catch (error) {
-      console.error('Error saving payment config:', error);
+      alert('❌ Error: ' + (error instanceof Error ? error.message : 'Error'));
     } finally {
       setPaymentSaving(false);
     }
@@ -923,22 +936,59 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
   };
 
   const handleSavePlan = async () => {
-    const planData = {
-      ...planForm,
-      features: planForm.features.split('\n').filter(f => f.trim()),
-      isActive: true,
-      isPublic: true,
-      order: plans.length + 1,
-      icon: 'zap'
-    };
+    const featuresArr = planForm.features.split('\n').filter(f => f.trim());
+    const hotmartUrl = (planForm as any).hotmartUrl ?? null;
+
+    console.log('[Plan] Saving plan:', planForm.name, 'hotmartUrl:', hotmartUrl);
 
     if (editingPlan) {
-      const response = await api.planService.update(editingPlan.id, planData);
-      if (response.success && response.data) {
-        setPlans(prev => prev.map(p => p.id === editingPlan.id ? response.data! : p));
+      // UPDATE directo a Supabase — evita bundle antiguo de api.ts
+      const updatePayload: Record<string, unknown> = {
+        name:          planForm.name,
+        description:  planForm.description,
+        price:        planForm.price,
+        currency:     planForm.currency,
+        period:       planForm.period,
+        features:     featuresArr,
+        maxUsers:     planForm.maxUsers,
+        maxProducts:  planForm.maxProducts,
+        maxCategories: planForm.maxCategories,
+        isPopular:    planForm.isPopular,
+        isActive:     true,
+        isPublic:     true,
+        icon:         'zap',
+        color:        planForm.color,
+        hotmart_url:  hotmartUrl,   // snake_case — nombre real de la columna en Supabase
+        updatedAt:    new Date().toISOString()
+      };
+
+      console.log('[Plan] Update payload:', JSON.stringify(updatePayload));
+
+      const { error } = await supabase
+        .from('plans')
+        .update(updatePayload)
+        .eq('id', editingPlan.id);
+
+      if (error) {
+        console.error('[Plan] Error updating plan:', error);
+        alert('❌ Error al guardar: ' + error.message);
+      } else {
+        setPlans(prev => prev.map(p =>
+          p.id === editingPlan.id
+            ? { ...p, ...planForm, features: featuresArr, hotmartUrl, isActive: true, isPublic: true, icon: 'zap' }
+            : p
+        ));
       }
     } else {
-      const response = await api.planService.create(planData);
+      const response = await api.planService.create({
+        ...planForm,
+        features: featuresArr,
+        isActive: true,
+        isPublic: true,
+        order: plans.length + 1,
+        icon: 'zap',
+        isPopular: planForm.isPopular
+      });
       if (response.success && response.data) {
         setPlans(prev => [...prev, response.data!]);
       }
@@ -950,26 +1000,44 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
   const handleSaveAllPlans = async () => {
     try {
       console.log('[SuperAdmin] Saving all plans to Supabase...');
-      
-      // Save each plan to the database
-      const savePromises = plans.map(async (plan) => {
-        const planData = {
-          ...plan,
-          features: parseFeatures(plan.features),
-          isActive: true,
-          isPublic: true
+
+      for (const plan of plans) {
+        const featuresArr = parseFeatures(plan.features);
+        const hotmartUrl = (plan as any).hotmartUrl ?? null;
+
+        const updatePayload: Record<string, unknown> = {
+          name:          plan.name,
+          description:  plan.description,
+          price:        plan.price,
+          currency:     plan.currency,
+          period:       plan.period,
+          features:     featuresArr,
+          maxUsers:     plan.maxUsers,
+          maxProducts:  plan.maxProducts,
+          maxCategories: plan.maxCategories,
+          isPopular:    plan.isPopular,
+          isActive:     true,
+          isPublic:     true,
+          icon:         plan.icon,
+          color:        plan.color,
+          order:        plan.order,
+          hotmart_url:  hotmartUrl,   // snake_case — nombre real en Supabase
+          updatedAt:    new Date().toISOString()
         };
 
-        // Update existing plan
-        const response = await api.planService.update(plan.id, planData);
-        if (!response.success) {
-          console.error('[SuperAdmin] Failed to save plan:', plan.name);
-        }
-        return response;
-      });
+        console.log('[SuperAdmin] Saving plan:', plan.name, '| hotmart_url:', hotmartUrl);
+        console.log('[SuperAdmin] Payload:', JSON.stringify(updatePayload));
 
-      await Promise.all(savePromises);
-      
+        const { error } = await supabase
+          .from('plans')
+          .update(updatePayload)
+          .eq('id', plan.id);
+
+        if (error) {
+          console.error('[SuperAdmin] Failed to save plan:', plan.name, error);
+        }
+      }
+
       console.log('[SuperAdmin] All plans saved successfully');
       alert('✅ Todos los planes se guardaron correctamente en la base de datos');
     } catch (error) {
@@ -1482,7 +1550,8 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
       maxProducts: plan.maxProducts ?? 50,
       maxCategories: plan.maxCategories ?? 5,
       isPopular: plan.isPopular ?? false,
-      color: plan.color || '#8b5cf6'
+      color: plan.color || '#8b5cf6',
+      hotmartUrl: (plan as any).hotmartUrl ?? ''
     });
     setShowPlanModal(true);
   };
@@ -2947,8 +3016,8 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                                       </span>
                                     </Label>
                                     <Input
-                                      value={planHotmartUrls[plan.id] ?? ''}
-                                      onChange={(e) => updatePlanHotmartUrl(plan.id, e.target.value)}
+                                      value={(paymentConfig?.hotmart as any)?.[`url_${plan.slug}`] ?? ''}
+                                      onChange={(e) => updatePlanHotmartUrl(plan.slug, e.target.value)}
                                       placeholder="https://pay.hotmart.com/..."
                                       className="text-sm"
                                     />
@@ -4253,6 +4322,15 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                 placeholder="Característica 1&#10;Característica 2&#10;..."
                 rows={4}
               />
+            </div>
+            <div>
+              <Label>URL de Hotmart</Label>
+              <Input
+                value={(planForm as any).hotmartUrl ?? ''}
+                onChange={e => setPlanForm(prev => ({ ...prev, hotmartUrl: e.target.value }))}
+                placeholder="https://pay.hotmart.com/XXX?off=abc"
+              />
+              <p className="text-xs text-gray-500 mt-1">Enlace de checkout de Hotmart para este plan</p>
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div>
