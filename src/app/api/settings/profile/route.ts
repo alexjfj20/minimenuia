@@ -57,8 +57,23 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
     console.log('[Settings Profile API] GET request for businessId:', businessId);
     console.log('[Settings Profile API] Supabase configured:', !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-    if (!businessId) {
-      return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
+    // Validar que businessId sea un UUID válido
+    if (!businessId || businessId === 'undefined' || businessId === 'null') {
+      console.error('[Settings Profile API] Invalid businessId:', businessId);
+      return NextResponse.json({ 
+        success: false, 
+        error: 'businessId inválido o no proporcionado. Verifica que el usuario esté autenticado correctamente.' 
+      }, { status: 400 });
+    }
+
+    // Validar formato de UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(businessId)) {
+      console.error('[Settings Profile API] businessId no es un UUID válido:', businessId);
+      return NextResponse.json({ 
+        success: false, 
+        error: 'businessId no tiene formato UUID válido' 
+      }, { status: 400 });
     }
 
     // Get all data from Supabase (no file-based storage in production)
@@ -74,6 +89,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
     }
 
     if (!business) {
+      console.warn('[Settings Profile API] Business not found for id:', businessId);
       return NextResponse.json({ success: false, error: 'Negocio no encontrado' }, { status: 404 });
     }
 
@@ -102,7 +118,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ProfileRes
       updatedAt: business.updatedAt || new Date().toISOString(),
     };
 
-    console.log('[Settings Profile API] Profile loaded successfully');
+    console.log('[Settings Profile API] Profile loaded successfully for business:', businessId);
 
     return NextResponse.json({
       success: true,
@@ -126,8 +142,23 @@ export async function PUT(request: NextRequest): Promise<NextResponse<ProfileRes
 
     console.log('[Settings Profile API] PUT request for businessId:', businessId);
 
-    if (!businessId) {
-      return NextResponse.json({ success: false, error: 'businessId es requerido' }, { status: 400 });
+    // Validar que businessId sea un UUID válido
+    if (!businessId || businessId === 'undefined' || businessId === 'null') {
+      console.error('[Settings Profile API] Invalid businessId in PUT:', businessId);
+      return NextResponse.json({ 
+        success: false, 
+        error: 'businessId inválido o no proporcionado. Verifica que el usuario esté autenticado correctamente.' 
+      }, { status: 400 });
+    }
+
+    // Validar formato de UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(businessId)) {
+      console.error('[Settings Profile API] businessId no es un UUID válido:', businessId);
+      return NextResponse.json({ 
+        success: false, 
+        error: 'businessId no tiene formato UUID válido' 
+      }, { status: 400 });
     }
 
     // Build update object with all possible fields
