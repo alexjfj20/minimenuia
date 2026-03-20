@@ -6,9 +6,10 @@ import { generateNextOrderNumber } from '@/lib/order-utils';
 // Invoice type definition
 interface InvoiceItem {
   productId: string;
-  name: string;
-  price: number;
+  productName: string;
+  unitPrice: number;
   quantity: number;
+  totalPrice: number;
 }
 
 interface RestaurantInvoiceType {
@@ -63,9 +64,10 @@ export async function GET(request: NextRequest) {
       customerPhone: order.customerPhone || undefined,
       items: (order.items || []).map((item: any) => ({
         productId: item.productId,
-        name: item.productName,
-        price: item.unitPrice,
-        quantity: item.quantity
+        productName: item.productName,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        totalPrice: item.totalPrice || (item.unitPrice * item.quantity)
       })),
       subtotal: order.subtotal,
       tax: order.tax,
@@ -142,10 +144,10 @@ export async function POST(request: NextRequest) {
     const itemsToInsert = body.items.map(item => ({
       orderId: newOrder.id,
       productId: item.productId,
-      productName: item.name,
+      productName: item.productName,
       quantity: item.quantity,
-      unitPrice: item.price,
-      totalPrice: item.price * item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice || (item.unitPrice * item.quantity),
     }));
 
     const { data: items, error: itemsError } = await supabase

@@ -16,7 +16,8 @@ const statusConfig: Record<StatusType, { label: string; className: string }> = {
   preparing: { label: 'Preparando', className: 'bg-orange-100 text-orange-800 border-orange-200' },
   ready: { label: 'Listo', className: 'bg-green-100 text-green-800 border-green-200' },
   delivered: { label: 'Entregado', className: 'bg-green-100 text-green-800 border-green-200' },
-  cancelled: { label: 'Cancelado', className: 'bg-red-100 text-red-800 border-red-200' }
+  cancelled: { label: 'Cancelado', className: 'bg-red-100 text-red-800 border-red-200' },
+  on_the_way: { label: 'En Camino', className: 'bg-blue-100 text-blue-800 border-blue-200' }
 };
 
 interface StatusBadgeProps {

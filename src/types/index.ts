@@ -300,10 +300,10 @@ export interface Category {
   id: string;
   businessId: string;
   name: string;
-  description: string;
-  icon: string | null;
-  order: number;
+  description?: string;
+  icon: string;
   isActive: boolean;
+  order: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -312,6 +312,7 @@ export interface Product {
   id: string;
   businessId: string;
   categoryId: string;
+  category?: string;
   name: string;
   description: string;
   price: number;
@@ -319,6 +320,12 @@ export interface Product {
   image: string | null;
   isAvailable: boolean;
   isFeatured: boolean;
+  stock?: number;
+  requiereEmpaque?: boolean;
+  onSale?: boolean;
+  salePrice?: number;
+  saleStartDate?: string;
+  saleEndDate?: string;
   order: number;
   createdAt: string;
   updatedAt: string;
@@ -364,7 +371,7 @@ export interface OrderItem {
   notes: string | null;
 }
 
-export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'on_the_way';
 
 // --- UI State Types ---
 
@@ -514,4 +521,160 @@ export interface UpdateUserData {
   businessId?: string | null;
   phone?: string | null;
   avatar?: string | null;
+}
+// --- Printable Order Interface for Unified Invoices ---
+export interface PrintableOrder {
+  invoiceNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  dateTime: string;
+  items: Array<{
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+    notes?: string | null;
+  }>;
+  subtotal: number;
+  tax: number;
+  deliveryFee: number;
+  packagingFee: number;
+  total: number;
+  paymentMethod?: string;
+  estimatedDelivery?: string;
+}
+
+// --- Unified Order Interface for 3-column view ---
+export interface UnifiedOrder {
+  id: string;
+  orderNumber?: string;
+  customer: string;
+  items: number;
+  total: number;
+  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'confirmed' | 'on_the_way' | 'cancelled';
+  type: 'restaurante' | 'domicilio';
+  time: string;
+  date: string;
+  phone?: string;
+  address?: string;
+  notes?: string;
+  paymentStatus?: 'pending' | 'paid' | 'refunded';
+  paymentMethod?: string;
+  createdAt: string;
+}
+
+// --- Delivery Order Interface ---
+export interface DeliveryOrder {
+  id: string;
+  orderNumber?: string;
+  invoiceNumber: string;
+  customer: string;
+  phone: string;
+  address: string;
+  neighborhood: string;
+  items: number;
+  subtotal: number;
+  deliveryFee: number;
+  total: number;
+  status: 'pending' | 'confirmed' | 'preparing' | 'on_the_way' | 'delivered' | 'cancelled';
+  paymentMethod: 'cash' | 'card' | 'transfer';
+  paymentStatus: 'pending' | 'paid' | 'refunded';
+  notes?: string;
+  createdAt: string;
+  date: string;
+  estimatedDelivery: string;
+  driver?: string;
+}
+
+// --- Delivery Invoice for TPV Domicilio ---
+export interface DeliveryInvoice {
+  id: string;
+  orderNumber?: string;
+  invoiceNumber: string;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  customerNeighborhood: string;
+  items: DeliveryCartItem[];
+  subtotal: number;
+  deliveryFee: number;
+  empaqueTotal: number;
+  total: number;
+  paymentMethod: 'cash' | 'card' | 'transfer';
+  paymentStatus: 'pending' | 'paid';
+  notes: string;
+  status: 'pending' | 'confirmed' | 'preparing' | 'on_the_way' | 'delivered';
+  createdAt: string;
+  estimatedDelivery: string;
+}
+
+// --- Restaurant Invoice Interface ---
+export interface RestaurantInvoice {
+  id: string;
+  businessId: string;
+  invoiceNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  items: Array<{
+    productId: string;
+    productName: string; // Renamed from 'name' for consistency
+    unitPrice: number; // Renamed from 'price' for consistency
+    quantity: number;
+    totalPrice: number; // Added for completeness
+  }>;
+  subtotal: number;
+  tax: number;
+  total: number;
+  paymentMethod: 'cash' | 'card' | 'transfer';
+  status: 'paid' | 'pending' | 'cancelled';
+  createdAt: string;
+  notes?: string;
+  source?: 'tpv' | 'cart';
+}
+
+// --- Cart Item Interface for TPV ---
+export interface CartItem {
+  productId: string;
+  productName: string; // Renamed from 'name'
+  unitPrice: number; // Renamed from 'price'
+  quantity: number;
+  totalPrice: number;
+  stock: number;
+  notes?: string | null;
+}
+
+// --- Delivery Cart Item for TPV Domicilio ---
+export interface DeliveryCartItem {
+  productId: string;
+  productName: string; // Renamed from 'name'
+  unitPrice: number; // Renamed from 'price'
+  quantity: number;
+  totalPrice: number;
+  stock: number;
+  notes?: string | null;
+  requiereEmpaque: boolean;
+}
+
+export interface PaymentMethodConfig {
+  id: string;
+  name: string;
+  icon: string;
+  phone: string;
+  accountHolder: string;
+  qrImage: string | null;
+  enabled: boolean;
+}
+
+// --- Printer Interface ---
+export interface Printer {
+  id: string;
+  name: string;
+  type: string;
+  area: string;
+  ip: string;
+  port: number;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
 }

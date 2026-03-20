@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+// Force dynamic rendering to avoid SSR issues with hooks
+export const dynamic = 'force-dynamic';
+
 interface DeliveryConfig {
   deliveryFee: number;
   minimumOrder: number;

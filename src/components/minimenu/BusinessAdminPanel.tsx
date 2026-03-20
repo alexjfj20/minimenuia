@@ -13,7 +13,22 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusBadge } from './StatusBadge';
-import type { User } from '@/types';
+import type { 
+  User, 
+  Product, 
+  Category, 
+  Order, 
+  OrderItem, 
+  PrintableOrder, 
+  UnifiedOrder, 
+  DeliveryOrder, 
+  DeliveryInvoice, 
+  RestaurantInvoice, 
+  CartItem, 
+  DeliveryCartItem, 
+  Printer, 
+  PaymentMethodConfig 
+} from '@/types';
 import {
   LayoutDashboard,
   Package,
@@ -46,7 +61,6 @@ import {
   MapPin,
   Phone,
   Clock,
-  Printer,
   FileText,
   Save,
   HardDrive,
@@ -66,8 +80,11 @@ import {
   ChevronRight,
   MessageSquare,
   Smartphone,
-  Landmark
+  Landmark,
+  Printer as PrinterIcon,
+  History
 } from 'lucide-react';
+import type { InvoiceSettingsType } from '@/types/invoice';
 
 // --- Speech Recognition Types ---
 interface SpeechRecognitionEvent extends Event {
@@ -133,193 +150,37 @@ function formatPrice(price: number): string {
   }).format(price);
 }
 
-// --- Product Interface ---
-interface Product {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  available: boolean;
-  featured: boolean;
-  image: string | null;
-  stock: number;
-  requiereEmpaque?: boolean;
-  // Campos de Oferta
-  onSale?: boolean;
-  salePrice?: number;
-  saleStartDate?: string;
-  saleEndDate?: string;
+function parseFeatures(features: unknown): string[] {
+  if (!features) return [];
+  if (Array.isArray(features)) return features.map(f => String(f));
+  if (typeof features === 'string') {
+    if (features.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(features);
+        return Array.isArray(parsed) ? parsed.map(f => String(f)) : [features];
+      } catch (e) {
+        return features.split('\n').filter(Boolean);
+      }
+    }
+    return features.split('\n').filter(Boolean);
+  }
+  return [];
 }
 
-// --- Order Interface ---
-interface Order {
-  id: string;
-  orderNumber?: string; // Número amigable del pedido (ORD-0001)
-  customer: string;
-  items: number;
-  total: number;
-  status: 'pending' | 'preparing' | 'ready' | 'delivered';
-  time: string;
-  date: string;
-  phone?: string;
-  address?: string;
-  notes?: string;
-  type?: 'restaurante' | 'domicilio'; // Tipo de pedido
-  createdAt?: string; // Para cálculo de temporizador
-  paymentStatus?: 'pending' | 'paid' | 'refunded'; // Estado del pago
-  paymentMethod?: 'cash' | 'card' | 'transfer';
-}
 
-// --- Unified Order Interface for 3-column view ---
-interface UnifiedOrder {
-  id: string;
-  orderNumber?: string; // Número amigable del pedido (ORD-0001)
-  customer: string;
-  items: number;
-  total: number;
-  status: 'pending' | 'preparing' | 'ready' | 'delivered' | 'confirmed' | 'on_the_way' | 'cancelled';
-  type: 'restaurante' | 'domicilio';
-  time: string;
-  date: string;
-  phone?: string;
-  address?: string;
-  notes?: string;
-  createdAt: string; // Para temporizador
-}
-
-// --- Delivery Order Interface ---
-interface DeliveryOrder {
-  id: string;
-  orderNumber?: string; // Número amigable del pedido (ORD-0001)
-  invoiceNumber: string;
-  customer: string;
-  phone: string;
-  address: string;
-  neighborhood: string;
-  items: number;
-  subtotal: number;
-  deliveryFee: number;
-  total: number;
-  status: 'pending' | 'confirmed' | 'preparing' | 'on_the_way' | 'delivered' | 'cancelled';
-  paymentMethod: 'cash' | 'card' | 'transfer';
-  paymentStatus: 'pending' | 'paid' | 'refunded';
-  notes?: string;
-  createdAt: string;
-  date: string;
-  estimatedDelivery: string;
-  driver?: string;
-}
-
-// Category interface
-interface Category {
-  id: string;
-  name: string;
-  icon: string;
-  order: number;
-}
-
-// Printer interface
-interface Printer {
-  id: string;
-  name: string;
-  type: string;
-  area: string;
-  ip: string;
-  port: number;
-  isDefault: boolean;
-  isActive: boolean;
-  createdAt: string;
-}
-
-// Delivery Cart Item for TPV Domicilio
-interface DeliveryCartItem {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  stock: number;
-  requiereEmpaque: boolean;
-}
-
-// Delivery Invoice for TPV Domicilio
-interface DeliveryInvoice {
-  id: string;
-  orderNumber?: string; // Número amigable del pedido (ORD-0001)
-  invoiceNumber: string;
-  customerName: string;
-  customerPhone: string;
-  customerAddress: string;
-  customerNeighborhood: string;
-  items: DeliveryCartItem[];
-  subtotal: number;
-  deliveryFee: number;
-  empaqueTotal: number;
-  total: number;
-  paymentMethod: 'cash' | 'card' | 'transfer';
-  paymentStatus: 'pending' | 'paid';
-  notes: string;
-  status: 'pending' | 'confirmed' | 'preparing' | 'on_the_way' | 'delivered';
-  createdAt: string;
-  estimatedDelivery: string;
-}
-
-// --- Cart Item Interface for TPV ---
-interface CartItem {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  stock: number;
-}
-
-// --- Restaurant Invoice Interface ---
-interface RestaurantInvoice {
-  id: string;
-  invoiceNumber: string;
-  customerName: string;
-  customerPhone?: string;
-  items: Array<{
-    productId: string;
-    name: string;
-    price: number;
-    quantity: number;
-  }>;
-  subtotal: number;
-  tax: number;
-  total: number;
-  paymentMethod: 'cash' | 'card' | 'transfer';
-  status: 'paid' | 'pending' | 'cancelled';
-  createdAt: string;
-  notes?: string;
-  source?: 'tpv' | 'cart'; // Origin: TPV or Shopping Cart
-}
-
-// --- Payment Method Config Interface ---
-interface PaymentMethodConfig {
-  id: string;
-  name: string;
-  icon: string;
-  phone: string;
-  accountHolder: string;
-  qrImage: string | null;
-  enabled: boolean;
-}
+// --- Default categories for fallback ---
 
 // Default categories for fallback
 const defaultCategories: Category[] = [
-  { id: 'cat-1', name: 'Entradas', icon: '🥗', order: 1 },
-  { id: 'cat-2', name: 'Platos Principales', icon: '🍽️', order: 2 },
-  { id: 'cat-3', name: 'Bebidas', icon: '🥤', order: 3 },
-  { id: 'cat-4', name: 'Postres', icon: '🍰', order: 4 }
+  { id: 'cat-1', businessId: 'default', name: 'Entradas', description: '', icon: '🥗', isActive: true, order: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat-2', businessId: 'default', name: 'Platos Principales', description: '', icon: '🍽️', isActive: true, order: 2, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat-3', businessId: 'default', name: 'Bebidas', description: '', icon: '🥤', isActive: true, order: 3, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'cat-4', businessId: 'default', name: 'Postres', description: '', icon: '🍰', isActive: true, order: 4, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
 
 // Default printer types and areas
 const defaultPrinterTypes = ['Térmica', 'Inyección', 'Láser', 'Matricial'];
 const defaultPrinterAreas = ['Cocina', 'Barra', 'Caja', 'General'];
-
-// Removed mockOrders and mockDeliveryOrders to ensure full SaaS isolation.
-// All data is now fetched from the database via API.
 
 // --- Helper functions for OrderCard (must be outside component) ---
 function getTimerColor(minutes: number): string {
@@ -337,6 +198,16 @@ function shouldShowTimer(status: string): boolean {
   // Estados activos para mostrar timer: pendiente, preparando, confirmado, en_camino
   return ['pending', 'preparing', 'confirmed', 'on_the_way'].includes(status);
 }
+
+function getElapsedMinutes(createdAt: string): number {
+  const created = new Date(createdAt).getTime();
+  const now = Date.now();
+  return Math.floor((now - created) / 60000);
+}
+
+// --- Helper functions for OrderCard (must be outside component) ---
+// --- Removed duplicate helpers from here as they are defined globally below if needed, or vice-versa ---
+// Actually, I'll keep them here and remove the others later to avoid breaking the component.
 
 // --- Order Card Component for Kanban View ---
 interface OrderCardProps {
@@ -437,7 +308,19 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     const loadProducts = async (): Promise<void> => {
       setIsLoadingProducts(true);
       try {
-        const response = await fetch('/api/products');
+        const businessId = user.businessId || profileId;
+        if (!businessId) return;
+
+        const response = await fetch(`/api/products?businessId=${businessId}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new TypeError("Oops, we haven't got JSON!");
+        }
+
         const data = await response.json();
 
         if (data.success && data.data) {
@@ -461,8 +344,9 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     description: '',
     price: 0,
     category: 'Entradas',
-    available: true,
-    featured: false,
+    categoryId: 'cat-1',
+    isAvailable: true,
+    isFeatured: false,
     image: null as string | null,
     stock: 0,
     requiereEmpaque: true,
@@ -499,6 +383,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
     description: string;
     price: number;
     category: string;
+    categoryId: string;
     image: string | null;
   } | null>(null);
 
@@ -606,6 +491,80 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState<boolean>(true);
   const [profileId, setProfileId] = useState<string | null>(null);
+
+  // --- Invoice Settings State ---
+  const [invoiceSettings, setInvoiceSettings] = useState<InvoiceSettingsType>({
+    logo: {
+      url: '',
+      size: '80px',
+      position: 'center'
+    },
+    header: {
+      businessName: '',
+      address: '',
+      nit: '',
+      phone: ''
+    },
+    fields: {
+      showInvoiceNumber: true,
+      showDateTime: true,
+      showClientPhone: true,
+      showClientAddress: true,
+      showDeliveryFee: true,
+      showPackaging: true,
+      showPaymentMethod: true,
+      showEstimatedDelivery: false
+    },
+    bold: {
+      allBold: false,
+      zones: {
+        businessName: true,
+        address: false,
+        nit: false,
+        invoiceNumber: true,
+        dateTime: false,
+        clientName: true,
+        clientPhone: false,
+        clientAddress: false,
+        items: true,
+        subtotalFees: false,
+        total: true,
+        qrText: false,
+        socialMedia: false,
+        footer: false,
+        estimatedDelivery: false,
+        paymentMethod: false
+      }
+    },
+    promo: {
+      show: false,
+      text: ''
+    },
+    qr: {
+      show: true,
+      url: '',
+      labelText: 'Escanea para ver nuestro menú',
+      linkType: 'menu',
+      customImageUrl: undefined
+    },
+    socialMedia: {
+      show: false,
+      instagram: '',
+      whatsapp: '',
+      facebook: ''
+    },
+    footer: {
+      message: '¡Gracias por su compra!',
+      repeatBusinessName: true
+    },
+    style: {
+      font: 'monospace',
+      fontSize: '12px',
+      paperSize: '80mm',
+      separatorStyle: 'dashed'
+    }
+  });
+  const [isLoadingInvoiceSettings, setIsLoadingInvoiceSettings] = useState<boolean>(false);
 
   // --- Check if business has AI Catalog service active ---
   useEffect(() => {
@@ -996,7 +955,7 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
 
   // --- Order Detail States ---
   const [showOrderDetail, setShowOrderDetail] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<UnifiedOrder | null>(null);
   const [isSavingOrderChanges, setIsSavingOrderChanges] = useState<boolean>(false);
 
   // --- Delivery Order States ---
@@ -1146,62 +1105,58 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
               primaryColor: parsed.primaryColor || '#8b5cf6',
               secondaryColor: parsed.secondaryColor || '#ffffff',
               impoconsumo: parsed.impoconsumo ?? 8,
-              // Imágenes del negocio
               avatar: parsed.avatar || null,
-            logo: parsed.logo || null,
-            banner: parsed.banner || null,
-            bannerEnabled: parsed.bannerEnabled ?? true,
-            // Franja Hero Sutil
-            heroImageUrl: parsed.heroImageUrl || null,
-            showHeroBanner: parsed.showHeroBanner ?? false,
-            // Favicon (Icono de Favoritos)
-            favicon: parsed.favicon || null,
-            // Propina Voluntaria
-            tipEnabled: parsed.tipEnabled ?? true,
-            tipPercentageDefault: parsed.tipPercentageDefault ?? 10,
-            tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true,
-            // Métodos de Pago (Efectivo primero)
-            paymentMethods: parsed.paymentMethods ?? [
-              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
-              { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
-              { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
-            ]
-          });
-          // Load empaque value
-          if (parsed.valorEmpaqueUnitario !== undefined) {
-            setValorUnitarioEmpaque(parsed.valorEmpaqueUnitario);
+              logo: parsed.logo || null,
+              banner: parsed.banner || null,
+              bannerEnabled: parsed.bannerEnabled ?? true,
+              heroImageUrl: parsed.heroImageUrl || null,
+              showHeroBanner: parsed.showHeroBanner ?? false,
+              favicon: parsed.favicon || null,
+              tipEnabled: parsed.tipEnabled ?? true,
+              tipPercentageDefault: parsed.tipPercentageDefault ?? 10,
+              tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true,
+              paymentMethods: parsed.paymentMethods ?? [
+                { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
+                { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
+                { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
+                { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
+                { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
+              ]
+            });
+            // Load empaque value
+            if (parsed.valorEmpaqueUnitario !== undefined) {
+              setValorUnitarioEmpaque(parsed.valorEmpaqueUnitario);
+            }
           }
-          } // Cierra el else validación UUID
         }
 
         // Then sync with server
         const response = await fetch(`/api/settings/profile?businessId=${user.businessId}`);
+        if (!response.ok) {
+          throw new Error(`Profile fetch failed: ${response.status}`);
+        }
         const data = await response.json();
 
         if (data.success && data.data) {
           setProfileId(data.data.id);
           setProfileForm({
             businessName: data.data.name || '',
+            slug: data.data.slug || '',
             phone: data.data.phone || '',
             address: data.data.address || '',
             primaryColor: data.data.primaryColor || '#8b5cf6',
             secondaryColor: data.data.secondaryColor || '#ffffff',
             impoconsumo: data.data.impoconsumo ?? 8,
-            // Imágenes del negocio
             avatar: data.data.avatar || null,
             logo: data.data.logo || null,
             banner: data.data.banner || null,
             bannerEnabled: data.data.bannerEnabled ?? true,
-            // Franja Hero Sutil
             heroImageUrl: data.data.heroImageUrl || null,
             showHeroBanner: data.data.showHeroBanner ?? false,
-            // Propina Voluntaria
+            favicon: data.data.favicon || null,
             tipEnabled: data.data.tipEnabled ?? true,
             tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
             tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true,
-            // Métodos de Pago (Efectivo primero)
             paymentMethods: data.data.paymentMethods ?? [
               { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
@@ -1214,100 +1169,62 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
           if (data.data.valorEmpaqueUnitario !== undefined) {
             setValorUnitarioEmpaque(data.data.valorEmpaqueUnitario);
           }
-          // Note: Data is persisted in database. localStorage removed to avoid quota exceeded errors.
 
-          // Load products from Database using the specific profileId
+          // Load products from Database
           try {
             const productsRes = await fetch(`/api/products?businessId=${data.data.id}`);
-            const productsData = await productsRes.json();
-            if (productsData.success && productsData.data) {
-              setProducts(productsData.data.products || []);
-              console.log('[Catalog] Loaded from DB:', productsData.data.products.length);
+            if (productsRes.ok) {
+              const productsData = await productsRes.json();
+              if (productsData.success && productsData.data) {
+                setProducts(productsData.data.products || []);
+              }
             }
           } catch (prodErr) {
             console.error('[Catalog] Error loading products:', prodErr);
           }
+
+          // --- Load Invoice Settings ---
+          try {
+            setIsLoadingInvoiceSettings(true);
+            const settingsRes = await fetch(`/api/business/invoice-settings?businessId=${data.data.id}`);
+            if (settingsRes.ok) {
+              const settingsData = await settingsRes.json();
+              if (settingsData.success && settingsData.data) {
+                setInvoiceSettings(settingsData.data);
+              }
+            }
+          } catch (settingsErr) {
+            console.error('[Invoice] Error loading settings:', settingsErr);
+          } finally {
+            setIsLoadingInvoiceSettings(false);
+          }
         }
       } catch (error) {
         console.error('[Profile] Error loading profile:', error);
-        // Try to use localStorage as fallback
+        // Fallback to local if server fails
         const savedProfile = localStorage.getItem('businessProfile');
         if (savedProfile) {
           const parsed = JSON.parse(savedProfile);
-
-          // IGNORAR IDs estáticos de sesiones anteriores (ej: 'business-1')
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-          if (parsed.id && !uuidRegex.test(parsed.id)) {
-            console.warn('[Profile Fallback] Eliminando perfil viejo con ID inválido del localStorage:', parsed.id);
-            localStorage.removeItem('businessProfile');
-            localStorage.removeItem('businessProducts');
-            // Dejar null, permitiendo que el useEffect reintente crear o manejar el estado vacío
-          } else {
-            setProfileId(parsed.id);
-            setProfileForm({
-              businessName: parsed.name || 'Mi Restaurante',
-              phone: parsed.phone || '+57 300 000 0000',
-              address: parsed.address || 'Dirección del negocio',
-              primaryColor: parsed.primaryColor || '#8b5cf6',
-              secondaryColor: parsed.secondaryColor || '#ffffff',
-              impoconsumo: parsed.impoconsumo ?? 8,
-              // Imágenes del negocio
-              avatar: parsed.avatar || null,
+          setProfileId(parsed.id);
+          setProfileForm({
+            businessName: parsed.businessName || parsed.name || 'Mi Restaurante',
+            slug: parsed.slug || '',
+            phone: parsed.phone || '+57 300 000 0000',
+            address: parsed.address || 'Dirección del negocio',
+            primaryColor: parsed.primaryColor || '#8b5cf6',
+            secondaryColor: parsed.secondaryColor || '#ffffff',
+            impoconsumo: parsed.impoconsumo ?? 8,
+            avatar: parsed.avatar || null,
             logo: parsed.logo || null,
             banner: parsed.banner || null,
             bannerEnabled: parsed.bannerEnabled ?? true,
-            // Franja Hero Sutil
             heroImageUrl: parsed.heroImageUrl || null,
             showHeroBanner: parsed.showHeroBanner ?? false,
-            // Propina Voluntaria
+            favicon: parsed.favicon || null,
             tipEnabled: parsed.tipEnabled ?? true,
             tipPercentageDefault: parsed.tipPercentageDefault ?? 10,
             tipOnlyOnPremise: parsed.tipOnlyOnPremise ?? true,
-            // Métodos de Pago (Efectivo primero)
-            paymentMethods: parsed.paymentMethods ?? ([
-              { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
-              { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
-              { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
-              { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
-            ] as PaymentMethodConfig[])
-          } as any);
-
-          // Cargar productos del localStorage
-          const savedProducts = localStorage.getItem('businessProducts');
-          if (savedProducts) {
-            try {
-              setProducts(JSON.parse(savedProducts));
-            } catch (e) {
-              console.error('[Catalog] Error parsing local products');
-            }
-          }
-          } // <- Cierra el else (línea 795) que contiene la carga de perfil
-        } else {
-          // Set default values if loading fails
-          setProfileForm({
-            businessName: 'Mi Restaurante',
-            phone: '+57 300 000 0000',
-            address: 'Dirección del negocio',
-            primaryColor: '#8b5cf6',
-            secondaryColor: '#ffffff',
-            impoconsumo: 8,
-            // Imágenes del negocio
-            avatar: null,
-            logo: null,
-            banner: null,
-            bannerEnabled: true,
-            // Franja Hero Sutil
-            heroImageUrl: null,
-            showHeroBanner: false,
-            // Favicon (Icono de Favoritos)
-            favicon: null,
-            // Propina Voluntaria
-            tipEnabled: true,
-            tipPercentageDefault: 10,
-            tipOnlyOnPremise: true,
-            // Métodos de Pago (Efectivo primero)
-            paymentMethods: [
+            paymentMethods: parsed.paymentMethods || [
               { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
               { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
@@ -1360,7 +1277,8 @@ export function BusinessAdminPanel({ user, onLogout }: BusinessAdminPanelProps) 
       { id: 'tpv', label: 'Factura Restaurante', icon: <FileText className="w-5 h-5" /> },
       { id: 'domicilios', label: 'Facturación Domicilio', icon: <Truck className="w-5 h-5" /> },
       { id: 'configuracion-domicilio', label: 'Configuración Domicilio', icon: <Truck className="w-5 h-5" /> },
-      { id: 'impresoras', label: 'Impresoras', icon: <Printer className="w-5 h-5" /> },
+      { id: 'configuracion-factura', label: 'Editor Factura', icon: <FileText className="w-5 h-5" /> },
+      { id: 'impresoras', label: 'Impresoras', icon: <PrinterIcon className="w-5 h-5" /> },
       { id: 'empaque', label: 'Empaque', icon: <Package className="w-5 h-5" /> },
       { id: 'backup', label: 'Backup', icon: <HardDrive className="w-5 h-5" /> },
       { id: 'compartir', label: 'Compartir Menú', icon: <Share2 className="w-5 h-5" /> },
@@ -1555,7 +1473,7 @@ El precio debe ser un número entero en pesos colombianos.`
         description: productData.product.description,
         price: productData.product.price,
         category: productData.product.category,
-        image: imageData.image
+        categoryId: 'cat-1', image: imageData.image
       });
 
       // Informar si se usó fallback
@@ -1761,7 +1679,7 @@ El precio debe ser un número entero en pesos colombianos.`
         description: productData.product.description,
         price: productData.product.price,
         category: productData.product.category,
-        image: imageData.image
+        categoryId: 'cat-1', image: imageData.image
       });
 
       // Informar si se usó fallback
@@ -1903,9 +1821,14 @@ El precio debe ser un número entero en pesos colombianos.`
         if (newProduct.category && !categories.find(c => c.name === newProduct.category)) {
           setCategories(prev => [...prev, {
             id: `cat-${Date.now()}`,
+            businessId: profileId || 'default',
             name: newProduct.category,
+            description: '',
             icon: '🍴',
-            order: prev.length + 1
+            isActive: true,
+            order: prev.length + 1,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
           }]);
         }
       } else {
@@ -1952,15 +1875,21 @@ El precio debe ser un número entero en pesos colombianos.`
     if (!aiGeneratedProduct) return;
 
     addProductToList({
+      businessId: profileId || user.businessId || 'default',
+      categoryId: aiGeneratedProduct.categoryId || 'default',
       name: aiGeneratedProduct.name,
       description: aiGeneratedProduct.description,
       price: aiGeneratedProduct.price,
+      currency: 'COP',
       category: aiGeneratedProduct.category,
-      available: true,
-      featured: false,
+      isAvailable: true,
+      isFeatured: false,
       image: aiGeneratedProduct.image,
-      stock: 0
-    });
+      stock: 0,
+      order: products.length + 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    } as Omit<Product, 'id'>);
 
     setShowAITextModal(false);
     setShowAIVoiceModal(false);
@@ -2019,21 +1948,26 @@ El precio debe ser un número entero en pesos colombianos.`
     } else {
       // Create new product via API
       await addProductToList({
+        businessId: profileId || user.businessId || 'default',
+        categoryId: productForm.categoryId,
         name: productForm.name,
         description: productForm.description,
         price: productForm.price,
+        currency: 'COP',
         category: productForm.category,
-        available: productForm.available,
-        featured: productForm.featured,
+        isAvailable: productForm.isAvailable,
+        isFeatured: productForm.isFeatured,
         image: productForm.image,
         stock: productForm.stock,
         requiereEmpaque: productForm.requiereEmpaque,
-        // Campos de Oferta
         onSale: productForm.onSale,
         salePrice: productForm.salePrice,
         saleStartDate: productForm.saleStartDate,
-        saleEndDate: productForm.saleEndDate
-      });
+        saleEndDate: productForm.saleEndDate,
+        order: products.length + 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as Omit<Product, 'id'>);
     }
 
     setShowProductModal(false);
@@ -2046,9 +1980,10 @@ El precio debe ser un número entero en pesos colombianos.`
       name: product.name,
       description: product.description,
       price: product.price,
-      category: product.category,
-      available: product.available,
-      featured: product.featured,
+      category: product.category || 'Entradas',
+      categoryId: product.categoryId || 'cat-1',
+      isAvailable: product.isAvailable,
+      isFeatured: product.isFeatured,
       image: product.image,
       stock: product.stock ?? 0,
       requiereEmpaque: product.requiereEmpaque ?? true,
@@ -2099,12 +2034,12 @@ El precio debe ser un número entero en pesos colombianos.`
       description: '',
       price: 0,
       category: 'Entradas',
-      available: true,
-      featured: false,
+      categoryId: 'cat-1',
+      isAvailable: true,
+      isFeatured: false,
       image: null,
       stock: 0,
       requiereEmpaque: true,
-      // Campos de Oferta
       onSale: false,
       salePrice: 0,
       saleStartDate: '',
@@ -2130,9 +2065,14 @@ El precio debe ser un número entero en pesos colombianos.`
     // Create new category
     const newCategory: Category = {
       id: `cat-${Date.now()}`,
+      businessId: profileId || 'default',
       name: trimmedName,
+      description: '',
       icon: newCategoryIcon,
-      order: categories.length + 1
+      isActive: true,
+      order: categories.length + 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     // Add to categories list
@@ -2166,12 +2106,13 @@ El precio debe ser un número entero en pesos colombianos.`
       }
       return [...prev, {
         productId: product.id,
-        name: product.name,
-        price: product.price,
+        productName: product.name,
+        unitPrice: product.price,
         quantity: 1,
+        totalPrice: product.price,
         stock: product.stock,
         requiereEmpaque: product.requiereEmpaque ?? true
-      }];
+      } as DeliveryCartItem];
     });
   };
 
@@ -2197,7 +2138,7 @@ El precio debe ser un número entero en pesos colombianos.`
 
   // Get delivery cart totals
   const getDeliveryCartTotals = (): { subtotal: number; empaqueTotal: number; total: number; itemCount: number } => {
-    const subtotal = deliveryCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = deliveryCart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
     const empaqueTotal = deliveryCart.reduce((sum, item) => {
       if (item.requiereEmpaque) {
         return sum + (valorEmpaqueUnitario * item.quantity);
@@ -2362,9 +2303,10 @@ El precio debe ser un número entero en pesos colombianos.`
               customerNeighborhood: order.neighborhood ?? '',
               items: order.items.map((item) => ({
                 productId: item.productId,
-                name: item.productName, // Prisma usa productName
-                price: item.unitPrice,  // Prisma usa unitPrice
+                productName: item.productName,
+                unitPrice: item.unitPrice,
                 quantity: item.quantity,
+                totalPrice: item.unitPrice * item.quantity,
                 stock: 0,
                 requiereEmpaque: false
               })),
@@ -2423,7 +2365,8 @@ El precio debe ser un número entero en pesos colombianos.`
 
       // Load restaurant orders
       const restaurantResponse = await fetch(`/api/orders?businessId=${businessId}&orderType=RESTAURANT`);
-      if (restaurantResponse.ok) {
+      const contentType1 = restaurantResponse.headers.get('content-type');
+      if (restaurantResponse.ok && contentType1?.includes('application/json')) {
         const data = await restaurantResponse.json();
         if (data.success && data.data) {
           const orders: Order[] = data.data.map((order: {
@@ -2451,7 +2394,7 @@ El precio debe ser un número entero en pesos colombianos.`
             date: new Date(order.createdAt).toLocaleDateString('es-CO'),
             phone: order.customerPhone,
             address: order.customerAddress,
-            notes: order.notes,
+            notes: order.notes, paymentStatus: (order as any).paymentStatus || 'pending', paymentMethod: (order as any).paymentMethod || 'cash',
             createdAt: order.createdAt
           }));
           setDbRestaurantOrders(orders);
@@ -2461,7 +2404,8 @@ El precio debe ser un número entero en pesos colombianos.`
 
       // Load delivery orders
       const deliveryResponse = await fetch(`/api/orders?businessId=${businessId}&orderType=DELIVERY`);
-      if (deliveryResponse.ok) {
+      const contentType2 = deliveryResponse.headers.get('content-type');
+      if (deliveryResponse.ok && contentType2?.includes('application/json')) {
         const data = await deliveryResponse.json();
         if (data.success && data.data) {
           const orders: DeliveryOrder[] = data.data.map((order: {
@@ -2502,8 +2446,8 @@ El precio debe ser un número entero en pesos colombianos.`
                       order.status === 'CANCELLED' ? 'cancelled' : 'pending') as DeliveryOrder['status'],
             paymentMethod: (order.paymentMethod === 'Efectivo' || order.paymentMethod === 'cash') ? 'cash' :
               (order.paymentMethod === 'Tarjeta' || order.paymentMethod === 'card') ? 'card' : 'transfer',
-            paymentStatus: order.paymentStatus === 'PAID' ? 'paid' :
-              order.paymentStatus === 'REFUNDED' ? 'refunded' : 'pending',
+            paymentStatus: (order.paymentStatus === 'PAID' ? 'paid' :
+              order.paymentStatus === 'REFUNDED' ? 'refunded' : 'pending') as DeliveryOrder['paymentStatus'],
             notes: order.notes,
             createdAt: order.createdAt,
             date: new Date(order.createdAt).toLocaleDateString('es-CO'),
@@ -2523,7 +2467,7 @@ El precio debe ser un número entero en pesos colombianos.`
   // Get filtered products for delivery invoice
   const getFilteredProductsForDelivery = (): Product[] => {
     return products.filter(p => {
-      if (!p.available) return false;
+      if (!p.isAvailable) return false;
       if (deliverySearchQuery) {
         return p.name.toLowerCase().includes(deliverySearchQuery.toLowerCase());
       }
@@ -2548,11 +2492,12 @@ El precio debe ser un número entero en pesos colombianos.`
       }
       return [...prevCart, {
         productId: product.id,
-        name: product.name,
-        price: product.price,
+        productName: product.name,
+        unitPrice: product.price,
         quantity: 1,
+        totalPrice: product.price,
         stock: product.stock
-      }];
+      } as CartItem];
     });
   };
 
@@ -2578,7 +2523,7 @@ El precio debe ser un número entero en pesos colombianos.`
 
   // Get cart totals
   const getCartTotals = (): { subtotal: number; tax: number; total: number } => {
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
     const tax = Math.round(subtotal * (profileForm.impoconsumo / 100));
     const total = subtotal + tax;
     return { subtotal, tax, total };
@@ -2620,9 +2565,10 @@ El precio debe ser un número entero en pesos colombianos.`
       customerPhone: invoiceCustomerPhone,
       items: cart.map(item => ({
         productId: item.productId,
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity
+        productName: item.productName,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        totalPrice: item.unitPrice * item.quantity
       })),
       subtotal: totals.subtotal,
       tax: totals.tax,
@@ -2974,103 +2920,207 @@ El precio debe ser un número entero en pesos colombianos.`
     showInvoiceToastMessage('success', `${filtered.length} factura(s) exportada(s) a CSV`);
   };
 
-  // --- Print Restaurant Invoice Ticket ---
-  const printRestaurantInvoiceTicket = (invoice: RestaurantInvoice): void => {
-    const qrData = `FACTURA: ${invoice.invoiceNumber}\\nCliente: ${invoice.customerName}\\nTotal: $${invoice.total.toLocaleString()}\\nFecha: ${new Date(invoice.createdAt).toLocaleDateString('es-CO')}`;
-    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qrData)}`;
-    const logoUrl = profileForm.logo || profileForm.avatar || '';
+  // --- Unified Print Function for all POS Modules ---
+  const handlePrintUnifiedTicket = (order: PrintableOrder): void => {
+    const config = invoiceSettings;
+    
+    // Helper to determine if text should be bold
+    const isBold = (zone: keyof InvoiceSettingsType['bold']['zones']): boolean => {
+      if (config.bold.allBold) return true;
+      return config.bold.zones[zone] ?? false;
+    };
+
+    // Determine font family
+    const fontStack = config.style.font === 'monospace' ? 'monospace' : 'sans-serif';
+    
+    // QR Code URL logic
+    let qrCodeUrl = '';
+    if (config.qr.show) {
+      if (config.qr.linkType === 'image' && config.qr.customImageUrl) {
+        qrCodeUrl = config.qr.customImageUrl;
+      } else {
+        const qrData = config.qr.url || `FACTURA: ${order.invoiceNumber}\nCliente: ${order.customerName}\nTotal: $${order.total.toLocaleString()}`;
+        qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+      }
+    }
 
     const ticketContent = `
+      <!DOCTYPE html>
       <html>
       <head>
-        <title>Ticket - ${invoice.invoiceNumber}</title>
+        <title>Imprimir Factura - ${order.invoiceNumber}</title>
+        <meta charset="UTF-8">
         <style>
-          @page { size: 80mm auto; margin: 0; }
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Courier New', monospace; font-size: 12px; width: 80mm; padding: 5mm; background: white; }
-          .ticket { width: 100%; }
-          .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-          .logo-img { max-width: 50mm; max-height: 20mm; object-fit: contain; margin-bottom: 5px; }
-          .header h1 { font-size: 16px; }
-          .header p { font-size: 11px; color: #666; }
-          .invoice-info { margin-bottom: 10px; }
-          .invoice-info p { font-size: 11px; }
-          .divider { border-top: 1px dashed #000; margin: 10px 0; }
-          .items { margin-bottom: 10px; }
-          .item { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 11px; }
-          .item-name { flex: 1; }
-          .item-qty { width: 30px; text-align: center; }
-          .item-price { width: 70px; text-align: right; }
-          .totals { margin-top: 10px; }
-          .total-line { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; }
-          .total-line.bold { font-weight: bold; font-size: 13px; border-top: 1px solid #000; padding-top: 5px; margin-top: 5px; }
-          .payment-status { text-align: center; margin: 10px 0; padding: 5px; background: ${invoice.status === 'paid' ? '#d4edda' : '#fff3cd'}; }
-          .qr-section { text-align: center; margin: 15px 0; }
-          .qr-code { width: 80px; height: 80px; }
-          .footer { text-align: center; font-size: 10px; color: #666; margin-top: 15px; border-top: 1px dashed #000; padding-top: 10px; }
+          body { 
+            font-family: ${fontStack}; 
+            font-size: ${config.style.fontSize}; 
+            background: white;
+            color: black;
+            display: flex;
+            justify-content: center;
+            padding: 0;
+          }
+          .invoice-root { 
+            width: 100%; 
+            max-width: ${config.style.paperSize === '58mm' ? '58mm' : config.style.paperSize === 'A4' ? '190mm' : '80mm'};
+            padding: 4mm;
+            background: white;
+          }
+          /* Layout Utilities */
+          .flex { display: flex; }
+          .justify-between { justify-content: space-between; }
+          .justify-center { justify-content: center; }
+          .text-center { text-align: center; }
+          .text-left { text-align: left; }
+          .text-right { text-align: right; }
+          .text-xs { font-size: 0.85em; }
+          .font-bold { font-weight: bold; }
+          .mb-1 { margin-bottom: 0.25rem; }
+          .mb-2 { margin-bottom: 0.5rem; }
+          .mt-1 { margin-top: 0.25rem; }
+          .my-2 { margin: 0.5rem 0; }
+          .mx-auto { margin-left: auto; margin-right: auto; }
+          .inline-block { display: inline-block; }
+          
+          /* Separators */
+          .separator { 
+            border-top: ${config.style.separatorStyle === 'solid' ? '2' : '1'}px ${config.style.separatorStyle === 'dashed' ? 'dashed' : config.style.separatorStyle === 'solid' ? 'solid' : 'none'} black;
+            margin: 0.5rem 0;
+            width: 100%;
+          }
+          
+          .logo-container { margin-bottom: 0.5rem; }
+          .logo-img { width: ${config.logo.size}; height: auto; }
+          
+          @media print {
+            body { padding: 0; }
+            @page { margin: 0; size: auto; }
+            .invoice-root { width: 100%; border: none; }
+          }
         </style>
       </head>
       <body>
-        <div class="ticket">
-          <div class="header">
-            ${logoUrl ? `<img src="${logoUrl}" alt="Logo" class="logo-img">` : ''}
-            <h1>${profileForm.businessName || 'MINIMENU'}</h1>
-            <p>${profileForm.address || ''}</p>
-            <p>${profileForm.phone || ''}</p>
+        <div class="invoice-root">
+          <!-- Logo -->
+          ${config.logo.url ? `
+            <div class="logo-container ${config.logo.position === 'center' ? 'text-center' : config.logo.position === 'right' ? 'text-right' : 'text-left'}">
+              <img src="${config.logo.url}" alt="Logo" class="logo-img">
+            </div>
+          ` : ''}
+
+          <!-- Header -->
+          <div class="text-center mb-2">
+            <p class="${isBold('businessName') ? 'font-bold' : ''}">${config.header.businessName || profileForm.businessName || 'NOMBRE DEL NEGOCIO'}</p>
+            <p class="text-xs ${isBold('address') ? 'font-bold' : ''}">${config.header.address || profileForm.address || 'Dirección del negocio'}</p>
+            <p class="text-xs ${isBold('nit') ? 'font-bold' : ''}">${config.header.nit ? 'NIT: ' + config.header.nit : ''}</p>
           </div>
-          
-          <div class="invoice-info">
-            <p><strong>Factura:</strong> ${invoice.invoiceNumber}</p>
-            <p><strong>Cliente:</strong> ${invoice.customerName}</p>
-            ${invoice.customerPhone ? `<p><strong>Tel:</strong> ${invoice.customerPhone}</p>` : ''}
-            <p><strong>Fecha:</strong> ${new Date(invoice.createdAt).toLocaleString('es-CO')}</p>
+
+          <div class="separator"></div>
+
+          <!-- Invoice Info -->
+          <div class="mb-2">
+            ${config.fields.showInvoiceNumber ? `<p class="${isBold('invoiceNumber') ? 'font-bold' : ''}">Factura: ${order.invoiceNumber}</p>` : ''}
+            ${config.fields.showDateTime ? `<p class="text-xs ${isBold('dateTime') ? 'font-bold' : ''}">Fecha: ${order.dateTime}</p>` : ''}
           </div>
-          
-          <div class="divider"></div>
-          
-          <div class="items">
-            ${invoice.items.map(item => `
-              <div class="item">
-                <span class="item-name">${item.name}</span>
-                <span class="item-qty">x${item.quantity}</span>
-                <span class="item-price">$${(item.price * item.quantity).toLocaleString()}</span>
+
+          <!-- Client Info -->
+          <div class="mb-2">
+            <p class="${isBold('clientName') ? 'font-bold' : ''}">Cliente: ${order.customerName}</p>
+            ${config.fields.showClientPhone && order.customerPhone ? `<p class="text-xs ${isBold('clientPhone') ? 'font-bold' : ''}">Teléfono: ${order.customerPhone}</p>` : ''}
+            ${config.fields.showClientAddress && order.customerAddress ? `<p class="text-xs ${isBold('clientAddress') ? 'font-bold' : ''}">Dirección: ${order.customerAddress}</p>` : ''}
+          </div>
+
+          <div class="separator"></div>
+
+          <!-- Items -->
+          <div class="mb-2">
+            <p class="${isBold('items') ? 'font-bold' : ''}">Productos:</p>
+            <div class="mt-1">
+              ${order.items.map(item => `
+                <div class="flex justify-between text-xs mb-1">
+                  <span>${item.quantity} x ${item.productName}${item.notes ? ` <i>(${item.notes})</i>` : ''}</span>
+                  <span>$${(item.totalPrice || (item.unitPrice * item.quantity) || 0).toLocaleString()}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="separator"></div>
+
+          <!-- Totals -->
+          <div class="mb-2">
+            <div class="flex justify-between text-xs">
+              <span class="${isBold('subtotalFees') ? 'font-bold' : ''}">Subtotal:</span>
+              <span class="${isBold('subtotalFees') ? 'font-bold' : ''}">$${order.subtotal.toLocaleString()}</span>
+            </div>
+            ${config.fields.showDeliveryFee && order.deliveryFee > 0 ? `
+              <div class="flex justify-between text-xs">
+                <span class="${isBold('subtotalFees') ? 'font-bold' : ''}">Domicilio:</span>
+                <span class="${isBold('subtotalFees') ? 'font-bold' : ''}">$${order.deliveryFee.toLocaleString()}</span>
               </div>
-            `).join('')}
-          </div>
-          
-          <div class="divider"></div>
-          
-          <div class="totals">
-            <div class="total-line">
-              <span>Subtotal:</span>
-              <span>$${invoice.subtotal.toLocaleString()}</span>
+            ` : ''}
+            ${config.fields.showPackaging && order.packagingFee > 0 ? `
+              <div class="flex justify-between text-xs">
+                <span class="${isBold('subtotalFees') ? 'font-bold' : ''}">Empaque:</span>
+                <span class="${isBold('subtotalFees') ? 'font-bold' : ''}">$${order.packagingFee.toLocaleString()}</span>
+              </div>
+            ` : ''}
+            ${order.tax > 0 ? `
+              <div class="flex justify-between text-xs">
+                <span class="${isBold('subtotalFees') ? 'font-bold' : ''}">Impuesto:</span>
+                <span class="${isBold('subtotalFees') ? 'font-bold' : ''}">$${order.tax.toLocaleString()}</span>
+              </div>
+            ` : ''}
+            <div class="flex justify-between mt-1 ${isBold('total') ? 'font-bold' : ''}">
+              <span>Total:</span>
+              <span>$${order.total.toLocaleString()}</span>
             </div>
-            <div class="total-line">
-              <span>Impuesto:</span>
-              <span>$${invoice.tax.toLocaleString()}</span>
+            ${config.fields.showPaymentMethod && order.paymentMethod ? `
+              <p class="text-xs mt-1">Pago: ${order.paymentMethod}</p>
+            ` : ''}
+            ${config.fields.showEstimatedDelivery && order.estimatedDelivery ? `
+              <p class="text-xs mt-1 ${isBold('estimatedDelivery') ? 'font-bold' : ''}">Entrega estimada: ${order.estimatedDelivery}</p>
+            ` : ''}
+          </div>
+
+          <!-- Promo -->
+          ${config.promo.show && config.promo.text ? `
+            <div class="separator"></div>
+            <p class="text-center text-xs font-bold mb-2">${config.promo.text}</p>
+          ` : ''}
+
+          <!-- QR Code -->
+          ${config.qr.show ? `
+            <div class="separator"></div>
+            <div class="text-center mb-2">
+              <img src="${qrCodeUrl}" alt="QR" class="inline-block" style="width: 20mm; height: 20mm; object-fit: contain;">
+              <p class="text-xs ${isBold('qrText') ? 'font-bold' : ''}">${config.qr.labelText}</p>
             </div>
-            <div class="total-line bold">
-              <span>TOTAL:</span>
-              <span>$${invoice.total.toLocaleString()}</span>
+          ` : ''}
+
+          <!-- Social Media -->
+          ${config.socialMedia.show ? `
+            <div class="separator"></div>
+            <div class="text-center mb-2">
+              <p class="text-xs mb-1 ${isBold('socialMedia') ? 'font-bold' : ''}">Síguenos:</p>
+              <div class="flex justify-center gap-2 text-xs">
+                ${config.socialMedia.instagram ? `<span>📷 @${config.socialMedia.instagram}</span>` : ''}
+                ${config.socialMedia.whatsapp ? `<span>💬 ${config.socialMedia.whatsapp}</span>` : ''}
+                ${config.socialMedia.facebook ? `<span>👍 ${config.socialMedia.facebook}</span>` : ''}
+              </div>
             </div>
-          </div>
-          
-          <div class="payment-status">
-            <strong>${invoice.status === 'paid' ? '✓ PAGADO' : 'PENDIENTE'}</strong>
-            <br>
-            <span>${invoice.paymentMethod === 'cash' ? 'Efectivo' : invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'}</span>
-          </div>
-          
-          <div class="qr-section">
-            <img src="${qrCodeUrl}" alt="QR" class="qr-code">
-            <p style="font-size: 10px;">Escanea para verificar</p>
-          </div>
-          
-          <div class="footer">
-            <p>¡Gracias por su visita!</p>
-            <p>Powered by MINIMENU</p>
+          ` : ''}
+
+          <!-- Footer -->
+          <div class="separator"></div>
+          <div class="text-center mb-2">
+            ${config.footer.repeatBusinessName ? `<p class="text-xs ${isBold('footer') ? 'font-bold' : ''}">${config.header.businessName || profileForm.businessName || 'NOMBRE DEL NEGOCIO'}</p>` : ''}
+            <p class="text-xs ${isBold('footer') ? 'font-bold' : ''}">${config.footer.message || '¡Gracias por su compra!'}</p>
+            <p class="text-xs" style="color: #999; margin-top: 5px;">Powered by MINIMENU</p>
           </div>
         </div>
+
         <script>
           window.onload = function() {
             window.print();
@@ -3081,11 +3131,112 @@ El precio debe ser un número entero en pesos colombianos.`
       </html>
     `;
 
-    const printWindow = window.open('', '_blank', 'width=320,height=500');
+    const printWindow = window.open('', '_blank', 'width=450,height=600');
     if (printWindow) {
       printWindow.document.write(ticketContent);
       printWindow.document.close();
     }
+  };
+
+  // --- Print Restaurant Invoice Ticket ---
+  const printRestaurantInvoiceTicket = (invoice: RestaurantInvoice): void => {
+    const printableOrder: PrintableOrder = {
+      invoiceNumber: invoice.invoiceNumber,
+      customerName: invoice.customerName,
+      customerPhone: invoice.customerPhone || undefined,
+      dateTime: new Date(invoice.createdAt).toLocaleString('es-CO'),
+      items: invoice.items.map(item => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        notes: (item as any).notes || ''
+      })),
+      subtotal: invoice.subtotal,
+      tax: invoice.tax,
+      deliveryFee: 0,
+      packagingFee: 0,
+      total: invoice.total,
+      paymentMethod: invoice.paymentMethod === 'cash' ? 'Efectivo' : invoice.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'
+    };
+
+    handlePrintUnifiedTicket(printableOrder);
+  };
+
+  // --- Print Delivery Invoice Ticket ---
+  const printDeliveryInvoiceTicket = (invoice: DeliveryInvoice): void => {
+    const printableOrder: PrintableOrder = {
+      invoiceNumber: invoice.invoiceNumber,
+      customerName: invoice.customerName,
+      customerPhone: invoice.customerPhone || undefined,
+      customerAddress: invoice.customerAddress || undefined,
+      dateTime: new Date(invoice.createdAt).toLocaleString('es-CO'),
+      items: invoice.items.map(item => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice || (item.unitPrice * item.quantity),
+        notes: item.notes || ''
+      })),
+      subtotal: invoice.subtotal,
+      tax: 0,
+      deliveryFee: invoice.deliveryFee || 0,
+      packagingFee: invoice.empaqueTotal || 0,
+      total: invoice.total,
+      paymentMethod: getDeliveryInvoicePaymentMethodText(invoice.paymentMethod)
+    };
+
+    handlePrintUnifiedTicket(printableOrder);
+  };
+
+  // --- Print Unified Order Ticket (Restaurant/Kanban) ---
+  const printUnifiedOrderTicket = (order: UnifiedOrder): void => {
+    const printableOrder: PrintableOrder = {
+      invoiceNumber: order.orderNumber || order.id,
+      customerName: order.customer,
+      customerPhone: order.phone || undefined,
+      customerAddress: order.address || undefined,
+      dateTime: order.createdAt ? new Date(order.createdAt).toLocaleString('es-CO') : `${order.date} ${order.time}`,
+      items: [{
+        productName: 'Detalle del Pedido',
+        quantity: order.items || 1,
+        unitPrice: (order.total || 0) / (order.items || 1),
+        totalPrice: order.total || 0,
+        notes: order.notes || ''
+      }],
+      subtotal: order.total || 0,
+      tax: 0,
+      deliveryFee: 0,
+      packagingFee: 0,
+      total: order.total || 0,
+      paymentMethod: order.paymentMethod ? (order.paymentMethod === 'cash' ? 'Efectivo' : order.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia') : 'Efectivo'
+    };
+    handlePrintUnifiedTicket(printableOrder);
+  };
+
+  // --- Print Delivery Order Ticket (Delivery/Kanban) ---
+  const printDeliveryOrderTicket = (order: DeliveryOrder): void => {
+    const printableOrder: PrintableOrder = {
+      invoiceNumber: order.invoiceNumber || order.orderNumber || order.id,
+      customerName: order.customer,
+      customerPhone: order.phone || undefined,
+      customerAddress: order.address || undefined,
+      dateTime: order.createdAt ? new Date(order.createdAt).toLocaleString('es-CO') : order.date,
+      items: [{
+        productName: 'Detalle del Pedido',
+        quantity: order.items || 1,
+        unitPrice: (order.subtotal || 0) / (order.items || 1),
+        totalPrice: order.subtotal || 0,
+        notes: order.notes || ''
+      }],
+      subtotal: order.subtotal || 0,
+      tax: 0,
+      deliveryFee: order.deliveryFee || 0,
+      packagingFee: 0,
+      total: order.total || 0,
+      paymentMethod: order.paymentMethod === 'cash' ? 'Efectivo' : order.paymentMethod === 'card' ? 'Tarjeta' : 'Transferencia'
+    };
+    handlePrintUnifiedTicket(printableOrder);
   };
 
   // --- Download Restaurant Invoice PDF ---
@@ -3162,10 +3313,10 @@ El precio debe ser un número entero en pesos colombianos.`
             <tbody>
               ${invoice.items.map(item => `
                 <tr>
-                  <td>${item.name}</td>
+                  <td>${item.productName}</td>
                   <td>${item.quantity}</td>
-                  <td>$${item.price.toLocaleString()}</td>
-                  <td>$${(item.price * item.quantity).toLocaleString()}</td>
+                  <td>$${item.unitPrice.toLocaleString()}</td>
+                  <td>$${(item.unitPrice * item.quantity).toLocaleString()}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -3216,7 +3367,7 @@ El precio debe ser un número entero en pesos colombianos.`
 
   // Get filtered products for invoice
   const getFilteredProductsForInvoice = (): Product[] => {
-    let filtered = products.filter(p => p.available);
+    let filtered = products.filter(p => p.isAvailable);
 
     if (productSearchQuery.trim()) {
       const query = productSearchQuery.toLowerCase();
@@ -3274,9 +3425,29 @@ El precio debe ser un número entero en pesos colombianos.`
 
   // --- Order Detail Functions ---
   const openOrderDetail = (order: Order): void => {
-    setSelectedOrder(order);
+    // Map backend Order to frontend UnifiedOrder safely handling pre-mapped objects
+    const runtimeOrder = order as unknown as Partial<UnifiedOrder>;
+    const uniOrder: UnifiedOrder = {
+      id: order.id,
+      orderNumber: runtimeOrder.orderNumber || order.id.slice(0, 8).toUpperCase(),
+      customer: runtimeOrder.customer || order.customerName,
+      phone: runtimeOrder.phone || order.customerPhone,
+      address: runtimeOrder.address || (order.notes?.includes('Dir:') ? order.notes.split('Dir:')[1].split('\n')[0].trim() : undefined),
+      items: typeof runtimeOrder.items === 'number' ? runtimeOrder.items : (Array.isArray(order.items) ? order.items.reduce((acc, item) => acc + item.quantity, 0) : 1),
+      total: order.total,
+      status: runtimeOrder.status || (order.status as unknown as UnifiedOrder['status']),
+      type: 'restaurante',
+      time: runtimeOrder.time || new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: runtimeOrder.date || new Date(order.createdAt).toLocaleDateString(),
+      notes: order.notes || undefined,
+      createdAt: order.createdAt,
+      paymentStatus: runtimeOrder.paymentStatus,
+      paymentMethod: runtimeOrder.paymentMethod
+    };
+    setSelectedOrder(uniOrder);
     setShowOrderDetail(true);
   };
+
 
   // --- Función para abrir el modal correcto según tipo de pedido ---
   const handleViewUnifiedOrder = (unifiedOrder: UnifiedOrder): void => {
@@ -3300,12 +3471,12 @@ El precio debe ser un número entero en pesos colombianos.`
 
   const updateOrderStatus = (newStatus: Order['status']): void => {
     if (!selectedOrder) return;
-    setSelectedOrder({ ...selectedOrder, status: newStatus });
+    setSelectedOrder({ ...selectedOrder, status: newStatus as UnifiedOrder['status'] });
   };
 
-  const updateOrderPaymentStatus = (newPaymentStatus: Order['paymentStatus']): void => {
+  const updateOrderPaymentStatus = (newPaymentStatus: any): void => {
     if (!selectedOrder) return;
-    setSelectedOrder({ ...selectedOrder, paymentStatus: newPaymentStatus });
+    setSelectedOrder({ ...selectedOrder, paymentStatus: newPaymentStatus } as any);
   };
 
   const handleSaveOrderChanges = async (): Promise<void> => {
@@ -3522,7 +3693,7 @@ El precio debe ser un número entero en pesos colombianos.`
   const deleteSelectedDeliveryInvoices = async (): Promise<void> => {
     setIsDeletingDeliveries(true);
     const idsArray = Array.from(selectedDeliveryIds);
-    setDeliveryDeleteProgress({ current: 0, total: idsArray.length });
+    setDeliveryDeleteProgress({ current: 0, total: idsArray.length, batch: 0, totalBatches: 0 });
 
     try {
       // Delete from localStorage
@@ -3545,7 +3716,7 @@ El precio debe ser un número entero en pesos colombianos.`
       });
     } finally {
       setIsDeletingDeliveries(false);
-      setDeliveryDeleteProgress({ current: 0, total: 0 });
+      setDeliveryDeleteProgress({ current: 0, total: 0, batch: 0, totalBatches: 0 });
     }
   };
 
@@ -3630,7 +3801,7 @@ El precio debe ser un número entero en pesos colombianos.`
       // Parse time string (e.g., "12:30 PM") to a comparable date
       // For this mock data, we'll use a simple approach
       const orderDate = new Date();
-      const [time, period] = order.time.split(' ');
+      const [time, period] = (order as any).time.split(' ');
       const [hours, minutes] = time.split(':');
       let hour = parseInt(hours, 10);
       if (period === 'PM' && hour !== 12) hour += 12;
@@ -3733,7 +3904,7 @@ El precio debe ser un número entero en pesos colombianos.`
   const deleteSelectedOrders = async (): Promise<void> => {
     setIsDeletingOrders(true);
     const idsArray = Array.from(selectedOrderIds);
-    setDeleteProgress({ current: 0, total: idsArray.length });
+    setDeleteProgress({ current: 0, total: idsArray.length, batch: 0, totalBatches: 0 });
 
     try {
       // In a real app, this would call an API
@@ -3746,7 +3917,7 @@ El precio debe ser un número entero en pesos colombianos.`
           console.log('Deleting orders batch:', batch);
         },
         500,
-        (current, total) => setDeleteProgress({ current, total })
+        (current, total) => setDeleteProgress({ current, total, batch: 0, totalBatches: 0 })
       );
 
       setToastMessage({
@@ -3762,7 +3933,7 @@ El precio debe ser un número entero en pesos colombianos.`
       });
     } finally {
       setIsDeletingOrders(false);
-      setDeleteProgress({ current: 0, total: 0 });
+      setDeleteProgress({ current: 0, total: 0, batch: 0, totalBatches: 0 });
     }
   };
 
@@ -3770,7 +3941,7 @@ El precio debe ser un número entero en pesos colombianos.`
   const deleteSelectedDeliveries = async (): Promise<void> => {
     setIsDeletingDeliveries(true);
     const idsArray = Array.from(selectedDeliveryIds);
-    setDeliveryDeleteProgress({ current: 0, total: idsArray.length });
+    setDeliveryDeleteProgress({ current: 0, total: idsArray.length, batch: 0, totalBatches: 0 });
 
     try {
       // In a real app, this would call an API
@@ -3781,7 +3952,7 @@ El precio debe ser un número entero en pesos colombianos.`
           console.log('Deleting deliveries batch:', batch);
         },
         500,
-        (current, total) => setDeliveryDeleteProgress({ current, total })
+        (current, total) => setDeliveryDeleteProgress({ current, total, batch: 0, totalBatches: 0 })
       );
 
       setToastMessage({
@@ -3797,7 +3968,7 @@ El precio debe ser un número entero en pesos colombianos.`
       });
     } finally {
       setIsDeletingDeliveries(false);
-      setDeliveryDeleteProgress({ current: 0, total: 0 });
+      setDeliveryDeleteProgress({ current: 0, total: 0, batch: 0, totalBatches: 0 });
     }
   };
 
@@ -3865,59 +4036,44 @@ El precio debe ser un número entero en pesos colombianos.`
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  // Calculate elapsed time in minutes
-  const getElapsedMinutes = (createdAt: string): number => {
-    const created = new Date(createdAt).getTime();
-    const now = Date.now();
-    return Math.floor((now - created) / 60000);
-  };
-
-  // Get timer color based on elapsed time
-  const getTimerColor = (minutes: number): string => {
-    if (minutes <= 10) return 'text-green-600';
-    if (minutes <= 20) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  // Get timer background for urgent orders
-  const getTimerBackground = (minutes: number): string => {
-    if (minutes > 20) return 'bg-red-50 animate-pulse';
-    return '';
-  };
 
   // Get all unified orders (restaurant + delivery) - ONLY from DB (No mock data)
   const getAllUnifiedOrders = (): UnifiedOrder[] => {
     const restaurantOrders: UnifiedOrder[] = dbRestaurantOrders.map(order => ({
       id: order.id,
-      orderNumber: order.orderNumber,
-      customer: order.customer,
+      orderNumber: (order as any).orderNumber || order.id.slice(0, 8),
+      customer: (order as any).customer || 'Cliente',
       items: order.items,
       total: order.total,
       status: order.status as UnifiedOrder['status'],
       type: 'restaurante' as const,
-      time: order.time,
-      date: order.date,
-      phone: order.phone,
-      address: order.address,
+      time: (order as any).time,
+      date: (order as any).date,
+      phone: (order as any).phone,
+      address: (order as any).address,
       notes: order.notes,
+      paymentStatus: (order as any).paymentStatus || 'pending',
+      paymentMethod: (order as any).paymentMethod || 'cash',
       createdAt: order.createdAt ?? new Date().toISOString()
-    }));
+    } as unknown as UnifiedOrder));
 
     const deliveryOrders: UnifiedOrder[] = dbDeliveryOrders.map(order => ({
       id: order.id,
-      orderNumber: order.orderNumber,
-      customer: order.customer,
+      orderNumber: (order as any).orderNumber || order.id.slice(0, 8),
+      customer: (order as any).customer || 'Cliente',
       items: order.items,
       total: order.total,
       status: order.status as UnifiedOrder['status'],
       type: 'domicilio' as const,
       time: order.createdAt,
-      date: order.date,
-      phone: order.phone,
-      address: order.address,
+      date: (order as any).date,
+      phone: (order as any).phone,
+      address: (order as any).address,
       notes: order.notes,
+      paymentStatus: (order as any).paymentStatus || 'pending',
+      paymentMethod: (order as any).paymentMethod || 'cash',
       createdAt: order.createdAt ?? new Date().toISOString()
-    }));
+    } as unknown as UnifiedOrder));
 
     return [...restaurantOrders, ...deliveryOrders];
   };
@@ -3985,10 +4141,6 @@ El precio debe ser un número entero en pesos colombianos.`
     return filtered;
   };
 
-  // Check if order should show timer - INCLUYE TODOS LOS ESTADOS ACTIVOS (RESTAURANTE Y DOMICILIO)
-  const shouldShowTimer = (status: UnifiedOrder['status']): boolean => {
-    return ['pending', 'preparing', 'confirmed', 'on_the_way'].includes(status);
-  };
 
   // Update timers every 10 seconds - SE EXTIENDE A TODOS LOS PEDIDOS (RESTAURANTE Y DOMICILIO)
   useEffect(() => {
@@ -4765,7 +4917,7 @@ El precio debe ser un número entero en pesos colombianos.`
   };
 
   // --- Order Ticket and PDF Functions (Restaurant Orders) ---
-  const printOrderTicket = (order: Order): void => {
+  const printOrderTicket = (order: UnifiedOrder): void => {
     const statusText: Record<string, string> = {
       pending: 'Pendiente',
       preparing: 'Preparando',
@@ -5021,7 +5173,7 @@ El precio debe ser un número entero en pesos colombianos.`
     }
   };
 
-  const downloadOrderPDF = (order: Order): void => {
+  const downloadOrderPDF = (order: UnifiedOrder): void => {
     const statusText: Record<string, string> = {
       pending: 'Pendiente',
       preparing: 'Preparando',
@@ -5589,15 +5741,19 @@ El precio debe ser un número entero en pesos colombianos.`
           // Franja Hero Sutil
           heroImageUrl: data.data.heroImageUrl || null,
           showHeroBanner: data.data.showHeroBanner ?? false,
+          // Favicon
+          favicon: data.data.favicon || null,
           // Propina Voluntaria
           tipEnabled: data.data.tipEnabled ?? true,
           tipPercentageDefault: data.data.tipPercentageDefault ?? 10,
           tipOnlyOnPremise: data.data.tipOnlyOnPremise ?? true,
           // Métodos de Pago
           paymentMethods: data.data.paymentMethods ?? [
-            { id: 'cash', name: 'Efectivo', icon: '💵', enabled: true },
-            { id: 'transfer', name: 'Transferencia', icon: '🏦', enabled: true },
-            { id: 'card', name: 'Tarjeta', icon: '💳', enabled: true }
+            { id: 'cash', name: 'Efectivo', icon: '💵', phone: '', accountHolder: '', qrImage: null, enabled: true },
+            { id: 'nequi', name: 'Nequi', icon: '🟢', phone: '', accountHolder: '', qrImage: null, enabled: true },
+            { id: 'brepb', name: 'BRE-B', icon: '🔵', phone: '', accountHolder: '', qrImage: null, enabled: false },
+            { id: 'daviplata', name: 'Daviplata', icon: '🔴', phone: '', accountHolder: '', qrImage: null, enabled: false },
+            { id: 'bancolombia', name: 'Bancolombia', icon: '🟡', phone: '', accountHolder: '', qrImage: null, enabled: false }
           ]
         });
         // Note: Data is persisted in database via API. localStorage removed to avoid quota exceeded errors.
@@ -6130,12 +6286,12 @@ El precio debe ser un número entero en pesos colombianos.`
                       const matchesCategory = filterCategory === 'all' || p.category === filterCategory;
                       // Filter by availability
                       const matchesAvailability = filterAvailability === 'all' ||
-                        (filterAvailability === 'available' && p.available) ||
-                        (filterAvailability === 'unavailable' && !p.available);
+                        (filterAvailability === 'available' && p.isAvailable) ||
+                        (filterAvailability === 'unavailable' && !p.isAvailable);
                       // Filter by featured
                       const matchesFeatured = filterFeatured === 'all' ||
-                        (filterFeatured === 'featured' && p.featured) ||
-                        (filterFeatured === 'normal' && !p.featured);
+                        (filterFeatured === 'featured' && p.isFeatured) ||
+                        (filterFeatured === 'normal' && !p.isFeatured);
 
                       return matchesSearch && matchesCategory && matchesAvailability && matchesFeatured;
                     })
@@ -6174,7 +6330,7 @@ El precio debe ser un número entero en pesos colombianos.`
                               <h4 className="font-medium">{product.name}</h4>
                               <p className="text-sm text-gray-500">{product.category}</p>
                             </div>
-                            {product.featured && (
+                            {product.isFeatured && (
                               <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
                             )}
                           </div>
@@ -6183,8 +6339,8 @@ El precio debe ser un número entero en pesos colombianos.`
                               <p className="text-xl font-bold">${product.price.toLocaleString()}</p>
                               <p className="text-sm text-gray-500">Stock: {product.stock ?? 0}</p>
                             </div>
-                            <Badge variant={product.available ? 'default' : 'secondary'}>
-                              {product.available ? 'Disponible' : 'Agotado'}
+                            <Badge variant={product.isAvailable ? 'default' : 'secondary'}>
+                              {product.isAvailable ? 'Disponible' : 'Agotado'}
                             </Badge>
                           </div>
                           <div className="flex gap-2">
@@ -6595,8 +6751,8 @@ El precio debe ser un número entero en pesos colombianos.`
                         cart.map(item => (
                           <div key={item.productId} className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{item.name}</p>
-                              <p className="text-xs text-gray-500">${item.price.toLocaleString()} c/u</p>
+                              <p className="font-medium text-sm truncate">{item.productName}</p>
+                              <p className="text-xs text-gray-500">${item.unitPrice.toLocaleString()} c/u</p>
                             </div>
                             <div className="flex items-center gap-2">
                               <Button
@@ -7056,7 +7212,7 @@ El precio debe ser un número entero en pesos colombianos.`
                                       onClick={() => printRestaurantInvoiceTicket(invoice)}
                                       title="Imprimir ticket"
                                     >
-                                      <Printer className="w-4 h-4" />
+                                      <PrinterIcon className="w-4 h-4" />
                                     </Button>
                                     <Button
                                       variant="ghost"
@@ -7285,8 +7441,8 @@ El precio debe ser un número entero en pesos colombianos.`
                           {deliveryCart.map(item => (
                             <div key={item.productId} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{item.name}</p>
-                                <p className="text-xs text-gray-500">{formatPrice(item.price)}</p>
+                                <p className="text-sm font-medium truncate">{item.productName}</p>
+                                <p className="text-xs text-gray-500">{formatPrice(item.unitPrice)}</p>
                               </div>
                               <div className="flex items-center gap-1">
                                 <Button
@@ -7709,62 +7865,9 @@ El precio debe ser un número entero en pesos colombianos.`
                                       variant="ghost"
                                       className="h-8 w-8 p-0 text-gray-600 hover:text-blue-600 hover:bg-blue-50"
                                       title="Imprimir ticket"
-                                      onClick={() => {
-                                        const ticketContent = `
-                                      <html>
-                                      <head>
-                                        <title>Ticket ${invoice.invoiceNumber}</title>
-                                        <meta charset="UTF-8">
-                                        <style>
-                                          * { margin: 0; padding: 0; box-sizing: border-box; }
-                                          body { font-family: 'Courier New', monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 10px; }
-                                          .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-                                          .header h1 { font-size: 16px; font-weight: bold; }
-                                          .header p { font-size: 10px; }
-                                          .info { margin-bottom: 10px; }
-                                          .info-row { display: flex; justify-content: space-between; font-size: 11px; margin: 3px 0; }
-                                          .items { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 8px 0; margin: 10px 0; }
-                                          .item { display: flex; justify-content: space-between; font-size: 11px; margin: 4px 0; }
-                                          .total { font-weight: bold; font-size: 14px; text-align: right; margin-top: 10px; }
-                                          .footer { text-align: center; font-size: 10px; margin-top: 15px; border-top: 1px dashed #000; padding-top: 10px; }
-                                        </style>
-                                      </head>
-                                      <body>
-                                        <div class="header">
-                                          <h1>${profileForm.businessName || 'MINIMENU'}</h1>
-                                          <p>${profileForm.address || ''}</p>
-                                          <p>${profileForm.phone || ''}</p>
-                                        </div>
-                                        <div class="info">
-                                          <div class="info-row"><span>Factura:</span><span>${invoice.invoiceNumber}</span></div>
-                                          <div class="info-row"><span>Fecha:</span><span>${new Date(invoice.createdAt).toLocaleDateString('es-CO')}</span></div>
-                                          <div class="info-row"><span>Cliente:</span><span>${invoice.customerName}</span></div>
-                                          <div class="info-row"><span>Tel:</span><span>${invoice.customerPhone}</span></div>
-                                          <div class="info-row"><span>Dir:</span><span>${invoice.customerAddress}</span></div>
-                                        </div>
-                                        <div class="items">
-                                          ${invoice.items.map(i => `<div class="item"><span>${i.name} x${i.quantity}</span><span>$${(i.price * i.quantity).toLocaleString()}</span></div>`).join('')}
-                                        </div>
-                                        <div class="info-row"><span>Subtotal:</span><span>$${invoice.subtotal.toLocaleString()}</span></div>
-                                        <div class="info-row"><span>Domicilio:</span><span>$${invoice.deliveryFee.toLocaleString()}</span></div>
-                                        <div class="info-row"><span>Empaque:</span><span>$${invoice.empaqueTotal.toLocaleString()}</span></div>
-                                        <div class="total">TOTAL: $${invoice.total.toLocaleString()}</div>
-                                        <div class="footer">
-                                          <p>¡Gracias por su compra!</p>
-                                          <p>${profileForm.businessName || 'MINIMENU'}</p>
-                                        </div>
-                                        <script>window.onload = () => { setTimeout(() => window.print(), 300); };</script>
-                                      </body>
-                                      </html>
-                                    `;
-                                        const printWindow = window.open('', '_blank', 'width=320,height=500');
-                                        if (printWindow) {
-                                          printWindow.document.write(ticketContent);
-                                          printWindow.document.close();
-                                        }
-                                      }}
+                                      onClick={() => printDeliveryInvoiceTicket(invoice)}
                                     >
-                                      <Printer className="w-4 h-4" />
+                                      <PrinterIcon className="w-4 h-4" />
                                     </Button>
                                     {/* Editar */}
                                     <Button
@@ -7850,7 +7953,7 @@ El precio debe ser un número entero en pesos colombianos.`
                                           <table class="items-table">
                                             <thead><tr><th>Producto</th><th>Cant.</th><th>P. Unit.</th><th>Subtotal</th></tr></thead>
                                             <tbody>
-                                              ${invoice.items.map(i => `<tr><td>${i.name}</td><td>${i.quantity}</td><td>$${i.price.toLocaleString()}</td><td>$${(i.price * i.quantity).toLocaleString()}</td></tr>`).join('')}
+                                              ${invoice.items.map(i => `<tr><td>${i.productName}</td><td>${i.quantity}</td><td>$${i.unitPrice.toLocaleString()}</td><td>$${(i.unitPrice * i.quantity).toLocaleString()}</td></tr>`).join('')}
                                             </tbody>
                                           </table>
                                           <div class="total-section">
@@ -7957,10 +8060,10 @@ El precio debe ser un número entero en pesos colombianos.`
                     {selectedDeliveryInvoice.items.map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-0">
                         <div>
-                          <span className="font-medium">{item.name}</span>
+                          <span className="font-medium">{item.productName}</span>
                           <span className="text-gray-500 text-sm ml-2">x{item.quantity}</span>
                         </div>
-                        <span className="font-medium">${(item.price * item.quantity).toLocaleString()}</span>
+                        <span className="font-medium">${(item.unitPrice * item.quantity).toLocaleString()}</span>
                       </div>
                     ))}
                   </div>
@@ -8187,6 +8290,15 @@ El precio debe ser un número entero en pesos colombianos.`
           />
         )}
 
+        {/* Configuracion Factura Tab */}
+        {activeTab === 'configuracion-factura' && (
+          <iframe
+            src="/dashboard/configuracion/factura"
+            className="w-full h-[calc(100vh-200px)] border-0"
+            title="Editor de Factura"
+          />
+        )}
+
         {/* Impresoras Tab */}
         {activeTab === 'impresoras' && (
           <div className="space-y-6">
@@ -8214,7 +8326,7 @@ El precio debe ser un número entero en pesos colombianos.`
                       <p className="text-sm text-purple-600">Total Impresoras</p>
                       <p className="text-2xl font-bold text-purple-700">{printers.length}</p>
                     </div>
-                    <Printer className="w-8 h-8 text-purple-500" />
+                    <PrinterIcon className="w-8 h-8 text-purple-500" />
                   </div>
                 </CardContent>
               </Card>
@@ -8268,7 +8380,7 @@ El precio debe ser un número entero en pesos colombianos.`
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${printer.isActive ? 'bg-purple-100' : 'bg-gray-100'}`}>
-                            <Printer className={`w-5 h-5 ${printer.isActive ? 'text-purple-600' : 'text-gray-400'}`} />
+                            <PrinterIcon className={`w-5 h-5 ${printer.isActive ? 'text-purple-600' : 'text-gray-400'}`} />
                           </div>
                           <div>
                             <h4 className="font-medium text-gray-900">{printer.name}</h4>
@@ -8329,7 +8441,7 @@ El precio debe ser un número entero en pesos colombianos.`
             ) : (
               <Card>
                 <CardContent className="p-8 text-center">
-                  <Printer className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                  <PrinterIcon className="w-16 h-16 mx-auto mb-4 text-gray-300" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No hay impresoras configuradas</h3>
                   <p className="text-gray-500 mb-4">
                     Agrega tu primera impresora para comenzar a imprimir comandas y tickets.
@@ -9849,13 +9961,14 @@ El precio debe ser un número entero en pesos colombianos.`
                                 <span className="text-gray-500">/{plan.period === 'monthly' ? 'mes' : plan.period}</span>
                               </div>
                               <ul className="space-y-2 text-sm mb-4">
-                                {plan.features.split('\n').slice(0, 4).map((feature, idx) => (
+                                {parseFeatures(plan.features).slice(0, 4).map((feature, idx) => (
                                   <li key={idx} className="flex items-center gap-2">
                                     <Check className="w-4 h-4 text-green-500" />
                                     <span className="text-gray-700">{feature.trim()}</span>
                                   </li>
                                 ))}
                               </ul>
+
                               {isCurrentPlan ? (
                                 <Button className="w-full bg-purple-600 hover:bg-purple-700" disabled>
                                   Plan Actual
@@ -9874,12 +9987,6 @@ El precio debe ser un número entero en pesos colombianos.`
                                         Elige tu método de pago para activar el plan
                                       </DialogDescription>
                                     </DialogHeader>
-                                    
-                                    {/* Debug logging */}
-                                    {console.log('[Modal Debug] paymentMethods:', paymentMethods)}
-                                    {console.log('[Modal Debug] hotmartEnabled:', paymentMethods?.hotmartEnabled)}
-                                    {console.log('[Modal Debug] nequiEnabled:', paymentMethods?.nequiEnabled)}
-                                    {console.log('[Modal Debug] bancolombiaEnabled:', paymentMethods?.bancolombiaEnabled)}
                                     
                                     <div className="space-y-3 mt-4">
                                       {/* Título de métodos de pago */}
@@ -10124,8 +10231,8 @@ El precio debe ser un número entero en pesos colombianos.`
             {/* Estado del Plato - Switch Prominente */}
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${productForm.available ? 'bg-green-100' : 'bg-red-100'}`}>
-                  {productForm.available ? (
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${productForm.isAvailable ? 'bg-green-100' : 'bg-red-100'}`}>
+                  {productForm.isAvailable ? (
                     <span className="text-green-600 text-lg">✓</span>
                   ) : (
                     <span className="text-red-600 text-lg">✕</span>
@@ -10133,18 +10240,18 @@ El precio debe ser un número entero en pesos colombianos.`
                 </div>
                 <div>
                   <p className="font-medium text-gray-900">
-                    {productForm.available ? 'Plato Activo' : 'Plato Inactivo'}
+                    {productForm.isAvailable ? 'Plato Activo' : 'Plato Inactivo'}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {productForm.available
+                    {productForm.isAvailable
                       ? 'Este plato será visible en el menú'
                       : 'Este plato no será visible en el menú'}
                   </p>
                 </div>
               </div>
               <Switch
-                checked={productForm.available}
-                onCheckedChange={(checked) => setProductForm(prev => ({ ...prev, available: checked }))}
+                checked={productForm.isAvailable}
+                onCheckedChange={(checked) => setProductForm(prev => ({ ...prev, isAvailable: checked }))}
                 className="data-[state=checked]:bg-green-600 data-[state=unchecked]:bg-gray-300"
               />
             </div>
@@ -10304,8 +10411,8 @@ El precio debe ser un número entero en pesos colombianos.`
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
                 <Switch
-                  checked={productForm.featured}
-                  onCheckedChange={(checked) => setProductForm(prev => ({ ...prev, featured: checked }))}
+                  checked={productForm.isFeatured}
+                  onCheckedChange={(checked) => setProductForm(prev => ({ ...prev, isFeatured: checked }))}
                   className="data-[state=checked]:bg-yellow-500"
                 />
                 <span className="text-sm">⭐ Destacado</span>
@@ -10756,7 +10863,7 @@ El precio debe ser un número entero en pesos colombianos.`
                   <div>
                     <span className="text-gray-500">Estado:</span>
                     <div className="mt-1">
-                      <StatusBadge status={selectedOrder.status} />
+                      <StatusBadge status={selectedOrder.status as any} />
                     </div>
                   </div>
                 </div>
@@ -10878,9 +10985,9 @@ El precio debe ser un número entero en pesos colombianos.`
                     size="sm"
                     variant="outline"
                     className="border-blue-500 text-blue-600 hover:bg-blue-50"
-                    onClick={() => selectedOrder && printOrderTicket(selectedOrder)}
+                    onClick={() => selectedOrder && printUnifiedOrderTicket(selectedOrder)}
                   >
-                    <Printer className="w-4 h-4 mr-2" />
+                    <PrinterIcon className="w-4 h-4 mr-2" />
                     Imprimir Directo
                   </Button>
                   <Button
@@ -11166,19 +11273,19 @@ El precio debe ser un número entero en pesos colombianos.`
                     className="flex-1 text-blue-600 hover:bg-blue-50 border-blue-200"
                     onClick={() => {
                       if (selectedDelivery) {
-                        printThermalTicket(selectedDelivery);
+                        printDeliveryOrderTicket(selectedDelivery);
                       }
                     }}
                   >
-                    <Printer className="w-4 h-4 mr-2" />
+                    <PrinterIcon className="w-4 h-4 mr-2" />
                     Imprimir
                   </Button>
                   <Button
                     variant="outline"
                     className="flex-1 text-green-600 hover:bg-green-50 border-green-200"
-                    onClick={() => printThermalTicket(selectedDelivery)}
+                    onClick={() => printDeliveryOrderTicket(selectedDelivery)}
                   >
-                    <Printer className="w-4 h-4 mr-2" />
+                    <PrinterIcon className="w-4 h-4 mr-2" />
                     Imprimir Directo
                   </Button>
                   <Button
@@ -11198,9 +11305,9 @@ El precio debe ser un número entero en pesos colombianos.`
                   <Button
                     variant="outline"
                     className="flex-1 text-blue-600 hover:bg-blue-50 border-blue-200"
-                    onClick={() => printThermalTicket(selectedDelivery)}
+                    onClick={() => printDeliveryOrderTicket(selectedDelivery)}
                   >
-                    <Printer className="w-4 h-4 mr-2" />
+                    <PrinterIcon className="w-4 h-4 mr-2" />
                     Imprimir Ticket
                   </Button>
                   <Button
@@ -11376,7 +11483,7 @@ El precio debe ser un número entero en pesos colombianos.`
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Printer className="w-5 h-5 text-purple-600" />
+              <PrinterIcon className="w-5 h-5 text-purple-600" />
               {editingPrinter ? 'Editar Impresora' : 'Agregar Impresora'}
             </DialogTitle>
           </DialogHeader>
@@ -11589,6 +11696,32 @@ El precio debe ser un número entero en pesos colombianos.`
               className="bg-red-600 hover:bg-red-700"
             >
               Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Hotmart Modal - Mejorado con Dialog de Shadcn */}
+      <Dialog open={showHotmartModal} onOpenChange={setShowHotmartModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <DialogTitle className="text-xl">{hotmartModalMessage.title}</DialogTitle>
+            </div>
+            <DialogDescription className="text-base text-gray-600">
+              {hotmartModalMessage.message}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-end mt-4">
+            <Button
+              type="button"
+              onClick={() => setShowHotmartModal(false)}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-8"
+            >
+              Entendido
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -12272,31 +12405,6 @@ function BackupSection({ businessName, onToast }: BackupSectionProps) {
         </CardContent>
       </Card>
 
-      {/* Hotmart Modal - Mejorado con Dialog de Shadcn */}
-      <Dialog open={showHotmartModal} onOpenChange={setShowHotmartModal}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="w-6 h-6 text-yellow-600" />
-              </div>
-              <DialogTitle className="text-xl">{hotmartModalMessage.title}</DialogTitle>
-            </div>
-            <DialogDescription className="text-base text-gray-600">
-              {hotmartModalMessage.message}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="sm:justify-end mt-4">
-            <Button
-              type="button"
-              onClick={() => setShowHotmartModal(false)}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-medium px-8"
-            >
-              Entendido
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
