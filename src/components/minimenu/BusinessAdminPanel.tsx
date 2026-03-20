@@ -2467,7 +2467,7 @@ El precio debe ser un número entero en pesos colombianos.`
   // Get filtered products for delivery invoice
   const getFilteredProductsForDelivery = (): Product[] => {
     return products.filter(p => {
-      if (!p.isAvailable) return false;
+      if (!p.isAvailable && !(p as any).available) return false;
       if (deliverySearchQuery) {
         return p.name.toLowerCase().includes(deliverySearchQuery.toLowerCase());
       }
@@ -3367,13 +3367,13 @@ El precio debe ser un número entero en pesos colombianos.`
 
   // Get filtered products for invoice
   const getFilteredProductsForInvoice = (): Product[] => {
-    let filtered = products.filter(p => p.isAvailable);
+    let filtered = products.filter(p => p.isAvailable || (p as any).available);
 
     if (productSearchQuery.trim()) {
       const query = productSearchQuery.toLowerCase();
       filtered = filtered.filter(p =>
         p.name.toLowerCase().includes(query) ||
-        p.description.toLowerCase().includes(query)
+        (p.description && p.description.toLowerCase().includes(query))
       );
     }
 
