@@ -3,7 +3,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
 interface LoginRequest {
@@ -23,8 +23,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Crear cliente de Supabase
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    // Buscar usuario en la base de datos usando el cliente admin
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
     // Buscar usuario en la base de datos
-    // Especificar la relación !users_businessId_fkey para evitar ambigüedad
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select('*, businesses!users_businessId_fkey(id, name, slug)')
@@ -39,13 +50,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Mapear business desde la relación especificada
     const business = user.businesses;
 
     // Verificar contraseña
     console.log('[Login] User found:', user.id, 'email:', user.email);
-    console.log('[Login] Password type:', typeof user.password, 'value:', user.password);
-    
+
     if (!user.password || typeof user.password !== 'string') {
       console.error('[Login] Invalid password format in database');
       return NextResponse.json(
@@ -61,6 +70,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { success: false, error: 'Credenciales inválidas' },
         { status: 401 }
       );
+    }
+
+    // Iniciar sesión en Supabase Auth
+    // Esto creará una sesión válida que getSession() podrá recuperar
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.toLowerCase(),
+      password: password
+    });
+
+    if (authError || !authData.user) {
+      console.error('[Login] Supabase Auth error:', authError);
+      // Si falla Supabase Auth pero la contraseña es válida,
+      // el usuario puede no estar en auth.users - continuar con cookie
     }
 
     // Crear sesión simple (en producción usar JWT o next-auth completo)

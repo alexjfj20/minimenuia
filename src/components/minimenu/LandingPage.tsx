@@ -385,7 +385,7 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
               <ul className="space-y-2 text-sm">
                 <li><button onClick={() => window.open('/?view=features', '_blank')} className="hover:text-white transition-colors">Características</button></li>
                 <li><a href="#" className="hover:text-white transition-colors">Precios</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Integraciones</a></li>
+                <li><a href="/integraciones" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Integraciones</a></li>
               </ul>
             </div>
             <div>

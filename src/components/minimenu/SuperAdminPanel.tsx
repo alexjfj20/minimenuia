@@ -107,7 +107,8 @@ import {
   Clock,
   Download,
   RotateCcw,
-  Bell
+  Bell,
+  UserCircle
 } from 'lucide-react';
 
 // --- Icon Mapping ---
@@ -124,7 +125,7 @@ const iconMap: Record<string, React.ReactNode> = {
   'building-2': <Building2 className="w-5 h-5" />
 };
 
-type TabType = 'dashboard' | 'negocios' | 'usuarios' | 'servicios' | 'modulos' | 'planes' | 'pagos' | 'chatbot' | 'integraciones' | 'mantenimiento';
+type TabType = 'dashboard' | 'negocios' | 'usuarios' | 'servicios' | 'modulos' | 'planes' | 'pagos' | 'chatbot' | 'integraciones' | 'mantenimiento' | 'perfil';
 
 interface SuperAdminPanelProps {
   onLogout: () => void;
@@ -288,6 +289,81 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     file: null as File | null
   });
 
+  // --- Profile State ---
+  const [profile, setProfile] = useState<{
+    fullName: string;
+    displayName: string;
+    email: string;
+    phone: string;
+    bio: string;
+    companyName: string;
+    companyWebsite: string;
+    timezone: string;
+    language: string;
+  }>({
+    fullName: 'Super Admin',
+    displayName: 'Super Admin',
+    email: 'auditsemseo@gmail.com',
+    phone: '',
+    bio: '',
+    companyName: 'MINIMENU',
+    companyWebsite: '',
+    timezone: 'America/Bogota',
+    language: 'es'
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+
+  // --- Load Profile ---
+  const loadProfile = useCallback(async () => {
+    try {
+      const response = await fetch('/api/perfil');
+      const data = await response.json();
+
+      if (response.ok && data.profile) {
+        setProfile({
+          fullName: data.profile.fullName || '',
+          displayName: data.profile.displayName || '',
+          email: data.profile.email || '',
+          phone: data.profile.phone || '',
+          bio: data.profile.bio || '',
+          companyName: data.profile.companyName || '',
+          companyWebsite: data.profile.companyWebsite || '',
+          timezone: data.profile.timezone || 'America/Bogota',
+          language: data.profile.language || 'es'
+        });
+      }
+    } catch (error) {
+      console.error('[SuperAdmin] Error loading profile:', error);
+    }
+  }, []);
+
+  // --- Save Profile ---
+  const saveProfile = useCallback(async (profileData: typeof profile) => {
+    setIsSavingProfile(true);
+    setProfileMessage(null);
+    try {
+      const response = await fetch('/api/perfil', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileData)
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setProfileMessage('Perfil actualizado correctamente');
+      } else {
+        setProfileMessage(data.error || 'Error al guardar el perfil');
+      }
+    } catch (error) {
+      console.error('[SuperAdmin] Error saving profile:', error);
+      setProfileMessage('Error al guardar el perfil');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  }, []);
+
   // ============================================================
   // LOAD AI MODELS FROM SUPABASE
   // ============================================================
@@ -395,7 +471,8 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    loadProfile();
+  }, [loadData, loadProfile]);
 
   // Cargar modelos de IA al montar
   useEffect(() => {
@@ -1576,7 +1653,8 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
     { id: 'pagos', label: 'Pasarelas de Pago', icon: <Wallet className="w-5 h-5" /> },
     { id: 'chatbot', label: 'Chatbot IA', icon: <Bot className="w-5 h-5" /> },
     { id: 'integraciones', label: 'Integraciones', icon: <Link2 className="w-5 h-5" /> },
-    { id: 'mantenimiento', label: 'Mantenimiento', icon: <Wrench className="w-5 h-5" /> }
+    { id: 'mantenimiento', label: 'Mantenimiento', icon: <Wrench className="w-5 h-5" /> },
+    { id: 'perfil', label: 'Mi Perfil', icon: <UserCircle className="w-5 h-5" /> }
   ];
 
   // --- Stats ---
@@ -1635,6 +1713,13 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
               <p className="text-xs text-gray-400">auditsemseo@gmail.com</p>
             </div>
           </div>
+          <button
+            onClick={() => setActiveTab('perfil')}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-left text-gray-300 hover:bg-gray-800 hover:text-white mb-2"
+          >
+            <UserCircle className="w-5 h-5" />
+            <span className="font-medium">Mi Perfil</span>
+          </button>
           <Button
             variant="outline"
             size="sm"
@@ -1665,6 +1750,7 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
             {activeTab === 'chatbot' && 'Configura el asistente virtual y motor de IA'}
             {activeTab === 'integraciones' && 'Gestiona las integraciones externas'}
             {activeTab === 'mantenimiento' && 'Herramientas de mantenimiento y diagnóstico del sistema'}
+            {activeTab === 'perfil' && 'Administra tu información personal y configuración de super administrador'}
           </p>
         </div>
 
@@ -3911,6 +3997,146 @@ export function SuperAdminPanel({ onLogout, onImpersonate }: SuperAdminPanelProp
                         </div>
                       ))}
                     </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Perfil Tab */}
+            {activeTab === 'perfil' && (
+              <div className="space-y-6">
+                {/* Profile Header */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Información del Perfil</CardTitle>
+                    <p className="text-sm text-gray-500">Administra tu información personal de super administrador</p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="fullName">Nombre Completo</Label>
+                        <Input
+                          id="fullName"
+                          value={profile.fullName}
+                          onChange={(e) => setProfile({ ...profile, fullName: e.target.value })}
+                          placeholder="Tu nombre completo"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="displayName">Nombre a Mostrar</Label>
+                        <Input
+                          id="displayName"
+                          value={profile.displayName}
+                          onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
+                          placeholder="Nombre público"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={profile.email}
+                          onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                          placeholder="tu@email.com"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="phone">Teléfono</Label>
+                        <Input
+                          id="phone"
+                          value={profile.phone}
+                          onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                          placeholder="+57 300 123 4567"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Label htmlFor="bio">Biografía</Label>
+                        <Textarea
+                          id="bio"
+                          value={profile.bio}
+                          onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                          placeholder="Breve descripción sobre ti"
+                          rows={3}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="companyName">Empresa</Label>
+                        <Input
+                          id="companyName"
+                          value={profile.companyName}
+                          onChange={(e) => setProfile({ ...profile, companyName: e.target.value })}
+                          placeholder="Nombre de tu empresa"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="companyWebsite">Sitio Web</Label>
+                        <Input
+                          id="companyWebsite"
+                          value={profile.companyWebsite}
+                          onChange={(e) => setProfile({ ...profile, companyWebsite: e.target.value })}
+                          placeholder="https://tuempresa.com"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="timezone">Zona Horaria</Label>
+                        <Select
+                          value={profile.timezone}
+                          onValueChange={(value) => setProfile({ ...profile, timezone: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="America/Bogota">Bogotá (GMT-5)</SelectItem>
+                            <SelectItem value="America/Mexico_City">Ciudad de México (GMT-6)</SelectItem>
+                            <SelectItem value="America/Lima">Lima (GMT-5)</SelectItem>
+                            <SelectItem value="America/Caracas">Caracas (GMT-4)</SelectItem>
+                            <SelectItem value="America/Santiago">Santiago (GMT-3)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="language">Idioma</Label>
+                        <Select
+                          value={profile.language}
+                          onValueChange={(value) => setProfile({ ...profile, language: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="es">Español</SelectItem>
+                            <SelectItem value="en">Inglés</SelectItem>
+                            <SelectItem value="pt">Portugués</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {profileMessage && (
+                      <div className={`p-3 rounded-lg ${profileMessage.includes('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                        {profileMessage}
+                      </div>
+                    )}
+
+                    <Button
+                      onClick={() => saveProfile(profile)}
+                      disabled={isSavingProfile}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      {isSavingProfile ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Guardando...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Guardar Cambios
+                        </>
+                      )}
+                    </Button>
                   </CardContent>
                 </Card>
               </div>
